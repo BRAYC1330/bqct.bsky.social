@@ -11,11 +11,18 @@ import bsky
 import timers
 import parser
 import community
+import news
 from link_extractor import LinkExtractor
 from utils import flatten_thread, extract_embed_full, with_retry, sanitize_for_prompt
 from logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
+
+def set_gh_output(key, value):
+    path = os.getenv("GITHUB_OUTPUT")
+    if path and value:
+        with open(path, "a") as f:
+            f.write(f"{key}={value}\n")
 
 async def process_item(client, item, llm):
     uri = item["uri"]
@@ -49,7 +56,7 @@ async def process_item(client, item, llm):
         if provider:
             raw = await with_retry(lambda: provider["func"](params.get("query", ""), **{k: v for k, v in params.items() if k in provider["supports"] and v}))
             if search.is_search_result_valid(raw, search_type):
-                search_data = raw[:3000]
+                search_data = search.clean_search_results(raw, search_type)
 
     root_thread = "\n".join([f"@{n['handle']}: {n['text']} {' '.join(n['links'])}" for n in nodes if n['is_root'] or n.get('text')])
     final_ctx = state.merge_contexts(memory, root_thread, search_data, user_text)
@@ -71,14 +78,24 @@ async def main():
             llm = generator.get_model()
 
         if llm:
+            if mini_due:
+                res = await news.post_if_due(client, llm, "mini")
+                if res:
+                    set_gh_output("LAST_MINI_DIGEST", res["time"])
+                    set_gh_output("LAST_DIGEST_URI", res["uri"])
+                    set_gh_output("ACTIVE_DIGEST_URI", res["uri"])
+            if full_due:
+                res = await news.post_if_due(client, llm, "full")
+                if res:
+                    set_gh_output("LAST_FULL_DIGEST", res["time"])
+                    set_gh_output("LAST_DIGEST_URI", res["uri"])
+                    set_gh_output("ACTIVE_DIGEST_URI", res["uri"])
+
             active = os.getenv("ACTIVE_DIGEST_URI", "")
             if active and active not in ("{}", "null", ""):
                 rec = await bsky.get_record(client, active)
                 if rec:
                     await community.process_digest_community(client, llm, active, rec["value"].get("text", ""))
-            if mini_due or full_due:
-                from news import post_if_due
-                await post_if_due(client, llm)
 
         if has_work and llm:
             with open("work_data.json") as f:
