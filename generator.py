@@ -64,8 +64,8 @@ def update_summary(llm, memory: str, user_text: str, reply: str) -> str:
     return utils.sanitize_for_prompt(_extract_text(llm(prompt, max_tokens=50, temperature=0.3)))
 
 def generate_digest(llm, keyword: str, summary: str, max_desc_chars: int) -> str:
-    prompt = config.DIGEST_REFINE_SYSTEM.format(keyword=keyword, summary=summary, max_desc_chars=max(20, max_desc_chars - 15))
-    raw = _extract_text(llm(prompt, max_tokens=min(max_desc_chars, 150), temperature=0.3)).split("\n")[0]
+    prompt = config.DIGEST_REFINE_SYSTEM.format(keyword=keyword, summary=summary, max_desc_chars=max(20, max_desc_chars))
+    raw = _extract_text(llm(prompt, max_tokens=min(max_desc_chars + 10, 100), temperature=0.3)).split("\n")[0]
     return raw[:max_desc_chars]
 
 async def generate_community_plan(llm, digest_ctx: str, comments: list) -> dict:
