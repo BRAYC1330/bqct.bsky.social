@@ -149,10 +149,10 @@ jobs:
         env:
           PAT: ${{ secrets.PAT }}
           LAST_PROCESSED: ${{ steps.check.outputs.last_processed }}
-          LAST_MINI_DIGEST: ${{ steps.run-bot.outputs.LAST_MINI_DIGEST }}
-          LAST_FULL_DIGEST: ${{ steps.run-bot.outputs.LAST_FULL_DIGEST }}
-          LAST_DIGEST_URI: ${{ steps.run-bot.outputs.LAST_DIGEST_URI }}
-          ACTIVE_DIGEST_URI: ${{ steps.run-bot.outputs.ACTIVE_DIGEST_URI }}
+          LAST_MINI_DIGEST: ${{ steps.run.outputs.LAST_MINI_DIGEST }}
+          LAST_FULL_DIGEST: ${{ steps.run.outputs.LAST_FULL_DIGEST }}
+          LAST_DIGEST_URI: ${{ steps.run.outputs.LAST_DIGEST_URI }}
+          ACTIVE_DIGEST_URI: ${{ steps.run.outputs.ACTIVE_DIGEST_URI }}
 
       - name: Health check alert
         if: failure()
