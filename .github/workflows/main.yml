@@ -1,31 +1,33 @@
-name: Run Bot
+name: Bluesky AI Bot
 on:
   schedule:
-    - cron: '*/30 * * * *'
+    - cron: '0 * * * *'
   workflow_dispatch:
-
+permissions:
+  contents: read
 jobs:
-  run:
+  run-bot:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    environment: production
+    outputs:
+      last_processed: ${{ steps.check.outputs.last_processed }}
+      last_mini_digest: ${{ steps.run-bot.outputs.LAST_MINI_DIGEST }}
+      last_full_digest: ${{ steps.run-bot.outputs.LAST_FULL_DIGEST }}
+      last_digest_uri: ${{ steps.run-bot.outputs.LAST_DIGEST_URI }}
+      active_digest_uri: ${{ steps.run-bot.outputs.ACTIVE_DIGEST_URI }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-          cache: pip
-          cache-dependency-path: requirements.txt
+          cache: 'pip'
+          cache-dependency-path: 'requirements.txt'
 
-      - name: Install Base Dependencies
+      - name: Install lightweight deps
         run: pip install httpx PyNaCl beautifulsoup4 trafilatura pyyaml
 
-      - name: Check Notifications
+      - name: Check notifications
         id: check
-        run: python check.py
         env:
           BOT_HANDLE: ${{ secrets.BOT_HANDLE }}
           BOT_PASSWORD: ${{ secrets.BOT_PASSWORD }}
@@ -34,61 +36,62 @@ jobs:
           PAT: ${{ secrets.PAT }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           LAST_PROCESSED: ${{ secrets.LAST_PROCESSED }}
+        run: python check.py
 
-      - name: Check Timers
-        id: status
-        run: |
-          python3 -c "
-          import os, sys
-          sys.path.append('.')
-          import timers
-          has_work = os.path.exists('work_data.json')
-          needs_mini = timers.check_mini_timer()
-          needs_full = timers.check_full_timer()
-          status = has_work or needs_mini or needs_full
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-              f.write(f'status={\"true\" if status else \"false\"}\n')
-          "
+      - name: Check if run needed
+        id: check-run
         env:
           LAST_MINI_DIGEST: ${{ secrets.LAST_MINI_DIGEST }}
           LAST_FULL_DIGEST: ${{ secrets.LAST_FULL_DIGEST }}
+        run: |
+          python3 << 'EOF'
+          import os, sys
+          sys.path.append('.')
+          import timers
+          has_notifications = os.path.exists('work_data.json')
+          needs_mini = timers.check_mini_timer()
+          needs_full = timers.check_full_timer()
+          status = has_notifications or needs_mini or needs_full
+          print(f"[DEBUG] has_work={has_notifications}, mini_due={needs_mini}, full_due={needs_full}, status={status}")
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f"status={'true' if status else 'false'}\n")
+          EOF
 
-      - name: Upgrade Pip
-        if: steps.status.outputs.status == 'true'
-        run: pip install --upgrade pip setuptools wheel
-
-      - name: Install Llama.cpp
-        if: steps.status.outputs.status == 'true'
-        run: pip install --prefer-binary llama-cpp-python==0.3.20
+      - name: Install heavy deps
+        if: steps.check-run.outputs.status == 'true'
         env:
-          CMAKE_ARGS: -DGGML_BLAS=OFF -DGGML_CUDA=OFF
+          CMAKE_ARGS: "-DGGML_BLAS=OFF -DGGML_CUDA=OFF"
+        run: |
+          pip install --upgrade pip setuptools wheel
+          pip install --prefer-binary llama-cpp-python==0.3.20
 
-      - name: Cache Model
-        if: steps.status.outputs.status == 'true'
+      - name: Cache model
+        if: steps.check-run.outputs.status == 'true'
         uses: actions/cache@v4
         with:
           path: models
-          key: Linux-qwen25-coder-14b-q5km-${{ runner.os }}
-          restore-keys: Linux-qwen25-coder-14b-q5km-
+          key: ${{ runner.os }}-qwen25-coder-14b-q5km-${{ hashFiles('models/**') }}
+          restore-keys: |
+            ${{ runner.os }}-qwen25-coder-14b-q5km-
 
-      - name: Download Model
-        if: steps.status.outputs.status == 'true'
-        id: sha_step
+      - name: Download model if not cached
+        if: steps.check-run.outputs.status == 'true'
         run: |
           mkdir -p models
           FILE="models/qwen2.5-coder-14b-instruct-q5_k_m.gguf"
+          EXPECTED_SHA256="${{ secrets.MODEL_SHA256 }}"
           if [ ! -f "$FILE" ] || [ $(stat -c%s "$FILE") -lt 1000000000 ]; then
             curl -L --retry 3 --retry-delay 10 -o "$FILE" "https://huggingface.co/Qwen/Qwen2.5-Coder-14B-Instruct-GGUF/resolve/main/qwen2.5-coder-14b-instruct-q5_k_m.gguf?download=true"
+            if [ -n "$EXPECTED_SHA256" ]; then
+              echo "$EXPECTED_SHA256  $FILE" | sha256sum -c -
+            fi
           fi
-          HASH=$(sha256sum "$FILE" | awk '{print $1}')
-          echo "MODEL_SHA256=$HASH"
-          echo "MODEL_SHA256=$HASH" >> $GITHUB_OUTPUT
 
       - name: Run Bot
-        if: steps.status.outputs.status == 'true'
-        run: python bot.py
+        id: run-bot
+        if: steps.check-run.outputs.status == 'true'
         env:
-          PYTHONUNBUFFERED: 1
+          PYTHONUNBUFFERED: "1"
           LAST_MINI_DIGEST: ${{ secrets.LAST_MINI_DIGEST }}
           LAST_FULL_DIGEST: ${{ secrets.LAST_FULL_DIGEST }}
           LAST_DIGEST_URI: ${{ secrets.LAST_DIGEST_URI }}
@@ -100,7 +103,7 @@ jobs:
           PAT: ${{ secrets.PAT }}
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          CONTEXT_SLOT_COUNT: ${{ secrets.CONTEXT_SLOT_COUNT }}
+          CONTEXT_SLOT_COUNT: 10
           CONTEXT_0: ${{ secrets.CONTEXT_0 }}
           CONTEXT_1: ${{ secrets.CONTEXT_1 }}
           CONTEXT_2: ${{ secrets.CONTEXT_2 }}
@@ -111,33 +114,51 @@ jobs:
           CONTEXT_7: ${{ secrets.CONTEXT_7 }}
           CONTEXT_8: ${{ secrets.CONTEXT_8 }}
           CONTEXT_9: ${{ secrets.CONTEXT_9 }}
-          LINK_CACHE_TTL: ${{ secrets.LINK_CACHE_TTL }}
-          ALLOWED_LINK_DOMAINS: ${{ secrets.ALLOWED_LINK_DOMAINS }}
-          MAX_LINK_CONTENT_SIZE: ${{ secrets.MAX_LINK_CONTENT_SIZE }}
-          RAW_DEBUG: "true"
+          LINK_CACHE_TTL: 300
+          ALLOWED_LINK_DOMAINS: "bsky.app,atproto.com,chainbase.com,tavily.com"
+          MAX_LINK_CONTENT_SIZE: 400
           LLAMA_NO_ACCELERATE: 1
+        run: python bot.py
 
-      - name: Update Secrets
-        if: steps.status.outputs.status == 'true'
+      - name: Update secrets atomically
+        if: steps.check-run.outputs.status == 'true'
         run: |
-          python3 -c "
-          import os, subprocess
+          python3 << 'EOF'
+          import os, subprocess, json
           def update_secret(key, value):
               if not value: return
-              cmd = ['gh', 'secret', 'set', key, '--body', value, '--repo', os.environ['GITHUB_REPOSITORY']]
-              subprocess.run(cmd, env={**os.environ, 'GH_TOKEN': os.environ['PAT']}, check=True)
+              cmd = ["gh", "secret", "set", key, "--body", value, "--repo", os.environ["GITHUB_REPOSITORY"]]
+              subprocess.run(cmd, env={**os.environ, "GH_TOKEN": os.environ["PAT"]}, check=True)
+
           updates = {}
-          if os.environ.get('LAST_MINI_DIGEST'): updates['LAST_MINI_DIGEST'] = os.environ['LAST_MINI_DIGEST']
-          if os.environ.get('LAST_FULL_DIGEST'): updates['LAST_FULL_DIGEST'] = os.environ['LAST_FULL_DIGEST']
-          if os.environ.get('LAST_DIGEST_URI'): updates['LAST_DIGEST_URI'] = os.environ['LAST_DIGEST_URI']
-          if os.environ.get('ACTIVE_DIGEST_URI'): updates['ACTIVE_DIGEST_URI'] = os.environ['ACTIVE_DIGEST_URI']
+          if os.environ.get("LAST_MINI_DIGEST"):
+              updates["LAST_MINI_DIGEST"] = os.environ["LAST_MINI_DIGEST"]
+              print(f"[SECRET] Updating LAST_MINI_DIGEST")
+          if os.environ.get("LAST_FULL_DIGEST"):
+              updates["LAST_FULL_DIGEST"] = os.environ["LAST_FULL_DIGEST"]
+              print(f"[SECRET] Updating LAST_FULL_DIGEST")
+          if os.environ.get("LAST_DIGEST_URI"):
+              updates["LAST_DIGEST_URI"] = os.environ["LAST_DIGEST_URI"]
+          if os.environ.get("ACTIVE_DIGEST_URI"):
+              updates["ACTIVE_DIGEST_URI"] = os.environ["ACTIVE_DIGEST_URI"]
+
           for k, v in updates.items():
-              if v: update_secret(k, v)
-          "
+              if v:
+                  update_secret(k, v)
+          EOF
         env:
           PAT: ${{ secrets.PAT }}
           LAST_PROCESSED: ${{ steps.check.outputs.last_processed }}
-          LAST_MINI_DIGEST: ${{ env.LAST_MINI_DIGEST }}
-          LAST_FULL_DIGEST: ${{ env.LAST_FULL_DIGEST }}
-          LAST_DIGEST_URI: ${{ env.LAST_DIGEST_URI }}
-          ACTIVE_DIGEST_URI: ${{ env.ACTIVE_DIGEST_URI }}
+          LAST_MINI_DIGEST: ${{ steps.run-bot.outputs.LAST_MINI_DIGEST }}
+          LAST_FULL_DIGEST: ${{ steps.run-bot.outputs.LAST_FULL_DIGEST }}
+          LAST_DIGEST_URI: ${{ steps.run-bot.outputs.LAST_DIGEST_URI }}
+          ACTIVE_DIGEST_URI: ${{ steps.run-bot.outputs.ACTIVE_DIGEST_URI }}
+
+      - name: Health check alert
+        if: failure()
+        run: |
+          if [ -n "${{ secrets.ALERT_WEBHOOK }}" ]; then
+            curl -X POST -H "Content-Type: application/json" \
+              -d "{\"text\":\"Bluesky Bot failed: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" \
+              "${{ secrets.ALERT_WEBHOOK }}" || true
+          fi
