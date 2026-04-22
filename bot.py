@@ -2,7 +2,6 @@ import os
 import json
 import asyncio
 import logging
-import httpx
 import config
 import state
 import search
@@ -17,12 +16,6 @@ from utils import flatten_thread, extract_embed_full, with_retry, sanitize_for_p
 from logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
-
-def set_gh_output(key, value):
-    path = os.getenv("GITHUB_OUTPUT")
-    if path and value:
-        with open(path, "a") as f:
-            f.write(f"{key}={value}\n")
 
 async def process_item(client, item, llm):
     uri = item["uri"]
@@ -78,24 +71,10 @@ async def main():
             llm = generator.get_model()
 
         if llm:
-            if mini_due:
-                res = await news.post_if_due(client, llm, "mini")
-                if res:
-                    set_gh_output("LAST_MINI_DIGEST", res["time"])
-                    set_gh_output("LAST_DIGEST_URI", res["uri"])
-                    set_gh_output("ACTIVE_DIGEST_URI", res["uri"])
-            if full_due:
-                res = await news.post_if_due(client, llm, "full")
-                if res:
-                    set_gh_output("LAST_FULL_DIGEST", res["time"])
-                    set_gh_output("LAST_DIGEST_URI", res["uri"])
-                    set_gh_output("ACTIVE_DIGEST_URI", res["uri"])
+            if mini_due or full_due:
+                await news.run(client, llm)
 
-            active = os.getenv("ACTIVE_DIGEST_URI", "")
-            if active and active not in ("{}", "null", ""):
-                rec = await bsky.get_record(client, active)
-                if rec:
-                    await community.process_digest_community(client, llm, active, rec["value"].get("text", ""))
+            await community.process(client, llm)
 
         if has_work and llm:
             with open("work_data.json") as f:
