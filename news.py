@@ -41,6 +41,7 @@ async def run(client, llm):
 
     digest_type = "full" if is_full else "mini"
     timer_key = "LAST_FULL_DIGEST" if is_full else "LAST_MINI_DIGEST"
+
     _update_gh_secret(timer_key, now_utc)
     _write_output(timer_key, now_utc)
 
@@ -66,7 +67,7 @@ async def run(client, llm):
         meta = f"{e} {kw} {stats_emoji} {sc}: "
         desc_budget = max(20, budget_per_trend - len(meta))
 
-        desc = await generator.generate_digest(llm, kw, item.get("summary", ""), desc_budget)
+        desc = generator.generate_digest(llm, kw, item.get("summary", ""), desc_budget)
 
         safe_limit = desc_budget - 8
         if len(desc) > safe_limit:
