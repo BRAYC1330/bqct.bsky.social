@@ -16,7 +16,6 @@ from utils import flatten_thread, extract_embed_full, with_retry, sanitize_for_p
 from logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
-
 async def process_item(client, item, llm):
     uri = item["uri"]
     user_text = item["text"]
@@ -25,7 +24,6 @@ async def process_item(client, item, llm):
     chain = await with_retry(lambda: bsky.fetch_thread_chain(client, uri))
     if not chain:
         return
-
     nodes = []
     for idx, post in enumerate(chain["chain"]):
         rec = post.get("record", {})
@@ -40,7 +38,6 @@ async def process_item(client, item, llm):
         nodes.append({"handle": author.get("handle"), "text": txt, "alts": alts, "links": link_hints, "is_root": idx == 0})
     if config.RAW_DEBUG:
         logger.info(f"=== RAW-THREAD-PARSED ===\n{json.dumps(nodes, ensure_ascii=False, indent=2)}\n=== END ===")
-
     memory = state.load_context(chain["root_uri"])
     search_data = ""
     if do_search:
@@ -50,14 +47,11 @@ async def process_item(client, item, llm):
             raw = await with_retry(lambda: provider["func"](params.get("query", ""), **{k: v for k, v in params.items() if k in provider["supports"] and v}))
             if search.is_search_result_valid(raw, search_type):
                 search_data = search.clean_search_results(raw, search_type)
-
     root_thread = "\n".join([f"@{n['handle']}: {n['text']} {' '.join(n['links'])}" for n in nodes if n['is_root'] or n.get('text')])
     final_ctx = state.merge_contexts(memory, root_thread, search_data, user_text)
-
     reply = generator.get_answer(llm, final_ctx, user_text, search_data, config.RESPONSE_MAX_CHARS)
     await with_retry(lambda: bsky.post_reply(client, config.BOT_DID, reply, chain["root_uri"], chain["root_cid"], uri, chain["parent_cid"]))
     state.save_context(chain["root_uri"], generator.update_summary(llm, memory, user_text, reply))
-
 async def main():
     logger.info("[main] === START ===")
     async with bsky.get_client() as client:
@@ -65,23 +59,17 @@ async def main():
         mini_due = timers.check_mini_timer()
         full_due = timers.check_full_timer()
         has_work = os.path.exists("work_data.json")
-
         llm = None
         if mini_due or full_due or has_work:
             llm = generator.get_model()
-
         if llm:
+            if has_work:
+                with open("work_data.json") as f:
+                    data = json.load(f)
+                await asyncio.gather(*[process_item(client, i, llm) for i in data.get("items", [])])
+            await community.process(client, llm)
             if mini_due or full_due:
                 await news.run(client, llm)
-
-            await community.process(client, llm)
-
-        if has_work and llm:
-            with open("work_data.json") as f:
-                data = json.load(f)
-            await asyncio.gather(*[process_item(client, i, llm) for i in data.get("items", [])])
-
-    logger.info("[main] === DONE ===")
-
+        logger.info("[main] === DONE ===")
 if __name__ == "__main__":
     asyncio.run(main())
