@@ -89,8 +89,10 @@ async def run(client, llm):
         final_post = f"{header}\n\n{body}\n\n{sig}"
 
     if config.RAW_DEBUG:
+        sep = "\n---\n"
+        ctx_block = sep.join(ctx_parts)
         logger.info(f"=== RAW-DIGEST-POST-TEXT ===\n{final_post}\n=== END ===")
-        logger.info(f"=== RAW-DIGEST-CONTEXT ===\n{'\n---\n'.join(ctx_parts)}\nGenerated: {now_utc}\n=== END ===")
+        logger.info(f"=== RAW-DIGEST-CONTEXT ===\n{ctx_block}\nGenerated: {now_utc}\n=== END ===")
 
     try:
         resp = await bsky.post_root(client, config.BOT_DID, final_post)
@@ -104,7 +106,9 @@ async def run(client, llm):
             _write_output("ACTIVE_DIGEST_URI", uri)
             _write_output("LAST_DIGEST_URI", uri)
 
-            digest_ctx = f"DIGEST CONTEXT:\n{'\n---\n'.join(ctx_parts)}\nGenerated: {now_utc}"
+            sep = "\n---\n"
+            ctx_block = sep.join(ctx_parts)
+            digest_ctx = f"DIGEST CONTEXT:\n{ctx_block}\nGenerated: {now_utc}"
             _update_gh_secret("CONTEXT_DIGEST", digest_ctx)
             return True
     except Exception as e:
