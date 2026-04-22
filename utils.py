@@ -3,9 +3,10 @@ import hashlib
 import re
 import json
 import logging
+import datetime
+import email.utils
 from httpx import HTTPStatusError
 from typing import Optional, Dict, List
-
 logger = logging.getLogger(__name__)
 
 class SecretFilter(logging.Filter):
@@ -17,7 +18,6 @@ class SecretFilter(logging.Filter):
         r'did:[^"\',\s}]+',
     ]
     REPLACEMENT = "[REDACTED]"
-
     def filter(self, record: logging.LogRecord) -> bool:
         if isinstance(record.msg, str):
             for pattern in self.SECRET_PATTERNS:
@@ -112,11 +112,20 @@ async def with_retry(func, max_attempts: int = 3, backoff: float = 1.5):
             return await func()
         except HTTPStatusError as e:
             if e.response.status_code in [429, 502, 503, 504] and attempt < max_attempts - 1:
-                retry_after = e.response.headers.get("retry-after")
-                if retry_after:
-                    await asyncio.sleep(int(retry_after))
-                else:
-                    await asyncio.sleep(5 * (backoff ** attempt))
+                retry_header = e.response.headers.get("retry-after")
+                wait_time = None
+                if retry_header:
+                    try:
+                        wait_time = int(retry_header)
+                    except ValueError:
+                        try:
+                            parsed_time = email.utils.parsedate_to_datetime(retry_header)
+                            wait_time = max(0, (parsed_time - datetime.datetime.now(datetime.timezone.utc)).total_seconds())
+                        except Exception:
+                            pass
+                if wait_time is None:
+                    wait_time = 5 * (backoff ** attempt)
+                await asyncio.sleep(wait_time)
                 continue
             raise
         except Exception as e:
