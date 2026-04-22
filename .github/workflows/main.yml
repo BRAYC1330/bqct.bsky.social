@@ -53,32 +53,6 @@ jobs:
           with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
               f.write(f"status={'true' if status else 'false'}\n")
           EOF
-      - name: Immediate Digest Timer Update
-        if: steps.check-run.outputs.status == 'true'
-        env:
-          PAT: ${{ secrets.PAT }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          LAST_MINI_DIGEST: ${{ secrets.LAST_MINI_DIGEST }}
-          LAST_FULL_DIGEST: ${{ secrets.LAST_FULL_DIGEST }}
-        run: |
-          python3 << 'EOF'
-          import os, subprocess
-          from datetime import datetime, timezone
-          import sys
-          sys.path.append('.')
-          import timers
-
-          now_utc = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
-          pat = os.environ["PAT"]
-          repo = os.environ["GITHUB_REPOSITORY"]
-
-          if timers.check_mini_timer():
-              print("[TIMER] Mini digest due. Updating LAST_MINI_DIGEST immediately.")
-              subprocess.run(["gh", "secret", "set", "LAST_MINI_DIGEST", "--body", now_utc, "--repo", repo], env={**os.environ, "GH_TOKEN": pat}, check=True)
-          elif timers.check_full_timer():
-              print("[TIMER] Full digest due. Updating LAST_FULL_DIGEST immediately.")
-              subprocess.run(["gh", "secret", "set", "LAST_FULL_DIGEST", "--body", now_utc, "--repo", repo], env={**os.environ, "GH_TOKEN": pat}, check=True)
-          EOF
       - name: Install heavy deps
         if: steps.check-run.outputs.status == 'true'
         env:
@@ -143,25 +117,16 @@ jobs:
         if: steps.check-run.outputs.status == 'true'
         run: |
           python3 << 'EOF'
-          import os, subprocess, json
+          import os, subprocess
           def update_secret(key, value):
               if not value: return
               cmd = ["gh", "secret", "set", key, "--body", value, "--repo", os.environ["GITHUB_REPOSITORY"]]
               subprocess.run(cmd, env={**os.environ, "GH_TOKEN": os.environ["PAT"]}, check=True)
-          updates = {}
-          if os.environ.get("LAST_MINI_DIGEST"):
-              updates["LAST_MINI_DIGEST"] = os.environ["LAST_MINI_DIGEST"]
-              print(f"[SECRET] Updating LAST_MINI_DIGEST")
-          if os.environ.get("LAST_FULL_DIGEST"):
-              updates["LAST_FULL_DIGEST"] = os.environ["LAST_FULL_DIGEST"]
-              print(f"[SECRET] Updating LAST_FULL_DIGEST")
-          if os.environ.get("LAST_DIGEST_URI"):
-              updates["LAST_DIGEST_URI"] = os.environ["LAST_DIGEST_URI"]
-          if os.environ.get("ACTIVE_DIGEST_URI"):
-              updates["ACTIVE_DIGEST_URI"] = os.environ["ACTIVE_DIGEST_URI"]
-          for k, v in updates.items():
-              if v:
-                  update_secret(k, v)
+          for key in ["LAST_MINI_DIGEST", "LAST_FULL_DIGEST", "LAST_DIGEST_URI", "ACTIVE_DIGEST_URI"]:
+              val = os.environ.get(key, "").strip()
+              if val:
+                  print(f"[SECRET] Updating {key}")
+                  update_secret(key, val)
           EOF
         env:
           PAT: ${{ secrets.PAT }}
