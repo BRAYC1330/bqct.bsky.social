@@ -53,6 +53,32 @@ jobs:
           with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
               f.write(f"status={'true' if status else 'false'}\n")
           EOF
+      - name: Immediate Digest Timer Update
+        if: steps.check-run.outputs.status == 'true'
+        env:
+          PAT: ${{ secrets.PAT }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          LAST_MINI_DIGEST: ${{ secrets.LAST_MINI_DIGEST }}
+          LAST_FULL_DIGEST: ${{ secrets.LAST_FULL_DIGEST }}
+        run: |
+          python3 << 'EOF'
+          import os, subprocess
+          from datetime import datetime, timezone
+          import sys
+          sys.path.append('.')
+          import timers
+
+          now_utc = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
+          pat = os.environ["PAT"]
+          repo = os.environ["GITHUB_REPOSITORY"]
+
+          if timers.check_mini_timer():
+              print("[TIMER] Mini digest due. Updating LAST_MINI_DIGEST immediately.")
+              subprocess.run(["gh", "secret", "set", "LAST_MINI_DIGEST", "--body", now_utc, "--repo", repo], env={**os.environ, "GH_TOKEN": pat}, check=True)
+          elif timers.check_full_timer():
+              print("[TIMER] Full digest due. Updating LAST_FULL_DIGEST immediately.")
+              subprocess.run(["gh", "secret", "set", "LAST_FULL_DIGEST", "--body", now_utc, "--repo", repo], env={**os.environ, "GH_TOKEN": pat}, check=True)
+          EOF
       - name: Install heavy deps
         if: steps.check-run.outputs.status == 'true'
         env:
