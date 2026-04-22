@@ -6,14 +6,11 @@ import config
 from logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
-
 def _slot(tid: str) -> int:
     return int(hashlib.sha256(tid.encode()).hexdigest(), 16) % config.CONTEXT_SLOT_COUNT
-
 def load_context(thread_id: str) -> str:
     slot = _slot(thread_id)
     return os.getenv(f"CONTEXT_{slot}", "") or ""
-
 def save_context(thread_id: str, memory: str):
     slot = _slot(thread_id)
     repo = os.environ.get("GITHUB_REPOSITORY", "")
@@ -25,7 +22,6 @@ def save_context(thread_id: str, memory: str):
         subprocess.run(cmd, env={**os.environ, "GH_TOKEN": pat}, check=True, capture_output=True)
     except Exception as e:
         logger.error(f"[CTX] Save failed: {e}")
-
 def merge_contexts(memory: str, root_thread: str, search_data: str, user_query: str) -> str:
     parts = []
     if memory:
