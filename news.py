@@ -1,5 +1,6 @@
 import os
 import logging
+import subprocess
 import json
 from datetime import datetime, timezone
 import config
@@ -10,6 +11,7 @@ import timers
 from logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
+
 def _update_gh_secret(key, value):
     if not value:
         return
@@ -22,19 +24,23 @@ def _update_gh_secret(key, value):
         subprocess.run(cmd, env={**os.environ, "GH_TOKEN": pat}, check=True, capture_output=True)
     except Exception as e:
         logger.error(f"[NEWS] Secret update failed: {e}")
+
 def _write_output(key, value):
     path = os.getenv("GITHUB_OUTPUT")
     if path and value:
         with open(path, "a") as f:
             f.write(f"{key}={value}\n")
+
 async def run(client, llm):
-    now_utc = datetime.now(timezone.utc).isoformat()
     is_mini = timers.check_mini_timer()
     is_full = timers.check_full_timer()
-    if not (is_mini or is_full):
+    if is_mini:
+        timer_key = "LAST_MINI_DIGEST"
+    elif is_full:
+        timer_key = "LAST_FULL_DIGEST"
+    else:
         return False
-    digest_type = "full" if is_full else "mini"
-    timer_key = "LAST_FULL_DIGEST" if is_full else "LAST_MINI_DIGEST"
+    now_utc = datetime.now(timezone.utc).isoformat()
     _update_gh_secret(timer_key, now_utc)
     _write_output(timer_key, now_utc)
     trends = await search.get_trending_topics_raw()
