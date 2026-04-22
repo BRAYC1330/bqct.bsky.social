@@ -6,15 +6,15 @@ on:
 permissions:
   contents: read
 jobs:
-  run-bot:
+  run:
     runs-on: ubuntu-latest
     environment: production
     outputs:
       last_processed: ${{ steps.check.outputs.last_processed }}
-      last_mini_digest: ${{ steps.run-bot.outputs.LAST_MINI_DIGEST }}
-      last_full_digest: ${{ steps.run-bot.outputs.LAST_FULL_DIGEST }}
-      last_digest_uri: ${{ steps.run-bot.outputs.LAST_DIGEST_URI }}
-      active_digest_uri: ${{ steps.run-bot.outputs.ACTIVE_DIGEST_URI }}
+      last_mini_digest: ${{ steps.run.outputs.LAST_MINI_DIGEST }}
+      last_full_digest: ${{ steps.run.outputs.LAST_FULL_DIGEST }}
+      last_digest_uri: ${{ steps.run.outputs.LAST_DIGEST_URI }}
+      active_digest_uri: ${{ steps.run.outputs.ACTIVE_DIGEST_URI }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
