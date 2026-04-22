@@ -16,7 +16,7 @@ async def parse_thread(thread_data: dict, root_uri: str = "", client=None):
     nodes = utils.flatten_thread(thread_data.get("thread", {}))
     logger.debug(f"[parse_thread] Extracted {len(nodes)} nodes")
     return nodes
-async def parse_digest_thread(thread_ Dict) -> Dict:
+async def parse_digest_thread(thread_data: Dict) -> Dict:
     logger.debug(f"[parse_digest_thread] Parsing thread with {len(thread_data.get('thread', {}))} nodes")
     nodes = utils.flatten_thread(thread_data.get("thread", {}))
     root = next((n for n in nodes if n.get("is_root")), {"uri": "", "cid": "", "text": ""})
