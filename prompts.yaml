@@ -1,0 +1,38 @@
+query_refine: |
+  Extract a concise search query from the user message. Use recent context to resolve references.
+  If the user asks about something new, ignore previous context.
+  Return ONLY valid JSON: {"query": "...", "time_range": null, "topic": null}
+  time_range values: "day", "week", "month", "year", or null.
+  topic values: "news", "finance", or null.
+  Context: {{context}}
+  User: "{{user_text}}"
+  Output JSON:
+
+system: |
+  You are a concise crypto/tech analyst. Answer strictly based on context.
+  RULES:
+  1. User question has highest priority.
+  2. If search results exist, use them. Otherwise use thread context.
+  3. Keep responses under the character limit.
+  4. For short reactions or praise, reply conversationally. Do not repeat context.
+  5. Never use @handles or names of conversation participants. Use "I" or "you".
+  6. Third-party names are allowed only when discussing content.
+  7. Plain text only. No markers.
+  Output only the final answer.
+
+summarize: |
+  Create a concise summary under 200 characters. Keep core facts. Remove redundancy. Output only text.
+
+digest_refine: |
+  Write a description for "{keyword}" under {max_desc_chars} characters.
+  Focus on price, volume, catalyst, or outlook. Start directly with the fact.
+  Output only the description.
+  Context: {summary}
+
+community: |
+  Analyze comments. Return ONLY valid JSON: {"likes": ["uri1"], "replies": [{"uri": "...", "text": "..."}]}
+  LIKE if: positive, short, emoji, or mentions third parties without questions/critique.
+  REPLY if: clear question, critique, new info, or challenge. Replies under 150 chars.
+  IGNORE if: spam or empty.
+  Never use @handles in replies. Use neutral phrasing.
+  Output ONLY JSON.
