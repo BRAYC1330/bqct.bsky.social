@@ -59,9 +59,11 @@ jobs:
         if: steps.check-run.outputs.status == 'true'
         env:
           PAT: ${{ secrets.PAT }}
+          GH_TOKEN: ${{ secrets.PAT }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           NEEDS_MINI: ${{ steps.check-run.outputs.needs_mini }}
           NEEDS_FULL: ${{ steps.check-run.outputs.needs_full }}
+          HAS_WORK: ${{ steps.check-run.outputs.has_work }}
         run: |
           NOW=$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)
           if [ "$NEEDS_MINI" = "true" ]; then
@@ -70,10 +72,6 @@ jobs:
           elif [ "$NEEDS_FULL" = "true" ]; then
             gh secret set LAST_FULL_DIGEST --body "$NOW" --repo "$GITHUB_REPOSITORY"
             echo "[TIMER] LAST_FULL_DIGEST reset successfully. API response: OK"
-          fi
-          if [ "$NEEDS_MINI" != "true" ] && [ "$NEEDS_FULL" != "true" ] && [ "${{ steps.check-run.outputs.has_work }}" != "true" ]; then
-            echo "[TIMER] No digest due and no work found. Exiting early to save resources."
-            exit 0
           fi
       - name: Install heavy deps
         if: steps.check-run.outputs.status == 'true'
