@@ -13,12 +13,10 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 def _update_gh_secret(key, value):
-    if not value:
-        return
+    if not value: return
     repo = os.environ.get("GITHUB_REPOSITORY", "")
     pat = os.environ.get("PAT", "")
-    if not repo or not pat:
-        return
+    if not repo or not pat: return
     cmd = ["gh", "secret", "set", key, "--body", value, "--repo", repo]
     try:
         subprocess.run(cmd, env={**os.environ, "GH_TOKEN": pat}, check=True, capture_output=True)
@@ -40,6 +38,7 @@ async def run(client, llm):
         timer_key = "LAST_FULL_DIGEST"
     else:
         return False
+    logger.info(f"[TIMER] Resetting {timer_key}")
     now_utc = datetime.now(timezone.utc).isoformat()
     _update_gh_secret(timer_key, now_utc)
     _write_output(timer_key, now_utc)
