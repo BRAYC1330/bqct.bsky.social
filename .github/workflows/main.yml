@@ -60,7 +60,7 @@ jobs:
               f.write(f"needs_full={'true' if needs_full else 'false'}\n")
               f.write(f"has_work={'true' if has_work else 'false'}\n")
           print(f"[DEBUG] has_work={has_work}, mini_due={needs_mini}, full_due={needs_full}, status={status}")
-          now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%3NZ')
+          now = datetime.now(timezone.utc).isoformat()
           repo = os.environ['GITHUB_REPOSITORY']
           if needs_mini:
               subprocess.run(["gh", "secret", "set", "LAST_MINI_DIGEST", "--body", now, "--repo", repo], check=True)
