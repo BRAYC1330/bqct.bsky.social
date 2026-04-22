@@ -13,12 +13,10 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 def _update_gh_secret(key, value):
-    if not value:
-        return
+    if not value: return
     repo = os.environ.get("GITHUB_REPOSITORY", "")
     pat = os.environ.get("PAT", "")
-    if not repo or not pat:
-        return
+    if not repo or not pat: return
     cmd = ["gh", "secret", "set", key, "--body", value, "--repo", repo]
     try:
         subprocess.run(cmd, env={**os.environ, "GH_TOKEN": pat}, check=True, capture_output=True)
@@ -32,6 +30,7 @@ def _write_output(key, value):
             f.write(f"{key}={value}\n")
 
 async def run(client, llm):
+    now_utc = datetime.now(timezone.utc).isoformat()
     is_mini = timers.check_mini_timer()
     is_full = timers.check_full_timer()
     if is_mini:
@@ -40,48 +39,29 @@ async def run(client, llm):
         timer_key = "LAST_FULL_DIGEST"
     else:
         return False
-    now_utc = datetime.now(timezone.utc).isoformat()
-    logger.info(f"[TIMER] {timer_key} already reset in workflow. Preparing post.")
     trends = await search.get_trending_topics_raw()
-    if not trends:
-        return False
+    if not trends: return False
     sig = f"Qwen | Chainbase TOPS {config.SIGNATURE_ICONS}"
     stats_emoji = config.TREND_STATS_EMOJI
     header = "TOP CRYPTO TREND:"
-    overhead = len(header) + 4 + len(sig)
-    available = max(50, 300 - overhead)
-    budget_per_trend = max(40, int(available / 6))
     lines = []
-    ctx_parts = []
+    ctx_entries = []
     for item in trends[:6]:
         kw = item.get("keyword", "Unknown")
         sc = int(item.get("score", 0))
         st = item.get("rank_status", "same")
+        is_new = item.get("is_new", False)
+        item_id = item.get("id", "")
+        summary = item.get("summary", "")
         e = config.TREND_EMOJIS.get(st.lower(), "")
-        meta = f"{e} {kw} {stats_emoji} {sc}: "
-        desc_budget = max(20, budget_per_trend - len(meta))
-        desc = generator.generate_digest(llm, kw, item.get("summary", ""), desc_budget)
-        safe_limit = desc_budget - 8
-        if len(desc) > safe_limit:
-            truncated = desc[:safe_limit]
-            last_space = truncated.rfind(" ")
-            desc = truncated[:last_space] + "." if last_space > 0 else truncated + "."
-        line = f"{meta}{desc}"
-        if len(line) > budget_per_trend:
-            line = line[:budget_per_trend - 1] + "..."
-        lines.append(line)
-        ctx_parts.append(f"{kw}: {desc}")
+        lines.append(f"{e} {kw} {stats_emoji} {sc}")
+        ctx_entries.append({"id": item_id, "keyword": kw, "summary": summary, "score": sc, "rank_status": st, "is_new": is_new})
     body = "\n".join(lines)
-    final_post = f"{header}\n{body}\n{sig}"
-    while len(final_post) > 300 and lines:
-        lines.pop()
-        body = "\n".join(lines)
-        final_post = f"{header}\n{body}\n{sig}"
+    final_post = f"{header}\n\n{body}\n\n{sig}"
+    digest_ctx_json = json.dumps(ctx_entries, ensure_ascii=False, indent=2)
     if config.RAW_DEBUG:
-        sep = "\n---\n"
-        ctx_block = sep.join(ctx_parts)
         logger.info(f"=== RAW-DIGEST-POST-TEXT ===\n{final_post}\n=== END ===")
-        logger.info(f"=== RAW-DIGEST-CONTEXT ===\n{ctx_block}\nGenerated: {now_utc}\n=== END ===")
+        logger.info(f"=== RAW-DIGEST-CONTEXT-JSON ===\n{digest_ctx_json}\n=== END ===")
     try:
         resp = await bsky.post_root(client, config.BOT_DID, final_post)
         uri = resp.get("uri")
@@ -93,10 +73,7 @@ async def run(client, llm):
             _update_gh_secret("LAST_DIGEST_URI", uri)
             _write_output("ACTIVE_DIGEST_URI", uri)
             _write_output("LAST_DIGEST_URI", uri)
-            sep = "\n---\n"
-            ctx_block = sep.join(ctx_parts)
-            digest_ctx = f"DIGEST CONTEXT:\n{ctx_block}\nGenerated: {now_utc}"
-            _update_gh_secret("CONTEXT_DIGEST", digest_ctx)
+            _update_gh_secret("CONTEXT_DIGEST", digest_ctx_json)
             return True
     except Exception as e:
         logger.error(f"[NEWS] Post failed: {e}")
