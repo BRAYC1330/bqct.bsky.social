@@ -15,6 +15,30 @@ def is_english_text(text: str) -> bool:
         return False
     return sum(1 for c in text if ord(c) < 128) / len(text) > 0.7
 
+def clean_chainbase_data(items: list) -> str:
+    lines = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        kw = item.get("keyword", "Unknown")
+        score = item.get("score", 0)
+        rank = item.get("current_rank", "N/A")
+        status = item.get("rank_status", "same")
+        summary = item.get("summary", "")
+        lines.append(f"{kw} | Score: {score} | Rank: {rank} | Trend: {status}\nSummary: {summary}")
+    return "\n\n".join(lines)
+
+def clean_search_results(raw: str, search_type: str) -> str:
+    try:
+        data = json.loads(raw) if isinstance(raw, str) else raw
+        if search_type == "chainbase":
+            items = data if isinstance(data, list) else data.get("items", [])
+            return clean_chainbase_data(items)
+        return raw
+    except Exception as e:
+        logger.warning(f"[SEARCH] Clean failed: {e}")
+    return raw
+
 async def get_trending_topics_raw() -> list:
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(config.REQUEST_TIMEOUT, connect=config.CONNECT_TIMEOUT)) as client:
