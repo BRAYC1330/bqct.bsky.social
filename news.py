@@ -5,20 +5,51 @@ import json
 from datetime import datetime, timezone
 import config
 import search
+import generator
 import bsky
+import timers
 from logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
 
-async def post_if_due(client, llm, digest_type="mini"):
+def _update_gh_secret(key, value):
+    if not value:
+        return
+    repo = os.environ.get("GITHUB_REPOSITORY", "")
+    pat = os.environ.get("PAT", "")
+    if not repo or not pat:
+        return
+    cmd = ["gh", "secret", "set", key, "--body", value, "--repo", repo]
+    try:
+        subprocess.run(cmd, env={**os.environ, "GH_TOKEN": pat}, check=True, capture_output=True)
+    except Exception as e:
+        logger.error(f"[NEWS] Secret update failed: {e}")
+
+def _write_output(key, value):
+    path = os.getenv("GITHUB_OUTPUT")
+    if path and value:
+        with open(path, "a") as f:
+            f.write(f"{key}={value}\n")
+
+async def run(client, llm):
+    now_utc = datetime.now(timezone.utc).isoformat()
+    is_mini = timers.check_mini_timer()
+    is_full = timers.check_full_timer()
+
+    if not (is_mini or is_full):
+        return False
+
+    digest_type = "full" if is_full else "mini"
+    timer_key = "LAST_FULL_DIGEST" if is_full else "LAST_MINI_DIGEST"
+    _update_gh_secret(timer_key, now_utc)
+    _write_output(timer_key, now_utc)
+
     trends = await search.get_trending_topics_raw()
     if not trends:
-        return None
+        return False
 
     sig = f"Qwen | Chainbase TOPS {config.SIGNATURE_ICONS}"
-    now_utc = datetime.now(timezone.utc).isoformat()
     stats_emoji = config.TREND_STATS_EMOJI
-
     header = "TOP CRYPTO TREND:"
     overhead = len(header) + 4 + len(sig)
     available = max(50, 300 - overhead)
@@ -65,10 +96,17 @@ async def post_if_due(client, llm, digest_type="mini"):
         resp = await bsky.post_root(client, config.BOT_DID, final_post)
         uri = resp.get("uri")
         if uri:
+            old_active = os.environ.get("ACTIVE_DIGEST_URI", "")
+            if old_active and old_active not in ("{}", "null", ""):
+                _update_gh_secret("PREV_DIGEST_URI", old_active)
+            _update_gh_secret("ACTIVE_DIGEST_URI", uri)
+            _update_gh_secret("LAST_DIGEST_URI", uri)
+            _write_output("ACTIVE_DIGEST_URI", uri)
+            _write_output("LAST_DIGEST_URI", uri)
+
             digest_ctx = f"DIGEST CONTEXT:\n{'\n---\n'.join(ctx_parts)}\nGenerated: {now_utc}"
-            cmd = ["gh", "secret", "set", "CONTEXT_DIGEST", "--body", digest_ctx, "--repo", os.environ["GITHUB_REPOSITORY"]]
-            subprocess.run(cmd, env={**os.environ, "GH_TOKEN": os.environ["PAT"]}, check=True)
-            return {"uri": uri, "time": now_utc, "type": digest_type}
+            _update_gh_secret("CONTEXT_DIGEST", digest_ctx)
+            return True
     except Exception as e:
         logger.error(f"[NEWS] Post failed: {e}")
-    return None
+    return False
