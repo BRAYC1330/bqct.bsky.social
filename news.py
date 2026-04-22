@@ -5,16 +5,15 @@ import json
 from datetime import datetime, timezone
 import config
 import search
-import generator
 import bsky
 from logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
 
-async def post_if_due(client, llm):
+async def post_if_due(client, llm, digest_type="mini"):
     trends = await search.get_trending_topics_raw()
     if not trends:
-        return False
+        return None
 
     sig = f"Qwen | Chainbase TOPS {config.SIGNATURE_ICONS}"
     now_utc = datetime.now(timezone.utc).isoformat()
@@ -69,13 +68,7 @@ async def post_if_due(client, llm):
             digest_ctx = f"DIGEST CONTEXT:\n{'\n---\n'.join(ctx_parts)}\nGenerated: {now_utc}"
             cmd = ["gh", "secret", "set", "CONTEXT_DIGEST", "--body", digest_ctx, "--repo", os.environ["GITHUB_REPOSITORY"]]
             subprocess.run(cmd, env={**os.environ, "GH_TOKEN": os.environ["PAT"]}, check=True)
-            updates = {"LAST_DIGEST_TIME": now_utc, "ACTIVE_DIGEST_URI": uri, "LAST_DIGEST_URI": uri}
-            github_output = os.getenv("GITHUB_OUTPUT", "")
-            if github_output:
-                with open(github_output, "a") as f:
-                    for k, v in updates.items():
-                        f.write(f"{k}={v}\n")
-            return True
+            return {"uri": uri, "time": now_utc, "type": digest_type}
     except Exception as e:
         logger.error(f"[NEWS] Post failed: {e}")
-    return False
+    return None
