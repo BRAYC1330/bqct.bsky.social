@@ -11,7 +11,6 @@ jobs:
     environment: production
     outputs:
       last_processed: ${{ steps.checker.outputs.last_processed }}
-      active_digest_uri: ${{ steps.run.outputs.ACTIVE_DIGEST_URI }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -94,25 +93,6 @@ jobs:
           MAX_LINK_CONTENT_SIZE: 400
           LLAMA_NO_ACCELERATE: 1
         run: python bot.py
-      - name: Update secrets atomically
-        if: steps.checker.outputs.status == 'true'
-        run: |
-          python3 << 'EOF'
-          import os, subprocess
-          def update_secret(key, value):
-              if not value: return
-              cmd = ["gh", "secret", "set", key, "--body", value, "--repo", os.environ["GITHUB_REPOSITORY"]]
-              subprocess.run(cmd, env={**os.environ, "GH_TOKEN": os.environ["PAT"]}, check=True)
-          for key in ["ACTIVE_DIGEST_URI"]:
-              val = os.environ.get(key, "").strip()
-              if val:
-                  print(f"[SECRET] Updating {key}")
-                  update_secret(key, val)
-          EOF
-        env:
-          PAT: ${{ secrets.PAT }}
-          LAST_PROCESSED: ${{ steps.checker.outputs.last_processed }}
-          ACTIVE_DIGEST_URI: ${{ steps.run.outputs.ACTIVE_DIGEST_URI }}
       - name: Health check alert
         if: failure()
         run: |
