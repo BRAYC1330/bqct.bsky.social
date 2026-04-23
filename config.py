@@ -2,6 +2,7 @@ import os
 import sys
 import pathlib
 import yaml
+import multiprocessing
 PROMPTS_PATH = pathlib.Path(__file__).parent / "prompts.yaml"
 with open(PROMPTS_PATH, "r", encoding="utf-8") as f:
     _p = yaml.safe_load(f)
@@ -23,12 +24,12 @@ def _env_float(name: str, default: float) -> float:
     val = os.getenv(name, "")
     return float(val) if val.strip() else default
 MODEL_PATH = os.getenv("MODEL_PATH", "models/qwen2.5-coder-14b-instruct-q5_k_m.gguf")
-MODEL_N_CTX = _env_int("MODEL_N_CTX", 14000)
-MODEL_N_THREADS = _env_int("MODEL_N_THREADS", 4)
+MODEL_N_CTX = _env_int("MODEL_N_CTX", 8192)
+MODEL_N_THREADS = _env_int("MODEL_N_THREADS", multiprocessing.cpu_count())
 TEMPERATURE = _env_float("TEMPERATURE", 0.7)
-MAX_TOKENS = _env_int("MAX_TOKENS", 512)
+MAX_TOKENS = _env_int("MAX_TOKENS", 200)
 RESPONSE_MAX_CHARS = _env_int("RESPONSE_MAX_CHARS", 300)
-CONTEXT_SLOT_COUNT = _env_int("CONTEXT_SLOT_COUNT", 10)
+CONTEXT_SLOT_COUNT = _env_int("CONTEXT_SLOT_COUNT", 5)
 SEARCH_TIMEOUT = _env_int("SEARCH_TIMEOUT", 30)
 REQUEST_TIMEOUT = _env_int("REQUEST_TIMEOUT", 60)
 CONNECT_TIMEOUT = _env_int("CONNECT_TIMEOUT", 10)
