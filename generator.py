@@ -8,7 +8,7 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 def get_model():
-    model_path = os.path.join(config.MODEL_DIR, config.MODEL_FILE)
+    model_path = config.MODEL_PATH
     if not os.path.exists(model_path):
         logger.error(f"[generator] Model not found: {model_path}")
         return None
@@ -21,7 +21,7 @@ def get_model():
             n_batch=512,
             verbose=False
         )
-        logger.info(f"[generator] Model loaded: {config.MODEL_FILE}")
+        logger.info(f"[generator] Model loaded: {os.path.basename(model_path)}")
         return llm
     except Exception as e:
         logger.error(f"[generator] Model load failed: {e}")
