@@ -4,29 +4,13 @@ import json
 import logging
 import httpx
 import config
+import bsky
 from logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
 
 async def get_client():
     return httpx.AsyncClient(timeout=30)
-
-async def login_with_cache(client, handle, password):
-    session_path = "session.json"
-    if os.path.exists(session_path):
-        try:
-            with open(session_path) as f:
-                sess = json.load(f)
-            client.headers["Authorization"] = f"Bearer {sess['accessJwt']}"
-            return
-        except:
-            pass
-    r = await client.post("https://bsky.social/xrpc/com.atproto.server.createSession", json={"identifier": handle, "password": password})
-    r.raise_for_status()
-    sess = r.json()
-    client.headers["Authorization"] = f"Bearer {sess['accessJwt']}"
-    with open(session_path, "w") as f:
-        json.dump(sess, f)
 
 def check_timer(last_processed: str, interval_hours: int) -> bool:
     from datetime import datetime, timezone, timedelta
@@ -36,7 +20,7 @@ def check_timer(last_processed: str, interval_hours: int) -> bool:
         last = datetime.fromisoformat(last_processed.replace("Z", "+00:00"))
         now = datetime.now(timezone.utc)
         return (now - last) >= timedelta(hours=interval_hours)
-    except:
+    except Exception:
         return True
 
 async def update_secret(key: str, value: str, pat: str, repo: str):
@@ -50,34 +34,27 @@ async def update_secret(key: str, value: str, pat: str, repo: str):
 async def main():
     client = await get_client()
     try:
-        await login_with_cache(client, config.BOT_HANDLE, config.BOT_PASSWORD)
-        
+        await bsky.login_with_cache(client, config.BOT_HANDLE, config.BOT_PASSWORD)
         last_processed = os.environ.get("LAST_PROCESSED", "").strip()
         active_digest_uri = os.environ.get("ACTIVE_DIGEST_URI", "").strip()
         last_mini = os.environ.get("LAST_MINI_DIGEST", "").strip()
         last_full = os.environ.get("LAST_FULL_DIGEST", "").strip()
-        
         mini_due = check_timer(last_mini, 4)
-        full_due = check_timer(last_full, 2) if last_full else True
-        
+        full_due = check_timer(last_full, 24) if last_full else True
         if full_due and not active_digest_uri:
             logger.warning("LAST_FULL_DIGEST is empty. Returning due=True")
             await update_secret("LAST_FULL_DIGEST", "init", os.environ["PAT"], os.environ["GITHUB_REPOSITORY"])
             logger.info("TIMER LAST_FULL_DIGEST reset successfully (pre-emptive).")
-        
         tasks = []
         if active_digest_uri:
             if mini_due:
                 tasks.append({"type": "digest_mini", "uri": active_digest_uri})
             if full_due:
                 tasks.append({"type": "digest_full", "uri": active_digest_uri})
-        
         with open("work_data.json", "w") as f:
             json.dump({"tasks": tasks}, f)
-        
         logger.info(f"Received 95 notifs. Relevant: 0 (Owner: 0, Digest comments: 0, Digest task: {tasks[0]['type'] if tasks else 'none'}). Total queued: {len(tasks)}. LAST_PROCESSED updated.")
         await update_secret("LAST_PROCESSED", json.dumps({"ts": str(__import__("datetime").datetime.now(__import__("datetime").timezone.utc))}), os.environ["PAT"], os.environ["GITHUB_REPOSITORY"])
-        
         print(f"::set-output name=status::{'true' if tasks else 'false'}")
         if tasks:
             print(f"::set-output name=last_processed::{json.dumps({'ts': str(__import__('datetime').datetime.now(__import__('datetime').timezone.utc))})}")
