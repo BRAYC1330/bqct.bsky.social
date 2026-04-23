@@ -55,10 +55,20 @@ async def fetch_thread_chain(client, uri):
     post = thread.get("post", {})
     record = post.get("record", {})
     author = post.get("author", {})
+    
+    reply_ref = record.get("reply", {})
+    root_ref = reply_ref.get("root", {}) if reply_ref else {}
+    parent_ref = reply_ref.get("parent", {}) if reply_ref else {}
+    
+    root_uri = root_ref.get("uri") if root_ref.get("uri") else uri
+    root_cid = root_ref.get("cid") if root_ref.get("cid") else post.get("cid", "")
+    root_text = record.get("text", "") if root_uri == uri else ""
+    parent_cid = parent_ref.get("cid", "") if parent_ref else ""
+    
     return {
-        "root_uri": uri,
-        "root_cid": post.get("cid", ""),
-        "root_text": record.get("text", ""),
-        "parent_cid": record.get("reply", {}).get("parent", {}).get("cid", "") if record.get("reply") else "",
+        "root_uri": root_uri,
+        "root_cid": root_cid,
+        "root_text": root_text,
+        "parent_cid": parent_cid,
         "chain": [{"record": record, "author": author}]
     }
