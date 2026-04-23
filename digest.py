@@ -61,6 +61,9 @@ async def run(client, llm, task_type="digest_mini"):
         if uri:
             _update_gh_secret("ACTIVE_DIGEST_URI", uri)
             _update_gh_secret("CONTEXT_DIGEST", digest_ctx_json)
+            timer_key = "LAST_FULL_DIGEST" if is_full else "LAST_MINI_DIGEST"
+            now_utc = datetime.now(timezone.utc).isoformat()
+            _update_gh_secret(timer_key, now_utc)
             return True
     except Exception as e:
         logger.error(f"[DIGEST] Post failed: {e}")
