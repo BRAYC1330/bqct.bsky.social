@@ -34,13 +34,14 @@ Context: {context}
 Format: {{"query": "search terms", "limit": 5, "time_range": "24h"}}
 Output:"""
     try:
-        raw = llm(prompt, max_tokens=100, temperature=0.1, stop=["}", "\n\n"])
+        output = llm(prompt, max_tokens=100, temperature=0.1, stop=["}", "\n\n"])
+        raw = output["choices"][0]["text"]
         raw = raw.strip().rstrip("}") + "}"
         return yaml.safe_load(raw)
     except:
         return {"query": user_query, "limit": 5}
 
-def get_answer(llm, context: str, user_query: str, search_data: str = "", max_chars: int = 280, temperature: float = 0.7) -> str:
+def get_answer(llm, context: str, user_query: str, search_ str = "", max_chars: int = 280, temperature: float = 0.7) -> str:
     prompt = f"""You are a concise crypto assistant. Reply in 1-2 short sentences.
 Context: {context}
 Query: {user_query}
@@ -50,7 +51,8 @@ Rules:
 - No hashtags, no links, no markdown.
 - Be helpful and direct.
 Reply:"""
-    response = llm(prompt, max_tokens=150, temperature=temperature)
+    output = llm(prompt, max_tokens=150, temperature=temperature)
+    response = output["choices"][0]["text"]
     return response.strip()
 
 def update_summary(llm, memory: str, user_query: str, reply: str) -> str:
