@@ -62,10 +62,3 @@ async def fetch_thread_chain(client, uri):
         "parent_cid": record.get("reply", {}).get("parent", {}).get("cid", "") if record.get("reply") else "",
         "chain": [{"record": record, "author": author}]
     }
-
-def like(client, bot_did, uri, cid):
-    record = {"$type": "app.bsky.feed.like", "subject": {"uri": uri, "cid": cid}, "createdAt": datetime.now(timezone.utc).isoformat()}
-    body = {"repo": bot_did, "collection": "app.bsky.feed.like", "record": record}
-    r = client.post("https://bsky.social/xrpc/com.atproto.repo.createRecord", json=body)
-    r.raise_for_status()
-    return r.json()
