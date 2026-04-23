@@ -23,20 +23,15 @@ def _update_gh_secret(key, value):
         logger.error(f"[DIGEST] Secret update failed: {e}")
 
 async def run(client, llm, task_type="digest_mini"):
-    is_full = "full" in str(task_type).lower()
-    limit = 1 if is_full else 6
-    header = "TOP CRYPTO TREND:" if is_full else "TOP CRYPTO TRENDS:"
-
     trends = await search.get_trending_topics_raw()
     if not trends:
         return False
-
     sig = f"Qwen | Chainbase TOPS {config.SIGNATURE_ICONS}"
     stats_emoji = config.TREND_STATS_EMOJI
+    header = "TOP CRYPTO TREND:"
     lines = []
     ctx_entries = []
-
-    for item in trends[:limit]:
+    for item in trends[:6]:
         kw = item.get("keyword", "Unknown")
         sc = int(item.get("score", 0))
         st = item.get("rank_status", "same")
@@ -46,24 +41,18 @@ async def run(client, llm, task_type="digest_mini"):
         e = config.TREND_EMOJIS.get(st.lower(), "")
         lines.append(f"{e} {kw} {stats_emoji} {sc}")
         ctx_entries.append({"id": item_id, "keyword": kw, "summary": summary, "score": sc, "rank_status": st, "is_new": is_new})
-
     body = "\n".join(lines)
     final_post = f"{header}\n\n{body}\n\n{sig}"
     digest_ctx_json = json.dumps(ctx_entries, ensure_ascii=False, indent=2)
-
     if config.RAW_DEBUG:
         logger.info(f"=== RAW-DIGEST-POST-TEXT ===\n{final_post}\n=== END ===")
         logger.info(f"=== RAW-DIGEST-CONTEXT-JSON ===\n{digest_ctx_json}\n=== END ===")
-
     try:
         resp = await bsky.post_root(client, config.BOT_DID, final_post)
         uri = resp.get("uri")
         if uri:
             _update_gh_secret("ACTIVE_DIGEST_URI", uri)
             _update_gh_secret("CONTEXT_DIGEST", digest_ctx_json)
-            timer_key = "LAST_FULL_DIGEST" if is_full else "LAST_MINI_DIGEST"
-            now_utc = datetime.now(timezone.utc).isoformat()
-            _update_gh_secret(timer_key, now_utc)
             return True
     except Exception as e:
         logger.error(f"[DIGEST] Post failed: {e}")
