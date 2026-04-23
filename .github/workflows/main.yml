@@ -20,7 +20,7 @@ jobs:
           cache: 'pip'
           cache-dependency-path: 'requirements.txt'
       - name: Install lightweight deps
-        run: pip install httpx PyNaCl pyyaml
+        run: pip install httpx pyyaml
       - name: Check
         id: checker
         env:
