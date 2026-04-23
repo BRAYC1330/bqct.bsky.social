@@ -1,32 +1,30 @@
 import os
 import logging
 from datetime import datetime, timezone
-from logging_config import setup_logging
-setup_logging()
 logger = logging.getLogger(__name__)
 
-def check_timer(secret_name: str, hours: int) -> bool:
-    logger.debug(f"[check_timer] Checking {secret_name} (threshold: {hours}h)")
-    secret_value = os.getenv(secret_name, "").strip()
-    if not secret_value or secret_value.lower() in ("", "{}", "null", "none", "''", '""'):
-        logger.debug(f"[check_timer] {secret_name} is empty/invalid -> due=True")
+MINI_INTERVAL = 4 * 3600
+FULL_INTERVAL = 2 * 3600
+
+def _check(last_key, interval):
+    last_str = os.getenv(last_key, "").strip()
+    if not last_str:
+        logger.warning(f"[timers] {last_key} is empty. Returning due=True")
         return True
     try:
-        val = secret_value.strip('"').strip("'")
-        if val.endswith("Z"):
-            val = val[:-1] + "+00:00"
-        last = datetime.fromisoformat(val)
-        now = datetime.now(timezone.utc)
-        diff_hours = (now - last).total_seconds() / 3600
-        is_due = diff_hours >= hours
-        logger.debug(f"[check_timer] {secret_name}: last={val}, diff={diff_hours:.2f}h, due={is_due}")
+        last_dt = datetime.fromisoformat(last_str)
+        if last_dt.tzinfo is None:
+            last_dt = last_dt.replace(tzinfo=timezone.utc)
+        delta = (datetime.now(timezone.utc) - last_dt).total_seconds()
+        is_due = delta >= interval
+        logger.info(f"[timers] {last_key} delta={delta:.0f}s, due={is_due}")
         return is_due
     except Exception as e:
-        logger.warning(f"[check_timer] {secret_name} parse error: {e} -> due=True")
+        logger.error(f"[timers] {last_key} parse error: {e}. Returning due=True")
         return True
 
-def check_mini_timer() -> bool:
-    return check_timer("LAST_MINI_DIGEST", 4)
+def check_mini_timer():
+    return _check("LAST_MINI_DIGEST", MINI_INTERVAL)
 
-def check_full_timer() -> bool:
-    return check_timer("LAST_FULL_DIGEST", 2)
+def check_full_timer():
+    return _check("LAST_FULL_DIGEST", FULL_INTERVAL)
