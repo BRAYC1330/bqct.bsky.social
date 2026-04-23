@@ -1,11 +1,23 @@
 import os
+import pathlib
 import yaml
 import logging
 from llama_cpp import Llama
 import config
 from logging_config import setup_logging
+
 setup_logging()
 logger = logging.getLogger(__name__)
+
+PROMPTS_PATH = pathlib.Path(__file__).parent / "prompts.yaml"
+with open(PROMPTS_PATH, "r", encoding="utf-8") as f:
+    _prompts = yaml.safe_load(f)
+
+SYSTEM_PROMPT = _prompts["system"]
+SUMMARIZE_SYSTEM = _prompts["summarize"]
+QUERY_REFINE_SYSTEM = _prompts["query_refine"]
+DIGEST_REFINE_SYSTEM = _prompts["digest_refine"]
+COMMUNITY_SYSTEM = _prompts["community"]
 
 def get_model():
     model_path = config.MODEL_PATH
