@@ -1,27 +1,21 @@
 import os
 import sys
-import pathlib
-import yaml
-PROMPTS_PATH = pathlib.Path(__file__).parent / "prompts.yaml"
-with open(PROMPTS_PATH, "r", encoding="utf-8") as f:
-    _p = yaml.safe_load(f)
-SYSTEM_PROMPT = _p["system"]
-SUMMARIZE_SYSTEM = _p["summarize"]
-QUERY_REFINE_SYSTEM = _p["query_refine"]
-DIGEST_REFINE_SYSTEM = _p["digest_refine"]
-COMMUNITY_SYSTEM = _p["community"]
+
 def _require(var_name: str):
     val = os.getenv(var_name)
     if not val or val.strip().lower() in ("", "{}", "null", "none"):
         print(f"ERROR: Required env var {var_name} is not set", file=sys.stderr)
         sys.exit(1)
     return val
+
 def _env_int(name: str, default: int) -> int:
     val = os.getenv(name, "")
     return int(val) if val.strip() else default
+
 def _env_float(name: str, default: float) -> float:
     val = os.getenv(name, "")
     return float(val) if val.strip() else default
+
 MODEL_PATH = os.getenv("MODEL_PATH", "models/qwen2.5-coder-14b-instruct-q4_k_m.gguf")
 MODEL_N_CTX = _env_int("MODEL_N_CTX", 14000)
 MODEL_N_THREADS = _env_int("MODEL_N_THREADS", 4)
