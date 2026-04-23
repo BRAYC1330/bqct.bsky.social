@@ -33,10 +33,10 @@ async def process(client, llm, task):
     root_thread = f"Root: {chain.get('root_text', '')[:200]}"
     final_ctx = state.merge_contexts(memory, root_thread, search_data, user_text)
     
-    reply = generator.get_answer(llm, final_ctx, user_text, search_data, max_chars=280)
+    reply = generator.get_answer(llm, final_ctx, user_text, search_data, max_chars=280, temperature=0.7)
     if utils.count_graphemes(reply) > 300:
         logger.warning(f"[owner] Reply too long ({utils.count_graphemes(reply)}), regenerating...")
-        reply = generator.get_answer(llm, final_ctx, user_text, search_data, max_chars=240)
+        reply = generator.get_answer(llm, final_ctx, user_text, search_data, max_chars=240, temperature=0.7)
     if utils.count_graphemes(reply) > 300:
         logger.error(f"[owner] Reply still too long, skipping post")
         return
