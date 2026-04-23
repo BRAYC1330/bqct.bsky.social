@@ -23,24 +23,10 @@ def _update_gh_secret(key, value):
     except Exception as e:
         logger.error(f"[NEWS] Secret update failed: {e}")
 
-def _write_output(key, value):
-    path = os.getenv("GITHUB_OUTPUT")
-    if path and value:
-        with open(path, "a") as f:
-            f.write(f"{key}={value}\n")
-
 async def run(client, llm):
-    now_utc = datetime.now(timezone.utc).isoformat()
-    is_mini = timers.check_mini_timer()
-    is_full = timers.check_full_timer()
-    if is_mini:
-        timer_key = "LAST_MINI_DIGEST"
-    elif is_full:
-        timer_key = "LAST_FULL_DIGEST"
-    else:
-        return False
     trends = await search.get_trending_topics_raw()
-    if not trends: return False
+    if not trends:
+        return False
     sig = f"Qwen | Chainbase TOPS {config.SIGNATURE_ICONS}"
     stats_emoji = config.TREND_STATS_EMOJI
     header = "TOP CRYPTO TREND:"
@@ -66,14 +52,13 @@ async def run(client, llm):
         resp = await bsky.post_root(client, config.BOT_DID, final_post)
         uri = resp.get("uri")
         if uri:
-            old_active = os.environ.get("ACTIVE_DIGEST_URI", "")
-            if old_active and old_active not in ("{}", "null", ""):
-                _update_gh_secret("PREV_DIGEST_URI", old_active)
+            now_utc = datetime.now(timezone.utc).isoformat()
             _update_gh_secret("ACTIVE_DIGEST_URI", uri)
-            _update_gh_secret("LAST_DIGEST_URI", uri)
-            _write_output("ACTIVE_DIGEST_URI", uri)
-            _write_output("LAST_DIGEST_URI", uri)
             _update_gh_secret("CONTEXT_DIGEST", digest_ctx_json)
+            if timers.check_mini_timer():
+                _update_gh_secret("LAST_MINI_DIGEST", now_utc)
+            elif timers.check_full_timer():
+                _update_gh_secret("LAST_FULL_DIGEST", now_utc)
             return True
     except Exception as e:
         logger.error(f"[NEWS] Post failed: {e}")
