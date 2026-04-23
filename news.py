@@ -23,7 +23,7 @@ def _update_gh_secret(key, value):
     except Exception as e:
         logger.error(f"[NEWS] Secret update failed: {e}")
 
-async def run(client, llm):
+async def run(client, llm, task_type="digest_mini"):
     trends = await search.get_trending_topics_raw()
     if not trends:
         return False
@@ -55,9 +55,9 @@ async def run(client, llm):
             now_utc = datetime.now(timezone.utc).isoformat()
             _update_gh_secret("ACTIVE_DIGEST_URI", uri)
             _update_gh_secret("CONTEXT_DIGEST", digest_ctx_json)
-            if timers.check_mini_timer():
+            if task_type == "digest_mini":
                 _update_gh_secret("LAST_MINI_DIGEST", now_utc)
-            elif timers.check_full_timer():
+            else:
                 _update_gh_secret("LAST_FULL_DIGEST", now_utc)
             return True
     except Exception as e:
