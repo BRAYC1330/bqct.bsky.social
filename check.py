@@ -85,12 +85,12 @@ async def run():
 
     digest_task_type = "none"
     if _check_timer("LAST_MINI_DIGEST", 4 * 3600):
-        tasks.append({"type": "digest_mini"})
+        tasks.append({"type": "mini"})
         digest_task_type = "mini"
         update_secret("LAST_MINI_DIGEST", now_utc)
         logger.info("[TIMER] LAST_MINI_DIGEST reset successfully (pre-emptive).")
     elif _check_timer("LAST_FULL_DIGEST", 2 * 3600):
-        tasks.append({"type": "digest_full"})
+        tasks.append({"type": "full"})
         digest_task_type = "full"
         update_secret("LAST_FULL_DIGEST", now_utc)
         logger.info("[TIMER] LAST_FULL_DIGEST reset successfully (pre-emptive).")
