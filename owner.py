@@ -5,6 +5,7 @@ import bsky
 import generator
 import search
 import state
+import utils
 from logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -31,7 +32,15 @@ async def process(client, llm, task):
                 search_data = search.clean_search_results(raw, search_type)
     root_thread = f"Root: {chain.get('root_text', '')[:200]}"
     final_ctx = state.merge_contexts(memory, root_thread, search_data, user_text)
-    reply = generator.get_answer(llm, final_ctx, user_text, search_data, config.RESPONSE_MAX_CHARS)
+    
+    reply = generator.get_answer(llm, final_ctx, user_text, search_data, max_chars=280)
+    if utils.count_graphemes(reply) > 300:
+        logger.warning(f"[owner] Reply too long ({utils.count_graphemes(reply)}), regenerating...")
+        reply = generator.get_answer(llm, final_ctx, user_text, search_data, max_chars=240)
+    if utils.count_graphemes(reply) > 300:
+        logger.error(f"[owner] Reply still too long, skipping post")
+        return
+    
     await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, uri, parent_cid)
     if root_uri != os.environ.get("ACTIVE_DIGEST_URI", "").strip():
         state.save_context(root_uri, generator.update_summary(llm, memory, user_text, reply))
