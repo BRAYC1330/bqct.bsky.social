@@ -13,7 +13,14 @@ def get_model():
         logger.error(f"[generator] Model not found: {model_path}")
         return None
     try:
-        llm = Llama(model_path=model_path, n_ctx=config.LLAMA_N_CTX, n_gpu_layers=config.LLAMA_GPU_LAYERS, verbose=False)
+        llm = Llama(
+            model_path=model_path,
+            n_ctx=config.MODEL_N_CTX,
+            n_gpu_layers=0,
+            n_threads=config.MODEL_N_THREADS,
+            n_batch=512,
+            verbose=False
+        )
         logger.info(f"[generator] Model loaded: {config.MODEL_FILE}")
         return llm
     except Exception as e:
@@ -48,5 +55,5 @@ Reply:"""
 
 def update_summary(llm, memory: str, user_query: str, reply: str) -> str:
     if not memory:
-        return f"Q: {user_query[:100]} → A: {reply[:100]}"
-    return memory[-200:] + f" | Q: {user_query[:50]} → A: {reply[:50]}"
+        return f"Q: {user_query[:100]} -> A: {reply[:100]}"
+    return memory[-200:] + f" | Q: {user_query[:50]} -> A: {reply[:50]}"
