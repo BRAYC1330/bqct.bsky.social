@@ -34,16 +34,10 @@ def flatten_thread_nodes(node: Dict, parent_uri: Optional[str] = None, out: Opti
     record = post.get("record", {})
     if not record:
         return out
-    out.append({
-        "uri": post.get("uri", ""),
-        "cid": post.get("cid", ""),
-        "handle": post.get("author", {}).get("handle", ""),
-        "text": record.get("text", ""),
-        "is_root": parent_uri is None
-    })
-    for reply_node in node.get("replies", []):
-        if isinstance(reply_node, dict):
-            flatten_thread_nodes(reply_node, post.get("uri", ""), out)
+    out.append({"uri": post.get("uri", ""), "cid": post.get("cid", ""), "handle": post.get("author", {}).get("handle", ""), "text": record.get("text", ""), "is_root": parent_uri is None})
+    for r in node.get("replies", []):
+        if isinstance(r, dict):
+            flatten_thread_nodes(r, post.get("uri", ""), out)
     return out
 
 def parse_thread(thread_data: Dict) -> Dict:
@@ -56,38 +50,16 @@ def parse_notifications(raw_json: Dict) -> List[NotificationItem]:
     items = []
     for n in raw_json.get("notifications", []):
         record = n.get("record", {})
-        parent_uri = ""
-        if isinstance(record, dict) and "reply" in record:
-            parent_uri = record.get("reply", {}).get("parent", {}).get("uri", "")
-        items.append({
-            "uri": n.get("uri", ""),
-            "reason": n.get("reason", ""),
-            "author_did": n.get("author", {}).get("did", ""),
-            "text": (record.get("text") or "").strip(),
-            "indexed_at": n.get("indexedAt", ""),
-            "parent_uri": parent_uri
-        })
+        parent_uri = record.get("reply", {}).get("parent", {}).get("uri", "") if isinstance(record, dict) and "reply" in record else ""
+        items.append({"uri": n.get("uri", ""), "reason": n.get("reason", ""), "author_did": n.get("author", {}).get("did", ""), "text": (record.get("text") or "").strip(), "indexed_at": n.get("indexedAt", ""), "parent_uri": parent_uri})
     return items
 
 def parse_trends(raw_json: Dict) -> List[TrendItem]:
     items = raw_json.get("items", []) if isinstance(raw_json, dict) else []
     result = []
     for i in items:
-        keyword = i.get("keyword", "")
-        summary = i.get("summary", "")
-        if len(keyword) > 0 and sum(1 for c in keyword if ord(c) < 128) / len(keyword) > 0.7:
-            result.append({
-                "id": str(i.get("id", "")),
-                "keyword": keyword,
-                "summary": summary,
-                "score": int(i.get("score", 0)),
-                "rank_status": i.get("rank_status", "same")
-            })
+        kw = i.get("keyword", "")
+        if kw and sum(1 for c in kw if ord(c) < 128) / len(kw) > 0.7:
+            result.append({"id": str(i.get("id", "")), "keyword": kw, "summary": i.get("summary", ""), "score": int(i.get("score", 0)), "rank_status": i.get("rank_status", "same")})
     result.sort(key=lambda x: x["score"], reverse=True)
     return result
-
-def extract_text_from_html(html_content: str, max_length: int = 400) -> str:
-    import re
-    text = re.sub(r'<[^>]+>', ' ', html_content)
-    text = re.sub(r'\s+', ' ', text).strip()
-    return text[:max_length]

@@ -2,10 +2,10 @@ import os
 import logging
 import httpx
 import time
+import json
 import config
 import parsers
 from logging_config import setup_logging
-
 setup_logging()
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,6 @@ async def get_trending_topics_raw(client: httpx.AsyncClient) -> list:
         _trend_cache = parsers.parse_trends(r.json())
         _trend_cache_time = now
         if config.RAW_DEBUG:
-            import json
             logger.info(f"=== RAW-TRENDS ===\n{json.dumps(_trend_cache, ensure_ascii=False, indent=2)}\n=== END ===")
         return _trend_cache
     except Exception as e:
@@ -42,13 +41,11 @@ def clean_search_results(raw) -> str:
 async def fetch_tavily(client: httpx.AsyncClient, query: str, time_range: str = "") -> str:
     if not config.TAVILY_API_KEY:
         return ""
-    url = "https://api.tavily.com/search"
-    headers = {"Authorization": f"Bearer {config.TAVILY_API_KEY}", "Content-Type": "application/json"}
-    payload = {"query": query, "search_depth": "basic", "max_results": 3, "include_raw_content": True}
-    if time_range:
-        payload["time_range"] = time_range
     try:
-        r = await client.post(url, headers=headers, json=payload)
+        payload = {"query": query, "search_depth": "basic", "max_results": 3, "include_raw_content": True}
+        if time_range:
+            payload["time_range"] = time_range
+        r = await client.post("https://api.tavily.com/search", headers={"Authorization": f"Bearer {config.TAVILY_API_KEY}"}, json=payload)
         r.raise_for_status()
         return clean_search_results(r.json().get("results", []))
     except Exception as e:

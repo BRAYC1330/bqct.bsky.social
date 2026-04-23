@@ -7,7 +7,6 @@ import shlex
 import re
 import config
 from logging_config import setup_logging
-
 setup_logging()
 logger = logging.getLogger(__name__)
 
@@ -36,12 +35,7 @@ async def save_thread_context(thread_id: str, memory: str):
     safe_memory = shlex.quote(memory[:250])
     safe_repo = shlex.quote(repo)
     safe_slot = shlex.quote(f"CONTEXT_{slot}")
-    proc = await asyncio.create_subprocess_exec(
-        "gh", "secret", "set", safe_slot, "--body", safe_memory, "--repo", safe_repo,
-        env={**os.environ, "GH_TOKEN": pat},
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE
-    )
+    proc = await asyncio.create_subprocess_exec("gh", "secret", "set", safe_slot, "--body", safe_memory, "--repo", safe_repo, env={**os.environ, "GH_TOKEN": pat}, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
     await proc.communicate()
 
 def load_digest_context() -> str:
@@ -51,13 +45,7 @@ def load_digest_context() -> str:
     try:
         data = json.loads(raw)
         if isinstance(data, list):
-            parts = []
-            for item in data:
-                kw = item.get("keyword", "")
-                summary = item.get("summary", "")
-                score = item.get("score", 0)
-                parts.append(f"{kw} (score: {score}): {summary}")
-            return "\n".join(parts)
+            return "\n".join(f"{i.get('keyword', '')} (score: {i.get('score', 0)}): {i.get('summary', '')}" for i in data)
         return ""
     except json.JSONDecodeError:
         return ""

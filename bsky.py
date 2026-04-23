@@ -7,7 +7,6 @@ from datetime import datetime, timezone
 from cryptography.fernet import Fernet
 import config
 import parsers
-
 logger = logging.getLogger(__name__)
 
 _session_cache = {}
@@ -37,10 +36,7 @@ async def login_with_cache(client: httpx.AsyncClient, handle: str, password: str
                 return
         except Exception:
             pass
-    r = await client.post(
-        "https://bsky.social/xrpc/com.atproto.server.createSession",
-        json={"identifier": handle, "password": password}
-    )
+    r = await client.post("https://bsky.social/xrpc/com.atproto.server.createSession", json={"identifier": handle, "password": password})
     r.raise_for_status()
     sess = r.json()
     client.headers["Authorization"] = f"Bearer {sess['accessJwt']}"
@@ -53,60 +49,24 @@ async def login_with_cache(client: httpx.AsyncClient, handle: str, password: str
     logger.info("[bsky] New session created and cached")
 
 async def post_root(client: httpx.AsyncClient, bot_did: str, text: str):
-    record = {
-        "$type": "app.bsky.feed.post",
-        "text": text,
-        "createdAt": datetime.now(timezone.utc).isoformat()
-    }
-    body = {
-        "repo": bot_did,
-        "collection": "app.bsky.feed.post",
-        "record": record
-    }
-    r = await client.post(
-        "https://bsky.social/xrpc/com.atproto.repo.createRecord",
-        json=body
-    )
+    record = {"$type": "app.bsky.feed.post", "text": text, "createdAt": datetime.now(timezone.utc).isoformat()}
+    body = {"repo": bot_did, "collection": "app.bsky.feed.post", "record": record}
+    r = await client.post("https://bsky.social/xrpc/com.atproto.repo.createRecord", json=body)
     r.raise_for_status()
     return r.json()
 
 async def post_reply(client: httpx.AsyncClient, bot_did: str, text: str, root_uri: str, root_cid: str, parent_uri: str, parent_cid: str):
-    reply = {
-        "root": {"uri": root_uri, "cid": root_cid},
-        "parent": {"uri": parent_uri, "cid": parent_cid}
-    }
-    record = {
-        "$type": "app.bsky.feed.post",
-        "text": text,
-        "createdAt": datetime.now(timezone.utc).isoformat(),
-        "reply": reply
-    }
-    body = {
-        "repo": bot_did,
-        "collection": "app.bsky.feed.post",
-        "record": record
-    }
-    r = await client.post(
-        "https://bsky.social/xrpc/com.atproto.repo.createRecord",
-        json=body
-    )
+    reply = {"root": {"uri": root_uri, "cid": root_cid}, "parent": {"uri": parent_uri, "cid": parent_cid}}
+    record = {"$type": "app.bsky.feed.post", "text": text, "createdAt": datetime.now(timezone.utc).isoformat(), "reply": reply}
+    body = {"repo": bot_did, "collection": "app.bsky.feed.post", "record": record}
+    r = await client.post("https://bsky.social/xrpc/com.atproto.repo.createRecord", json=body)
     r.raise_for_status()
     return r.json()
 
 async def fetch_thread_chain(client: httpx.AsyncClient, uri: str):
-    r = await client.get(
-        "https://bsky.social/xrpc/app.bsky.feed.getPostThread",
-        params={"uri": uri, "depth": 0}
-    )
+    r = await client.get("https://bsky.social/xrpc/app.bsky.feed.getPostThread", params={"uri": uri, "depth": 0})
     if r.status_code != 200:
         logger.warning(f"[bsky] get_thread_raw failed: {r.status_code}")
         return None
-    data = r.json()
-    parsed = parsers.parse_thread(data)
-    return {
-        "root_uri": parsed["uri"],
-        "root_cid": parsed["cid"],
-        "root_text": parsed["text"],
-        "parent_cid": "",
-        "chain": parsed["nodes"]
-    }
+    parsed = parsers.parse_thread(r.json())
+    return {"root_uri": parsed["uri"], "root_cid": parsed["cid"], "root_text": parsed["text"], "parent_cid": "", "chain": parsed["nodes"]}

@@ -4,7 +4,6 @@ import config
 import bsky
 import generator
 import state
-import utils
 from logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -14,35 +13,25 @@ async def process(client, llm, task):
     user_text = task["text"]
     parent_uri = task.get("parent_uri", "")
     if not parent_uri:
-        logger.warning(f"[community] Missing parent_uri for {uri}")
         return
     chain = await bsky.fetch_thread_chain(client, uri)
     if not chain:
         return
-    root_uri = chain.get("root_uri", parent_uri)
-    root_cid = chain.get("root_cid", "")
+
+    root_uri = chain["root_uri"]
+    root_cid = chain["root_cid"]
     parent_cid = chain.get("parent_cid", "")
-    
-    active_digest_uri = os.environ.get("ACTIVE_DIGEST_URI", "").strip()
-    if root_uri == active_digest_uri:
-        memory = state.load_digest_context()
-    else:
-        memory = state.load_thread_context(root_uri)
-    
-    root_thread = f"Root: {chain.get('root_text', '')[:200]}"
+    root_thread = f"Root: {chain['root_text'][:200]}"
+
+    memory = state.load_digest_context()
     final_ctx = state.merge_contexts(memory, root_thread, "", user_text)
-    
+
     reply = generator.get_answer(llm, final_ctx, user_text, "", max_chars=280, temperature=0.7)
     if len(reply) > 293:
-        logger.warning(f"[community] Reply too long ({len(reply)}), regenerating...")
         reply = generator.get_answer(llm, final_ctx, user_text, "", max_chars=260, temperature=0.7)
     if len(reply) > 293:
-        logger.error(f"[community] Reply still too long, skipping post")
         return
-        
+
     reply = reply.strip() + "\n\nQwen"
     await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, uri, parent_cid)
-    
-    if root_uri != active_digest_uri:
-        await state.save_thread_context(root_uri, generator.update_summary(llm, memory, user_text, reply))
     logger.info(f"[community] Replied to {uri[:40]}...")

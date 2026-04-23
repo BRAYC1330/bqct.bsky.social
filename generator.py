@@ -7,7 +7,6 @@ import html
 from llama_cpp import Llama
 import config
 from logging_config import setup_logging
-
 setup_logging()
 logger = logging.getLogger(__name__)
 
@@ -34,17 +33,9 @@ def _sanitize_input(text: str) -> str:
 def get_model():
     model_path = config.MODEL_PATH
     if not os.path.exists(model_path):
-        logger.error(f"[generator] Model not found: {model_path}")
         return None
     try:
-        llm = Llama(
-            model_path=model_path,
-            n_ctx=config.MODEL_N_CTX,
-            n_gpu_layers=0,
-            n_threads=config.MODEL_N_THREADS,
-            n_batch=512,
-            verbose=False
-        )
+        llm = Llama(model_path=model_path, n_ctx=config.MODEL_N_CTX, n_gpu_layers=0, n_threads=config.MODEL_N_THREADS, n_batch=512, verbose=False)
         logger.info(f"[generator] Model loaded: {os.path.basename(model_path)}")
         return llm
     except Exception as e:
@@ -52,15 +43,13 @@ def get_model():
         return None
 
 def extract_search_intent(llm, context: str, user_query: str) -> tuple:
-    safe_context = _sanitize_input(context)
-    safe_query = _sanitize_input(user_query)
     prompt = f"""Extract search query and time filter.
 Rules:
 - If time is a search filter, use: day, week, month, year.
 - If time is part of the question itself, use: none.
 - Return ONLY: QUERY: <text> | TIME: <day/week/month/year/none>
-Context: {safe_context}
-User: "{safe_query}"
+Context: {_sanitize_input(context)}
+User: "{_sanitize_input(user_query)}"
 Output:"""
     try:
         raw = llm(prompt, max_tokens=60, temperature=0.1)
@@ -76,21 +65,16 @@ Output:"""
         return user_query, ""
 
 def get_answer(llm, context: str, user_query: str, search_data: str = "", max_chars: int = 280, temperature: float = 0.7) -> str:
-    safe_context = _sanitize_input(context)
-    safe_query = _sanitize_input(user_query)
-    safe_search = _sanitize_input(search_data)
     prompt = f"""Reply in 1-2 short sentences.
-Context: {safe_context}
-Query: {safe_query}
-Search: {safe_search if safe_search else "N/A"}
+Context: {_sanitize_input(context)}
+Query: {_sanitize_input(user_query)}
+Search: {_sanitize_input(search_data) if search_data else "N/A"}
 Rules:
 - Max {max_chars} characters including spaces and emojis.
 - No hashtags, no links, no markdown.
 - Be helpful and direct.
 Reply:"""
-    output = llm(prompt, max_tokens=150, temperature=temperature)
-    response = output["choices"][0]["text"]
-    return response.strip()
+    return llm(prompt, max_tokens=150, temperature=temperature)["choices"][0]["text"].strip()
 
 def update_summary(llm, memory: str, user_query: str, reply: str) -> str:
     if not memory:
