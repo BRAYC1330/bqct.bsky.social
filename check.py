@@ -58,7 +58,7 @@ async def main():
         last_full = os.environ.get("LAST_FULL_DIGEST", "").strip()
         
         mini_due = check_timer(last_mini, 4)
-        full_due = check_timer(last_full, 24) if last_full else True
+        full_due = check_timer(last_full, 2) if last_full else True
         
         if full_due and not active_digest_uri:
             logger.warning("LAST_FULL_DIGEST is empty. Returning due=True")
