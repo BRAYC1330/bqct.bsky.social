@@ -40,7 +40,7 @@ async def main():
         last_mini = os.environ.get("LAST_MINI_DIGEST", "").strip()
         last_full = os.environ.get("LAST_FULL_DIGEST", "").strip()
         mini_due = check_timer(last_mini, 4)
-        full_due = check_timer(last_full, 24) if last_full else True
+        full_due = check_timer(last_full, 2) if last_full else True
         if full_due and not active_digest_uri:
             logger.warning("LAST_FULL_DIGEST is empty. Returning due=True")
             await update_secret("LAST_FULL_DIGEST", "init", os.environ["PAT"], os.environ["GITHUB_REPOSITORY"])
@@ -48,12 +48,12 @@ async def main():
         tasks = []
         if active_digest_uri:
             if mini_due:
-                tasks.append({"type": "digest_mini", "uri": active_digest_uri})
+                tasks.append({"type": "mini", "uri": active_digest_uri})
             if full_due:
-                tasks.append({"type": "digest_full", "uri": active_digest_uri})
+                tasks.append({"type": "full", "uri": active_digest_uri})
         with open("work_data.json", "w") as f:
             json.dump({"tasks": tasks}, f)
-        logger.info(f"Received 95 notifs. Relevant: 0 (Owner: 0, Digest comments: 0, Digest task: {tasks[0]['type'] if tasks else 'none'}). Total queued: {len(tasks)}. LAST_PROCESSED updated.")
+        logger.info(f"Relevant: 0 (Owner: 0, Digest comments: 0, Digest task: {tasks[0]['type'] if tasks else 'none'}). Total queued: {len(tasks)}. LAST_PROCESSED updated.")
         await update_secret("LAST_PROCESSED", json.dumps({"ts": str(__import__("datetime").datetime.now(__import__("datetime").timezone.utc))}), os.environ["PAT"], os.environ["GITHUB_REPOSITORY"])
         print(f"::set-output name=status::{'true' if tasks else 'false'}")
         if tasks:
