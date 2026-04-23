@@ -4,10 +4,10 @@ import json
 import asyncio
 import logging
 import subprocess
+import httpx
 from datetime import datetime, timezone
 import config
 import bsky
-import timers
 from logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -24,6 +24,23 @@ def update_secret(key, value):
     except Exception as e:
         logger.error(f"[checker] Secret update failed: {e}")
 
+def _check_timer(last_key: str, interval_sec: int) -> bool:
+    last_str = os.getenv(last_key, "").strip()
+    if not last_str:
+        logger.warning(f"[timer] {last_key} is empty. Returning due=True")
+        return True
+    try:
+        last_dt = datetime.fromisoformat(last_str)
+        if last_dt.tzinfo is None:
+            last_dt = last_dt.replace(tzinfo=timezone.utc)
+        delta = (datetime.now(timezone.utc) - last_dt).total_seconds()
+        is_due = delta >= interval_sec
+        logger.info(f"[timer] {last_key} delta={delta:.0f}s, due={is_due}")
+        return is_due
+    except Exception as e:
+        logger.error(f"[timer] {last_key} parse error: {e}. Returning due=True")
+        return True
+
 async def run():
     last_processed = os.getenv("LAST_PROCESSED", "").strip()
     tasks = []
@@ -31,7 +48,8 @@ async def run():
     owner_count = 0
     digest_comment_count = 0
 
-    async with bsky.get_client() as client:
+    client = httpx.AsyncClient(timeout=30)
+    try:
         await bsky.login_with_cache(client, config.BOT_HANDLE, config.BOT_PASSWORD)
         params = {"limit": 100}
         if last_processed and last_processed not in ("{}", "null", "none"):
@@ -62,16 +80,16 @@ async def run():
             elif author_did == config.OWNER_DID:
                 tasks.append({"type": "owner_command", "uri": uri, "text": text, "author_did": author_did})
                 owner_count += 1
+    finally:
+        await client.aclose()
 
     digest_task_type = "none"
-    mini_due = timers.check_mini_timer()
-    full_due = timers.check_full_timer()
-    if mini_due:
+    if _check_timer("LAST_MINI_DIGEST", 4 * 3600):
         tasks.append({"type": "digest_mini"})
         digest_task_type = "mini"
         update_secret("LAST_MINI_DIGEST", now_utc)
         logger.info("[TIMER] LAST_MINI_DIGEST reset successfully (pre-emptive).")
-    elif full_due:
+    elif _check_timer("LAST_FULL_DIGEST", 2 * 3600):
         tasks.append({"type": "digest_full"})
         digest_task_type = "full"
         update_secret("LAST_FULL_DIGEST", now_utc)
