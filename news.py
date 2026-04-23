@@ -1,6 +1,3 @@
-!код1
-`news.py`
-```python
 import os
 import logging
 import subprocess
@@ -60,15 +57,3 @@ async def run(client, llm, task_type="digest_mini"):
     except Exception as e:
         logger.error(f"[NEWS] Post failed: {e}")
     return False
-```
-
-**Что исправлено:**
-1. Удалён `import timers` — модуль больше не используется.
-2. Убраны проверки `timers.check_mini_timer()` / `check_full_timer()` внутри `news.py` — таймер уже сброшен в `check.py` до запуска бота.
-3. Функция `run()` принимает `task_type` из `bot.py`, но больше не обновляет таймеры — это делается пре-эмптивно в `check.py`.
-
-**Действие:** Удали файл `timers.py` из репозитория:
-```bash
-rm timers.py
-git add -A && git commit -m "chore: remove unused timers.py" && git push
-```
