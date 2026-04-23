@@ -10,8 +10,23 @@ import community
 import owner
 import digest
 from logging_config import setup_logging
+from collections import deque
+from time import time
 setup_logging()
 logger = logging.getLogger(__name__)
+
+_rate_limit_queue = deque()
+_rate_limit_max = 10
+_rate_limit_window = 60
+
+def check_rate_limit() -> bool:
+    now = time()
+    while _rate_limit_queue and _rate_limit_queue[0] < now - _rate_limit_window:
+        _rate_limit_queue.popleft()
+    if len(_rate_limit_queue) >= _rate_limit_max:
+        return False
+    _rate_limit_queue.append(now)
+    return True
 
 async def main():
     logger.info("[main] === START ===")
@@ -21,8 +36,10 @@ async def main():
         return
     logger.info("[main] work_data.json found, loading...")
     
-    with open("work_data.json") as f:
-        data = json.load(f)
+    def _load_work_data():
+        with open("work_data.json") as f:
+            return json.load(f)
+    data = await asyncio.to_thread(_load_work_data)
     tasks = data.get("tasks", [])
     logger.info(f"[main] Tasks loaded: {tasks}")
     
@@ -35,11 +52,14 @@ async def main():
         logger.error("[main] Failed to load model")
         return
     
-    client = httpx.AsyncClient(timeout=30)
-    try:
+    async with httpx.AsyncClient(timeout=30) as client:
         await bsky.login_with_cache(client, config.BOT_HANDLE, config.BOT_PASSWORD)
         
         for idx, task in enumerate(tasks):
+            if not check_rate_limit():
+                logger.warning("[main] Rate limit exceeded, skipping task")
+                await asyncio.sleep(1)
+                continue
             t_type = task.get("type", "UNKNOWN")
             uri = task.get("uri", "N/A")[:40]
             logger.info(f"[main] Processing task #{idx}: type={t_type}, uri={uri}")
@@ -56,8 +76,6 @@ async def main():
                 await owner.process(client, llm, task)
             else:
                 logger.warning(f"[main] Unknown task type: {t_type}")
-    finally:
-        await client.aclose()
     
     logger.info("[main] === DONE ===")
 
