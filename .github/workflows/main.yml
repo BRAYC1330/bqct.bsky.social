@@ -21,7 +21,7 @@ jobs:
           cache-dependency-path: 'requirements.txt'
       - name: Install lightweight deps
         run: pip install httpx PyNaCl beautifulsoup4 trafilatura pyyaml
-      - name: Check digest
+      - name: Check
         id: checker
         env:
           BOT_HANDLE: ${{ secrets.BOT_HANDLE }}
