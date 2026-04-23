@@ -22,9 +22,10 @@ async def get_trending_topics_raw() -> list:
             items = data.get("items", []) if isinstance(data, dict) else (data if isinstance(data, list) else [])
             eng = [i for i in items if is_english_text(i.get('keyword', '')) and is_english_text(i.get('summary', ''))]
             eng.sort(key=lambda x: x.get('score', 0), reverse=True)
+            
             if config.RAW_DEBUG:
-                logger.info(f"=== RAW-TRENDS ===\n{json.dumps(eng[:10], ensure_ascii=False, indent=2)}\n=== END ===")
-            return eng[:10]
+                logger.info(f"=== RAW-TRENDS ===\n{json.dumps(eng, ensure_ascii=False, indent=2)}\n=== END ===")
+            return eng
     except Exception as e:
         logger.error(f"[SEARCH] Trend fetch failed: {e}")
         return []
