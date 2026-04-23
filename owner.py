@@ -13,8 +13,11 @@ logger = logging.getLogger(__name__)
 async def process(client, llm, task):
     uri = task["uri"]
     user_text = task["text"]
-    do_search = "!c" in user_text.lower() or "!t" in user_text.lower()
-    search_type = "chainbase" if "!c" in user_text.lower() else ("tavily" if "!t" in user_text.lower() else None)
+    do_search = "!t" in user_text.lower() or "!c" in user_text.lower()
+    search_query, time_range = "", ""
+    if do_search:
+        clean_text = user_text.replace("!t", "").replace("!c", "").strip()
+        search_query, time_range = generator.extract_search_intent(llm, "", clean_text)
     chain = await bsky.fetch_thread_chain(client, uri)
     if not chain:
         return
@@ -23,13 +26,11 @@ async def process(client, llm, task):
     parent_cid = chain.get("parent_cid", "")
     memory = state.load_context(root_uri)
     search_data = ""
-    if do_search and search_type:
-        params = generator.extract_search_params(llm, "", user_text)
-        provider = search.SEARCH_PROVIDERS.get(search_type)
-        if provider:
-            raw = await provider["func"](params.get("query", ""), **{k: v for k, v in params.items() if k in provider["supports"] and v})
-            if search.is_search_result_valid(raw, search_type):
-                search_data = search.clean_search_results(raw, search_type)
+    if do_search and search_query:
+        if "!c" in user_text.lower():
+            search_data = await search.fetch_chainbase(search_query)
+        else:
+            search_data = await search.fetch_tavily(search_query, time_range)
     root_thread = f"Root: {chain.get('root_text', '')[:200]}"
     final_ctx = state.merge_contexts(memory, root_thread, search_data, user_text)
     
