@@ -63,10 +63,12 @@ async def run():
                 digest_comment_count += 1
 
     digest_task_type = "none"
-    if timers.check_mini_timer():
+    mini_due = timers.check_mini_timer()
+    full_due = timers.check_full_timer()
+    if mini_due:
         tasks.append({"type": "digest_mini"})
         digest_task_type = "mini"
-    elif timers.check_full_timer():
+    elif full_due:
         tasks.append({"type": "digest_full"})
         digest_task_type = "full"
 
