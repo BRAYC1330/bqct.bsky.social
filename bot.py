@@ -44,7 +44,7 @@ async def main():
             uri = task.get("uri", "N/A")[:40]
             logger.info(f"[main] Processing task #{idx}: type={t_type}, uri={uri}")
             
-            if t_type in ("mini", "full"):
+            if t_type in ("digest_mini", "digest_full"):
                 logger.info(f"[main] Calling digest.run({t_type})")
                 result = await digest.run(client, llm, t_type)
                 logger.info(f"[main] digest.run returned: {result}")
