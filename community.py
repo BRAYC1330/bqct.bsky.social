@@ -1,3 +1,4 @@
+import os
 import logging
 import config
 import bsky
@@ -25,5 +26,6 @@ async def process(client, llm, task):
     final_ctx = state.merge_contexts(memory, root_thread, "", user_text)
     reply = generator.get_answer(llm, final_ctx, user_text, "", config.RESPONSE_MAX_CHARS)
     await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, uri, parent_cid)
-    state.save_context(root_uri, generator.update_summary(llm, memory, user_text, reply))
+    if root_uri != os.environ.get("ACTIVE_DIGEST_URI", "").strip():
+        state.save_context(root_uri, generator.update_summary(llm, memory, user_text, reply))
     logger.info(f"[community] Replied to {uri[:40]}...")
