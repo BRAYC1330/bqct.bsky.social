@@ -7,7 +7,7 @@ import generator
 import bsky
 import community
 import owner
-import news
+import digest
 from logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -30,7 +30,7 @@ async def main():
         for task in tasks:
             t_type = task.get("type", "")
             if t_type in ("digest_mini", "digest_full"):
-                await news.run(client, llm, t_type)
+                await digest.run(client, llm, t_type)
             elif t_type == "digest_comment":
                 await community.process(client, llm, task)
             elif t_type == "owner_command":
