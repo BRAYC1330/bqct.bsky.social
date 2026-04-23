@@ -1,21 +1,29 @@
 import os
 import logging
 import httpx
+import json
 import config
 from logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
 
+def is_english_text(text: str) -> bool:
+    if not text:
+        return False
+    return sum(1 for c in text if ord(c) < 128) / len(text) > 0.7
+
 async def get_trending_topics_raw() -> list:
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            r = await client.get("https://api.chainbase.com/tops/v1/tool/list-trending-topics?language=en", timeout=30)
+        async with httpx.AsyncClient(timeout=httpx.Timeout(config.REQUEST_TIMEOUT, connect=config.CONNECT_TIMEOUT)) as client:
+            r = await client.get("https://api.chainbase.com/tops/v1/tool/list-trending-topics?language=en", timeout=config.SEARCH_TIMEOUT)
             if r.status_code != 200:
                 return []
             data = r.json()
             items = data.get("items", []) if isinstance(data, dict) else (data if isinstance(data, list) else [])
-            eng = [i for i in items if i.get("keyword") and i.get("summary")]
-            eng.sort(key=lambda x: x.get("score", 0), reverse=True)
+            eng = [i for i in items if is_english_text(i.get('keyword', '')) and is_english_text(i.get('summary', ''))]
+            eng.sort(key=lambda x: x.get('score', 0), reverse=True)
+            if config.RAW_DEBUG:
+                logger.info(f"=== RAW-TRENDS ===\n{json.dumps(eng[:10], ensure_ascii=False, indent=2)}\n=== END ===")
             return eng[:10]
     except Exception as e:
         logger.error(f"[SEARCH] Trend fetch failed: {e}")
