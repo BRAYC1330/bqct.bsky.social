@@ -27,22 +27,30 @@ def get_model():
         logger.error(f"[generator] Model load failed: {e}")
         return None
 
-def extract_search_params(llm, user_query: str, context: str = "") -> dict:
-    prompt = f"""Extract search parameters from the query. Return JSON only.
-Query: {user_query}
+def extract_search_intent(llm, context: str, user_query: str) -> tuple:
+    prompt = f"""Extract search query and time filter.
+Rules:
+- If time is a search filter, use: day, week, month, year.
+- If time is part of the question itself, use: none.
+- Return ONLY: QUERY: <text> | TIME: <day/week/month/year/none>
 Context: {context}
-Format: {{"query": "search terms", "limit": 5, "time_range": "24h"}}
+User: "{user_query}"
 Output:"""
     try:
-        output = llm(prompt, max_tokens=100, temperature=0.1, stop=["}", "\n\n"])
-        raw = output["choices"][0]["text"]
-        raw = raw.strip().rstrip("}") + "}"
-        return yaml.safe_load(raw)
+        raw = llm(prompt, max_tokens=60, temperature=0.1)
+        if "| TIME:" in raw:
+            q_part, t_part = raw.split("| TIME:", 1)
+            query = q_part.replace("QUERY:", "").strip()
+            time_range = t_part.strip().lower()
+            if time_range not in ("day", "week", "month", "year"):
+                time_range = ""
+            return query, time_range
+        return user_query, ""
     except:
-        return {"query": user_query, "limit": 5}
+        return user_query, ""
 
 def get_answer(llm, context: str, user_query: str, search_data: str = "", max_chars: int = 280, temperature: float = 0.7) -> str:
-    prompt = f"""You are a concise crypto assistant. Reply in 1-2 short sentences.
+    prompt = f"""You are a concise crypto/tech analyst. Reply in 1-2 short sentences.
 Context: {context}
 Query: {user_query}
 Search: {search_data if search_data else "N/A"}
