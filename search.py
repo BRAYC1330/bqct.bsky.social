@@ -7,15 +7,7 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 async def get_trending_topics_raw() -> list:
-    # Mock data for testing digest generation
-    return [
-        {"id": "btc", "keyword": "Bitcoin", "summary": "Price holding above $60K", "score": 150, "rank_status": "up", "is_new": False},
-        {"id": "eth", "keyword": "Ethereum", "summary": "ETF inflows continue", "score": 120, "rank_status": "same", "is_new": False},
-        {"id": "sol", "keyword": "Solana", "summary": "Network activity surge", "score": 95, "rank_status": "up", "is_new": True},
-        {"id": "xrp", "keyword": "XRP", "summary": "Legal clarity progress", "score": 80, "rank_status": "down", "is_new": False},
-        {"id": "ada", "keyword": "Cardano", "summary": "Upgrade announcement", "score": 70, "rank_status": "same", "is_new": False},
-        {"id": "dot", "keyword": "Polkadot", "summary": "Parachain auctions update", "score": 60, "rank_status": "same", "is_new": False},
-    ]
+    return []
 
 def clean_search_results(raw) -> str:
     if not raw:
