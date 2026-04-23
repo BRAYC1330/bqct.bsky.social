@@ -75,7 +75,7 @@ async def run(client, llm, task_type="digest_mini"):
                 return False
 
             body = "\n".join(lines)
-            final_post = f"{header}\n{body}\n{sig}"
+            final_post = f"{header}\n\n{body}\n\n{sig}"
 
             if config.RAW_DEBUG:
                 logger.info(f"=== RAW-MINI-POST ===\n{final_post}\n=== END ===")
@@ -117,7 +117,7 @@ async def run(client, llm, task_type="digest_mini"):
                     else:
                         break
 
-            final_post = f"{header}\n{title}{desc}\n{sig}"
+            final_post = f"{header}\n\n{title}{desc}\n\n{sig}"
 
             if config.RAW_DEBUG:
                 logger.info(f"=== RAW-FULL-POST ===\n{final_post}\n=== END ===")
