@@ -1,3 +1,6 @@
+!код1
+`news.py`
+```python
 import os
 import logging
 import subprocess
@@ -7,7 +10,6 @@ import config
 import search
 import generator
 import bsky
-import timers
 from logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -52,14 +54,21 @@ async def run(client, llm, task_type="digest_mini"):
         resp = await bsky.post_root(client, config.BOT_DID, final_post)
         uri = resp.get("uri")
         if uri:
-            now_utc = datetime.now(timezone.utc).isoformat()
             _update_gh_secret("ACTIVE_DIGEST_URI", uri)
             _update_gh_secret("CONTEXT_DIGEST", digest_ctx_json)
-            if task_type == "digest_mini":
-                _update_gh_secret("LAST_MINI_DIGEST", now_utc)
-            else:
-                _update_gh_secret("LAST_FULL_DIGEST", now_utc)
             return True
     except Exception as e:
         logger.error(f"[NEWS] Post failed: {e}")
     return False
+```
+
+**Что исправлено:**
+1. Удалён `import timers` — модуль больше не используется.
+2. Убраны проверки `timers.check_mini_timer()` / `check_full_timer()` внутри `news.py` — таймер уже сброшен в `check.py` до запуска бота.
+3. Функция `run()` принимает `task_type` из `bot.py`, но больше не обновляет таймеры — это делается пре-эмптивно в `check.py`.
+
+**Действие:** Удали файл `timers.py` из репозитория:
+```bash
+rm timers.py
+git add -A && git commit -m "chore: remove unused timers.py" && git push
+```
