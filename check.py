@@ -20,6 +20,7 @@ def update_secret(key, value):
     cmd = ["gh", "secret", "set", key, "--body", value, "--repo", repo]
     try:
         subprocess.run(cmd, env={**os.environ, "GH_TOKEN": pat}, check=True, capture_output=True)
+        logger.info(f"[checker] Secret {key} updated successfully.")
     except Exception as e:
         logger.error(f"[checker] Secret update failed: {e}")
 
@@ -68,9 +69,13 @@ async def run():
     if mini_due:
         tasks.append({"type": "digest_mini"})
         digest_task_type = "mini"
+        update_secret("LAST_MINI_DIGEST", now_utc)
+        logger.info("[TIMER] LAST_MINI_DIGEST reset successfully (pre-emptive).")
     elif full_due:
         tasks.append({"type": "digest_full"})
         digest_task_type = "full"
+        update_secret("LAST_FULL_DIGEST", now_utc)
+        logger.info("[TIMER] LAST_FULL_DIGEST reset successfully (pre-emptive).")
 
     with open("work_data.json", "w") as f:
         json.dump({"tasks": tasks}, f)
