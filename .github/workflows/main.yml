@@ -10,10 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     outputs:
-      last_processed: ${{ steps.check.outputs.last_processed }}
-      last_mini_digest: ${{ steps.run.outputs.LAST_MINI_DIGEST }}
-      last_full_digest: ${{ steps.run.outputs.LAST_FULL_DIGEST }}
-      last_digest_uri: ${{ steps.run.outputs.LAST_DIGEST_URI }}
+      last_processed: ${{ steps.checker.outputs.last_processed }}
       active_digest_uri: ${{ steps.run.outputs.ACTIVE_DIGEST_URI }}
     steps:
       - uses: actions/checkout@v4
@@ -24,8 +21,8 @@ jobs:
           cache-dependency-path: 'requirements.txt'
       - name: Install lightweight deps
         run: pip install httpx PyNaCl beautifulsoup4 trafilatura pyyaml
-      - name: Check notifications
-        id: check
+      - name: Check digest
+        id: checker
         env:
           BOT_HANDLE: ${{ secrets.BOT_HANDLE }}
           BOT_PASSWORD: ${{ secrets.BOT_PASSWORD }}
@@ -34,50 +31,19 @@ jobs:
           PAT: ${{ secrets.PAT }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           LAST_PROCESSED: ${{ secrets.LAST_PROCESSED }}
-        run: python check.py
-      - name: Check digest
-        id: evaluate
-        env:
-          PAT: ${{ secrets.PAT }}
-          GH_TOKEN: ${{ secrets.PAT }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
+          ACTIVE_DIGEST_URI: ${{ secrets.ACTIVE_DIGEST_URI }}
           LAST_MINI_DIGEST: ${{ secrets.LAST_MINI_DIGEST }}
           LAST_FULL_DIGEST: ${{ secrets.LAST_FULL_DIGEST }}
-        run: |
-          python3 << 'PYEOF'
-          import os, sys, subprocess
-          sys.path.append('.')
-          import timers
-          from datetime import datetime, timezone
-          has_work = os.path.exists('work_data.json')
-          needs_mini = timers.check_mini_timer()
-          needs_full = timers.check_full_timer()
-          status = has_work or needs_mini or needs_full
-          out = os.environ['GITHUB_OUTPUT']
-          with open(out, 'a') as f:
-              f.write(f"status={'true' if status else 'false'}\n")
-              f.write(f"needs_mini={'true' if needs_mini else 'false'}\n")
-              f.write(f"needs_full={'true' if needs_full else 'false'}\n")
-              f.write(f"has_work={'true' if has_work else 'false'}\n")
-          print(f"[DEBUG] has_work={has_work}, mini_due={needs_mini}, full_due={needs_full}, status={status}")
-          now = datetime.now(timezone.utc).isoformat()
-          repo = os.environ['GITHUB_REPOSITORY']
-          if needs_mini:
-              subprocess.run(["gh", "secret", "set", "LAST_MINI_DIGEST", "--body", now, "--repo", repo], check=True)
-              print("[TIMER] LAST_MINI_DIGEST reset successfully.")
-          elif needs_full:
-              subprocess.run(["gh", "secret", "set", "LAST_FULL_DIGEST", "--body", now, "--repo", repo], check=True)
-              print("[TIMER] LAST_FULL_DIGEST reset successfully.")
-          PYEOF
+        run: python checker.py
       - name: Install heavy deps
-        if: steps.evaluate.outputs.status == 'true'
+        if: steps.checker.outputs.status == 'true'
         env:
           CMAKE_ARGS: "-DGGML_BLAS=OFF -DGGML_CUDA=OFF"
         run: |
           pip install --upgrade pip setuptools wheel
           pip install --prefer-binary llama-cpp-python==0.3.20
       - name: Cache model
-        if: steps.evaluate.outputs.status == 'true'
+        if: steps.checker.outputs.status == 'true'
         uses: actions/cache@v4
         with:
           path: models
@@ -85,7 +51,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-qwen25-coder-14b-q5km-
       - name: Download model if not cached
-        if: steps.evaluate.outputs.status == 'true'
+        if: steps.checker.outputs.status == 'true'
         run: |
           set -e
           mkdir -p models
@@ -99,13 +65,11 @@ jobs:
           fi
       - name: Run Bot
         id: run
-        if: steps.evaluate.outputs.status == 'true'
+        if: steps.checker.outputs.status == 'true'
         env:
           PYTHONUNBUFFERED: "1"
-          LAST_MINI_DIGEST: ${{ secrets.LAST_MINI_DIGEST }}
-          LAST_FULL_DIGEST: ${{ secrets.LAST_FULL_DIGEST }}
-          LAST_DIGEST_URI: ${{ secrets.LAST_DIGEST_URI }}
           ACTIVE_DIGEST_URI: ${{ secrets.ACTIVE_DIGEST_URI }}
+          CONTEXT_DIGEST: ${{ secrets.CONTEXT_DIGEST }}
           BOT_HANDLE: ${{ secrets.BOT_HANDLE }}
           BOT_PASSWORD: ${{ secrets.BOT_PASSWORD }}
           BOT_DID: ${{ secrets.BOT_DID }}
@@ -130,7 +94,7 @@ jobs:
           LLAMA_NO_ACCELERATE: 1
         run: python bot.py
       - name: Update secrets atomically
-        if: steps.evaluate.outputs.status == 'true'
+        if: steps.checker.outputs.status == 'true'
         run: |
           python3 << 'EOF'
           import os, subprocess
@@ -138,7 +102,7 @@ jobs:
               if not value: return
               cmd = ["gh", "secret", "set", key, "--body", value, "--repo", os.environ["GITHUB_REPOSITORY"]]
               subprocess.run(cmd, env={**os.environ, "GH_TOKEN": os.environ["PAT"]}, check=True)
-          for key in ["LAST_DIGEST_URI", "ACTIVE_DIGEST_URI"]:
+          for key in ["ACTIVE_DIGEST_URI"]:
               val = os.environ.get(key, "").strip()
               if val:
                   print(f"[SECRET] Updating {key}")
@@ -146,10 +110,7 @@ jobs:
           EOF
         env:
           PAT: ${{ secrets.PAT }}
-          LAST_PROCESSED: ${{ steps.check.outputs.last_processed }}
-          LAST_MINI_DIGEST: ${{ steps.run.outputs.LAST_MINI_DIGEST }}
-          LAST_FULL_DIGEST: ${{ steps.run.outputs.LAST_FULL_DIGEST }}
-          LAST_DIGEST_URI: ${{ steps.run.outputs.LAST_DIGEST_URI }}
+          LAST_PROCESSED: ${{ steps.checker.outputs.last_processed }}
           ACTIVE_DIGEST_URI: ${{ steps.run.outputs.ACTIVE_DIGEST_URI }}
       - name: Health check alert
         if: failure()
