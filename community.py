@@ -22,29 +22,27 @@ async def process(client, llm, task):
     root_uri = chain.get("root_uri", parent_uri)
     root_cid = chain.get("root_cid", "")
     parent_cid = chain.get("parent_cid", "")
-    memory = state.load_context(root_uri)
+    
+    active_digest_uri = os.environ.get("ACTIVE_DIGEST_URI", "").strip()
+    if root_uri == active_digest_uri:
+        memory = state.load_digest_context()
+    else:
+        memory = state.load_thread_context(root_uri)
+    
     root_thread = f"Root: {chain.get('root_text', '')[:200]}"
-    
-    if config.RAW_DEBUG:
-        logger.info(f"[community] [DEBUG] memory: {memory[:200] if memory else 'EMPTY'}")
-        logger.info(f"[community] [DEBUG] root_thread: {root_thread}")
-        logger.info(f"[community] [DEBUG] user_text: {user_text}")
-    
     final_ctx = state.merge_contexts(memory, root_thread, "", user_text)
     
-    if config.RAW_DEBUG:
-        logger.info(f"[community] [DEBUG] === FINAL CONTEXT TO MODEL ===\n{final_ctx}\n=== END CONTEXT ===")
-    
     reply = generator.get_answer(llm, final_ctx, user_text, "", max_chars=280, temperature=0.7)
-    if utils.count_graphemes(reply) > 293:
-        logger.warning(f"[community] Reply too long ({utils.count_graphemes(reply)}), regenerating...")
+    if len(reply) > 293:
+        logger.warning(f"[community] Reply too long ({len(reply)}), regenerating...")
         reply = generator.get_answer(llm, final_ctx, user_text, "", max_chars=260, temperature=0.7)
-    if utils.count_graphemes(reply) > 293:
+    if len(reply) > 293:
         logger.error(f"[community] Reply still too long, skipping post")
         return
         
     reply = reply.strip() + "\n\nQwen"
     await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, uri, parent_cid)
-    if root_uri != os.environ.get("ACTIVE_DIGEST_URI", "").strip():
-        state.save_context(root_uri, generator.update_summary(llm, memory, user_text, reply))
+    
+    if root_uri != active_digest_uri:
+        await state.save_thread_context(root_uri, generator.update_summary(llm, memory, user_text, reply))
     logger.info(f"[community] Replied to {uri[:40]}...")

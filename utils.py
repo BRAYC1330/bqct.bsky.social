@@ -3,23 +3,7 @@ import hashlib
 import re
 import logging
 from httpx import HTTPStatusError
-
-class SecretFilter(logging.Filter):
-    SECRET_PATTERNS = [
-        r'Bearer\s+[A-Za-z0-9\-_\.]+',
-        r'password["\']?\s*[:=]\s*["\']?[^"\',\s}]+',
-        r'api[_-]?key["\']?\s*[:=]\s*["\']?[^"\',\s}]+',
-        r'PAT["\']?\s*[:=]\s*["\']?[^"\',\s}]+',
-        r'did:[^"\',\s}]+',
-    ]
-    REPLACEMENT = "[REDACTED]"
-    def filter(self, record: logging.LogRecord) -> bool:
-        msg = record.getMessage() if hasattr(record, 'getMessage') else str(record.msg)
-        for pattern in self.SECRET_PATTERNS:
-            msg = re.sub(pattern, self.REPLACEMENT, msg, flags=re.IGNORECASE)
-        record.msg = msg
-        record.args = None
-        return True
+import config
 
 def sanitize_for_prompt(text: str) -> str:
     if not text:
@@ -30,10 +14,14 @@ def sanitize_for_prompt(text: str) -> str:
     text = text.replace('"', '\\"').replace("'", "\\'")
     return text.strip()
 
-def count_graphemes(text: str) -> int:
-    return len(text) if text else 0
+def is_valid_length(text: str, max_len: int = 300) -> bool:
+    return len(text) <= max_len
 
-async def with_retry(func, max_attempts: int = 3, backoff: float = 1.5):
+async def with_retry(func, max_attempts: int = None, backoff: float = None):
+    if max_attempts is None:
+        max_attempts = config.HTTP_MAX_RETRIES
+    if backoff is None:
+        backoff = config.HTTP_BACKOFF
     for attempt in range(max_attempts):
         try:
             return await func()

@@ -2,6 +2,8 @@ import os
 import pathlib
 import yaml
 import logging
+import re
+import html
 from llama_cpp import Llama
 import config
 from logging_config import setup_logging
@@ -16,8 +18,18 @@ with open(PROMPTS_PATH, "r", encoding="utf-8") as f:
 SYSTEM_PROMPT = _prompts["system"]
 SUMMARIZE_SYSTEM = _prompts["summarize"]
 QUERY_REFINE_SYSTEM = _prompts["query_refine"]
+DIGEST_GENERATE = _prompts["digest_generate"]
 DIGEST_REFINE_SYSTEM = _prompts["digest_refine"]
 COMMUNITY_SYSTEM = _prompts["community"]
+
+def _sanitize_input(text: str) -> str:
+    if not text:
+        return ""
+    text = html.escape(text)
+    text = re.sub(r'\{\{.*?\}\}|\{%.*?%\}|\{#.*?#\}', '', text)
+    text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', text)
+    text = re.sub(r'[`\'"\\<>]', '', text)
+    return text.strip()
 
 def get_model():
     model_path = config.MODEL_PATH
@@ -40,13 +52,15 @@ def get_model():
         return None
 
 def extract_search_intent(llm, context: str, user_query: str) -> tuple:
+    safe_context = _sanitize_input(context)
+    safe_query = _sanitize_input(user_query)
     prompt = f"""Extract search query and time filter.
 Rules:
 - If time is a search filter, use: day, week, month, year.
 - If time is part of the question itself, use: none.
 - Return ONLY: QUERY: <text> | TIME: <day/week/month/year/none>
-Context: {context}
-User: "{user_query}"
+Context: {safe_context}
+User: "{safe_query}"
 Output:"""
     try:
         raw = llm(prompt, max_tokens=60, temperature=0.1)
@@ -62,10 +76,13 @@ Output:"""
         return user_query, ""
 
 def get_answer(llm, context: str, user_query: str, search_data: str = "", max_chars: int = 280, temperature: float = 0.7) -> str:
+    safe_context = _sanitize_input(context)
+    safe_query = _sanitize_input(user_query)
+    safe_search = _sanitize_input(search_data)
     prompt = f"""Reply in 1-2 short sentences.
-Context: {context}
-Query: {user_query}
-Search: {search_data if search_data else "N/A"}
+Context: {safe_context}
+Query: {safe_query}
+Search: {safe_search if safe_search else "N/A"}
 Rules:
 - Max {max_chars} characters including spaces and emojis.
 - No hashtags, no links, no markdown.
