@@ -17,9 +17,8 @@ jobs:
         with:
           python-version: '3.10'
           cache: 'pip'
-          cache-dependency-path: 'requirements.txt'
       - name: Install lightweight deps
-        run: pip install httpx
+        run: pip install httpx cryptography
       - name: Check
         id: checker
         env:
@@ -64,7 +63,6 @@ jobs:
             fi
           fi
       - name: Run Bot
-        id: run
         if: steps.checker.outputs.status == 'true'
         env:
           PYTHONUNBUFFERED: "1"
@@ -91,7 +89,6 @@ jobs:
           LINK_CACHE_TTL: 300
           ALLOWED_LINK_DOMAINS: "bsky.app,atproto.com,chainbase.com,tavily.com"
           MAX_LINK_CONTENT_SIZE: 400
-          LLAMA_NO_ACCELERATE: 1
         run: python bot.py
       - name: Health check alert
         if: failure()
