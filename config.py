@@ -22,7 +22,7 @@ def _env_int(name: str, default: int) -> int:
 def _env_float(name: str, default: float) -> float:
     val = os.getenv(name, "")
     return float(val) if val.strip() else default
-MODEL_PATH = os.getenv("MODEL_PATH", "models/qwen2.5-coder-14b-instruct-q5_k_m.gguf")
+MODEL_PATH = os.getenv("MODEL_PATH", "models/qwen2.5-coder-14b-instruct-q4_k_m.gguf")
 MODEL_N_CTX = _env_int("MODEL_N_CTX", 14000)
 MODEL_N_THREADS = _env_int("MODEL_N_THREADS", 4)
 MAX_TOKENS = _env_int("MAX_TOKENS", 250)
