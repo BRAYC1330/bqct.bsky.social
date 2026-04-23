@@ -27,6 +27,8 @@ async def run():
     last_processed = os.getenv("LAST_PROCESSED", "").strip()
     tasks = []
     now_utc = datetime.now(timezone.utc).isoformat()
+    owner_count = 0
+    digest_comment_count = 0
 
     async with bsky.get_client() as client:
         await bsky.login_with_cache(client, config.BOT_HANDLE, config.BOT_PASSWORD)
@@ -37,6 +39,7 @@ async def run():
         r = await client.get("https://bsky.social/xrpc/app.bsky.notification.listNotifications", params=params, timeout=15)
         r.raise_for_status()
         notifs = r.json().get("notifications", [])
+        total_notifs = len(notifs)
 
         active_uri = os.getenv("ACTIVE_DIGEST_URI", "").strip()
         for n in notifs:
@@ -54,19 +57,25 @@ async def run():
 
             if author_did == config.OWNER_DID:
                 tasks.append({"type": "owner_command", "uri": uri, "text": text, "author_did": author_did})
+                owner_count += 1
             elif active_uri and parent_uri and active_uri in parent_uri:
                 tasks.append({"type": "digest_comment", "uri": uri, "text": text, "author_did": author_did, "parent_uri": parent_uri})
+                digest_comment_count += 1
 
+    digest_task_type = "none"
     if timers.check_mini_timer():
         tasks.append({"type": "digest_mini"})
+        digest_task_type = "mini"
     elif timers.check_full_timer():
         tasks.append({"type": "digest_full"})
+        digest_task_type = "full"
 
     with open("work_data.json", "w") as f:
         json.dump({"tasks": tasks}, f)
 
     update_secret("LAST_PROCESSED", now_utc)
-    logger.info(f"[checker] {len(tasks)} tasks queued. LAST_PROCESSED updated.")
+    relevant = owner_count + digest_comment_count
+    logger.info(f"[checker] Received {total_notifs} notifs. Relevant: {relevant} (Owner: {owner_count}, Digest comments: {digest_comment_count}, Digest task: {digest_task_type}). Total queued: {len(tasks)}. LAST_PROCESSED updated.")
     out_path = os.getenv("GITHUB_OUTPUT")
     if out_path:
         with open(out_path, "a") as f:
