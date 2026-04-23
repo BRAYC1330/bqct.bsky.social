@@ -2,6 +2,7 @@ import os
 import json
 import asyncio
 import logging
+import httpx
 import config
 import generator
 import bsky
@@ -25,7 +26,8 @@ async def main():
         return
 
     llm = generator.get_model()
-    async with bsky.get_client() as client:
+    client = httpx.AsyncClient(timeout=30)
+    try:
         await bsky.login_with_cache(client, config.BOT_HANDLE, config.BOT_PASSWORD)
         for task in tasks:
             t_type = task.get("type", "")
@@ -35,6 +37,8 @@ async def main():
                 await community.process(client, llm, task)
             elif t_type == "owner_command":
                 await owner.process(client, llm, task)
+    finally:
+        await client.aclose()
     logger.info("[main] === DONE ===")
 
 if __name__ == "__main__":
