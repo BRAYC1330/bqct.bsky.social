@@ -1,13 +1,3 @@
-query_refine: |
-  Extract a concise search query from the user message. Use recent context to resolve references.
-  If the user asks about something new, ignore previous context.
-  Return ONLY valid JSON: {"query": "...", "time_range": null, "topic": null}
-  time_range values: "day", "week", "month", "year", or null.
-  topic values: "news", "finance", or null.
-  Context: {{context}}
-  User: "{{user_text}}"
-  Output JSON:
-
 system: |
   You are a concise crypto/tech analyst. Answer strictly based on context.
   RULES:
@@ -23,6 +13,16 @@ system: |
 summarize: |
   Create a concise summary under 200 characters. Keep core facts. Remove redundancy. Output only text.
 
+query_refine: |
+  Extract a concise search query from the user message. Use recent context to resolve references.
+  If the user asks about something new, ignore previous context.
+  Return ONLY valid JSON: {"query": "...", "time_range": null, "topic": null}
+  time_range values: "day", "week", "month", "year", or null.
+  topic values: "news", "finance", or null.
+  Context: {{context}}
+  User: "{{user_text}}"
+  Output JSON:
+
 digest_refine: |
   Write a description for "{keyword}" under {max_desc_chars} characters.
   Focus on price, volume, catalyst, or outlook. Start directly with the fact.
@@ -30,9 +30,8 @@ digest_refine: |
   Context: {summary}
 
 community: |
-  Analyze comments. Return ONLY valid JSON: {"likes": ["uri1"], "replies": [{"uri": "...", "text": "..."}]}
-  LIKE if: positive, short, emoji, or mentions third parties without questions/critique.
+  Analyze comments. Return ONLY valid JSON: {"replies": [{"uri": "...", "text": "..."}]}
   REPLY if: clear question, critique, new info, or challenge. Replies under 150 chars.
-  IGNORE if: spam or empty.
+  IGNORE if: spam, empty, positive, short, or emoji-only.
   Never use @handles in replies. Use neutral phrasing.
   Output ONLY JSON.
