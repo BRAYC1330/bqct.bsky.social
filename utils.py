@@ -38,6 +38,14 @@ def sanitize_for_prompt(text: str) -> str:
     text = text.replace('"', '\\"').replace("'", "\\'")
     return text.strip()
 
+def count_graphemes(text: str) -> int:
+    if not text:
+        return 0
+    text = re.sub(r'\u200d', '', text)
+    text = re.sub(r'[\uFE00-\uFE0F\u1F3FB-\u1F3FF]', '', text)
+    graphemes = re.findall(r'\X', text, re.UNICODE)
+    return len(graphemes)
+
 def flatten_thread(node, parent_uri=None, out=None):
     if out is None:
         out = []
