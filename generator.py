@@ -62,7 +62,7 @@ Output:"""
         return user_query, ""
 
 def get_answer(llm, context: str, user_query: str, search_data: str = "", max_chars: int = 280, temperature: float = 0.7) -> str:
-    prompt = f"""You are a concise crypto/tech analyst. Reply in 1-2 short sentences.
+    prompt = f"""Reply in 1-2 short sentences.
 Context: {context}
 Query: {user_query}
 Search: {search_data if search_data else "N/A"}
