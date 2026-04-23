@@ -7,7 +7,19 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 async def get_trending_topics_raw() -> list:
-    return []
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            r = await client.get("https://api.chainbase.com/tops/v1/tool/list-trending-topics?language=en", timeout=30)
+            if r.status_code != 200:
+                return []
+            data = r.json()
+            items = data.get("items", []) if isinstance(data, dict) else (data if isinstance(data, list) else [])
+            eng = [i for i in items if i.get("keyword") and i.get("summary")]
+            eng.sort(key=lambda x: x.get("score", 0), reverse=True)
+            return eng[:10]
+    except Exception as e:
+        logger.error(f"[SEARCH] Trend fetch failed: {e}")
+        return []
 
 def clean_search_results(raw) -> str:
     if not raw:
