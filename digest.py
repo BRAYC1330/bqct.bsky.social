@@ -20,7 +20,7 @@ def _update_gh_secret(key, value):
     try:
         subprocess.run(cmd, env={**os.environ, "GH_TOKEN": pat}, check=True, capture_output=True)
     except Exception as e:
-        logger.error(f"[NEWS] Secret update failed: {e}")
+        logger.error(f"[DIGEST] Secret update failed: {e}")
 
 async def run(client, llm, task_type="digest_mini"):
     trends = await search.get_trending_topics_raw()
@@ -55,5 +55,5 @@ async def run(client, llm, task_type="digest_mini"):
             _update_gh_secret("CONTEXT_DIGEST", digest_ctx_json)
             return True
     except Exception as e:
-        logger.error(f"[NEWS] Post failed: {e}")
+        logger.error(f"[DIGEST] Post failed: {e}")
     return False
