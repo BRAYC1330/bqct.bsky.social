@@ -35,6 +35,8 @@ def get_model():
 
 def extract_tavily_intent(llm, query: str) -> tuple:
     prompt = _prompts["tavily_intent"].format(query=query)
+    if config.DEBUG_OWNER:
+        logger.info(f"[DEBUG-OWNER] PROMPT_TAVILY_INTENT:\n{prompt}")
     try:
         raw = llm(prompt, max_tokens=60, temperature=0.1)
         if "| TIME:" in raw:
@@ -50,6 +52,8 @@ def extract_tavily_intent(llm, query: str) -> tuple:
 
 def extract_chainbase_keyword(llm, text: str) -> str:
     prompt = _prompts["chainbase_keyword"].format(text=text)
+    if config.DEBUG_OWNER:
+        logger.info(f"[DEBUG-OWNER] PROMPT_CHAINBASE_KEYWORD:\n{prompt}")
     try:
         raw = llm(prompt, max_tokens=20, temperature=0.1)
         keyword = raw.strip().split("\n")[0].replace("KEYWORD:", "").strip().strip('"')
@@ -59,13 +63,15 @@ def extract_chainbase_keyword(llm, text: str) -> str:
     except Exception:
         return text[:30]
 
-def get_reply(llm, memory: str, root_thread: str, search_data: str, query: str) -> str:
+def get_reply(llm, memory: str, root_thread: str, search_ str, query: str) -> str:
     prompt = _prompts["reply"].format(
         memory=memory or "None",
         root_thread=root_thread or "None",
         search_data=search_data or "None",
         query=query
     )
+    if config.DEBUG_OWNER:
+        logger.info(f"[DEBUG-OWNER] PROMPT_REPLY:\n{prompt}")
     try:
         raw = llm(prompt, max_tokens=150, temperature=0.7)
         return raw["choices"][0]["text"].strip()
@@ -79,6 +85,8 @@ def generate_digest(llm, keyword: str, summary: str, max_chars: int) -> str:
         summary=summary,
         max_desc_chars=max_chars
     )
+    if config.DEBUG_OWNER:
+        logger.info(f"[DEBUG-OWNER] PROMPT_DIGEST_REFINE:\n{prompt}")
     try:
         raw = llm(prompt, max_tokens=min(max_chars + 20, 120), temperature=0.2)
         return raw["choices"][0]["text"].strip().split("\n")[0]
@@ -88,6 +96,8 @@ def generate_digest(llm, keyword: str, summary: str, max_chars: int) -> str:
 
 def update_context_memory(llm, history: str) -> str:
     prompt = _prompts["context_memory"].format(history=history[:1500])
+    if config.DEBUG_OWNER:
+        logger.info(f"[DEBUG-OWNER] PROMPT_CONTEXT_MEMORY:\n{prompt}")
     try:
         raw = llm(prompt, max_tokens=300, temperature=0.3)
         return raw["choices"][0]["text"].strip()
