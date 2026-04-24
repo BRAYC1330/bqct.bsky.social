@@ -26,7 +26,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
       - name: Install checker deps
-        run: pip install httpx
+        run: pip install httpx pyyaml
       - name: Check
         id: checker
         env:
@@ -96,6 +96,7 @@ jobs:
           ALLOWED_LINK_DOMAINS: "bsky.app,atproto.com,chainbase.com,tavily.com"
           MAX_LINK_CONTENT_SIZE: 400
           LLAMA_NO_ACCELERATE: 1
+          DEBUG_OWNER: "true"
         run: python bot.py
       - name: Update secrets atomically
         if: steps.checker.outputs.status == 'true'
