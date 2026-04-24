@@ -3,6 +3,7 @@ import pathlib
 import yaml
 import logging
 import re
+from typing import Optional
 from llama_cpp import Llama
 import config
 from utils import sanitize_prompt
@@ -14,6 +15,8 @@ PROMPTS_PATH = pathlib.Path(__file__).parent / "prompts.yaml"
 with open(PROMPTS_PATH, "r", encoding="utf-8") as f:
     _prompts = yaml.safe_load(f)
 
+_model_cache: Optional[Llama] = None
+
 def _run_llm(llm, prompt: str, max_tokens: int = 150, temperature: float = 0.7) -> str:
     try:
         out = llm(prompt, max_tokens=max_tokens, temperature=temperature)
@@ -21,12 +24,30 @@ def _run_llm(llm, prompt: str, max_tokens: int = 150, temperature: float = 0.7) 
     except Exception:
         return ""
 
-def get_model():
+def get_model() -> Optional[Llama]:
+    global _model_cache
+    if _model_cache is not None:
+        logger.debug("[generator] Using cached model instance")
+        return _model_cache
+    
     model_path = config.MODEL_PATH
     if not os.path.exists(model_path):
+        logger.error(f"[generator] Model file not found: {model_path}")
         return None
+    
     try:
-        llm = Llama(model_path=model_path, n_ctx=config.MODEL_N_CTX, n_gpu_layers=0, n_threads=config.MODEL_N_THREADS, n_batch=512, verbose=False)
+        llm = Llama(
+            model_path=model_path,
+            n_ctx=config.MODEL_N_CTX,
+            n_gpu_layers=0,
+            n_threads=config.MODEL_N_THREADS,
+            n_batch=1024,
+            n_ubatch=1024,
+            mmap=True,
+            mlock=True,
+            verbose=False,
+        )
+        _model_cache = llm
         logger.info(f"[generator] Model loaded: {os.path.basename(model_path)}")
         return llm
     except Exception as e:
@@ -70,7 +91,7 @@ def filter_search_results_by_intent(llm, intent_query: str, results: list) -> li
         return results[:2]
 
 def get_answer(llm, context: str, user_query: str, search_data: str = "", fallback_topics: str = "", max_chars: int = 270, temperature: float = 0.7) -> str:
-    if fallback_topics and not search_data:
+    if fallback_topics and not search_
         prompt = _prompts["get_answer_fallback"].format(fallback_topics=fallback_topics, max_chars=max_chars)
     else:
         prompt = _prompts["get_answer_standard"].format(
