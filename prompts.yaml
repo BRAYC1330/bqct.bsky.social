@@ -48,16 +48,6 @@ digest_refine: |
   Output only the description.
   Context: {summary}
 
-community: |
-  Reply to the comment concisely.
-  Rules:
-  - If the comment is spam, empty, or pure praise, reply with a short acknowledgment or emoji.
-  - If there is a clear question or critique, answer directly in 1-2 sentences.
-  - Keep replies under 150 characters.
-  - Never use @handles. Use neutral phrasing.
-  - Plain text only. No JSON, no markdown.
-  Output only the reply text.
-
 extract_search_intent: |
   Extract search query and time filter.
   Rules:
@@ -69,11 +59,11 @@ extract_search_intent: |
   Output:
 
 extract_chainbase_keywords: |
-  Generate 3 search keywords for crypto narrative API, priority order.
+  Generate 3 search keywords for narrative API, in priority order.
   Rules:
-  - First: compound query combining main topics (e.g. "AI BTC", "quantum bitcoin")
-  - Second: simplified compound (e.g. "BTC quantum")
-  - Third: core ticker only (e.g. "BTC", "ETH")
+  - First: compound query combining main concepts from the request
+  - Second: simplified version with core terms only
+  - Third: single most relevant identifier (ticker, project name, or concept)
   - Return ONLY comma-separated uppercase keywords: KEY1,KEY2,KEY3
   - Max 20 chars per keyword, letters/numbers/hyphens only.
   Query: "{user_query}"
@@ -95,7 +85,7 @@ get_answer_fallback: |
   Reply:
 
 get_answer_standard: |
-  Reply in 1-2 short conversational sentences.
+  Reply in 1-3 concise sentences.
   Context: {context}
   Query: {user_query}
   Search: {search_data}
@@ -103,6 +93,22 @@ get_answer_standard: |
   - Max {max_chars} characters including spaces and emojis.
   - NO lists, bullets, headers, or digest format.
   - Speak naturally like in a direct chat.
-  - No hashtags, no links, no markdown.
-  - Be helpful and direct.
+  - If query asks "explain", include: who, what changed, why it matters.
+  - If search is empty, briefly note "no fresh data", then answer from knowledge.
+  - Add one universal tip: "Check official sources or trusted data platforms for verification."
+  - No hashtags, no links, no markdown, no @mentions.
+  Reply:
+
+community: |
+  Reply to the comment in 1-3 sentences.
+  Context: {context}
+  Query: {user_query}
+  Search: {search_data}
+  Rules:
+  - Max {max_chars} characters including spaces and emojis.
+  - If search data exists, use it for specifics: who, what changed, why it matters.
+  - If search is empty, briefly note "no fresh data found", then answer from knowledge.
+  - Add one universal tip: "Check official sources or trusted data platforms for verification."
+  - NO lists, bullets, headers, @mentions, hashtags, links, or markdown.
+  - Speak naturally, like in a direct chat.
   Reply:
