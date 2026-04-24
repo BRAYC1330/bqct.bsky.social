@@ -18,8 +18,7 @@ def _get_trend_emoji(rank_status: str) -> str:
     return config.TREND_EMOJIS.get(rank_status.lower(), "")
 
 def _cut_at_sentence(text: str, max_len: int) -> str:
-    if len(text) <= max_len:
-        return text
+    if len(text) <= max_len: return text
     truncated = text[:max_len]
     last_end = max(truncated.rfind('.'), truncated.rfind('!'), truncated.rfind('?'))
     if last_end > max_len * 0.6:
@@ -29,91 +28,59 @@ def _cut_at_sentence(text: str, max_len: int) -> str:
 async def run(client, llm, task_type="digest_mini"):
     trends = await search.get_trending_topics_raw()
     if not trends:
+        logger.warning("[digest] No trends fetched")
         return False
 
     sig = f"Qwen | Chainbase TOPS {config.SIGNATURE_ICONS}"
     stats_emoji = config.TREND_STATS_EMOJI
 
-    if task_type == "digest_mini":
-        header = "TOP CRYPTO TRENDS:"
-    elif task_type == "digest_full":
-        header = "TOP CRYPTO TREND:"
+    if task_type == "digest_mini": header = "TOP CRYPTO TRENDS:"
+    elif task_type == "digest_full": header = "TOP CRYPTO TREND:"
     else:
-        logger.warning(f"[DIGEST] Unknown task_type: {task_type}")
+        logger.warning(f"[digest] Unknown type: {task_type}")
         return False
 
     posted = False
-
     try:
         if task_type == "digest_mini":
-            lines = []
-            current_len = len(header) + len(sig) + 2
+            lines, current_len = [], len(header) + len(sig) + 2
             for item in trends[:6]:
-                kw = item.get("keyword", "?")
-                sc = int(item.get("score", 0))
-                st = item.get("rank_status", "same")
+                kw, sc, st = item.get("keyword", "?"), int(item.get("score", 0)), item.get("rank_status", "same")
                 e = _get_trend_emoji(st)
                 line = f"{e} {kw} {stats_emoji}  {sc}"
                 line_len = len(line) + (1 if lines else 0)
-                if current_len + line_len > MAX_POST_CHARS:
-                    break
+                if current_len + line_len > MAX_POST_CHARS: break
                 lines.append(line)
                 current_len += line_len
-
-            if not lines:
-                return False
-
-            body = "\n".join(lines)
-            final_post = f"{header}\n\n{body}\n\n{sig}"
-
-            if len(final_post) > MAX_POST_CHARS:
-                return False
-
-            if config.RAW_DEBUG:
-                logger.info(f"=== RAW-MINI-POST ===\n{final_post}\n=== END ===")
-
+            if not lines: return False
+            final_post = f"{header}\n\n{'\n'.join(lines)}\n\n{sig}"
+            if len(final_post) > MAX_POST_CHARS: return False
+            if config.RAW_DEBUG: logger.info(f"=== RAW-MINI-POST ===\n{final_post}\n=== END ===")
             resp = await bsky.post_root(client, config.BOT_DID, final_post)
-            uri = resp.get("uri")
-            if uri:
-                utils.update_github_secret("LAST_MINI_DIGEST", datetime.now(timezone.utc).isoformat())
-                utils.update_github_secret("ACTIVE_DIGEST_URI", uri)
+            if resp.get("uri"):
+                now_utc = datetime.now(timezone.utc).isoformat()
+                utils.update_github_secret("LAST_MINI_DIGEST", now_utc)
+                utils.update_github_secret("ACTIVE_DIGEST_URI", resp["uri"])
                 posted = True
-
         elif task_type == "digest_full":
             item = trends[0]
-            kw = item.get("keyword", "?")
-            sc = int(item.get("score", 0))
-            st = item.get("rank_status", "same")
-            summary = item.get("summary", "")
+            kw, sc, st, summary = item.get("keyword", "?"), int(item.get("score", 0)), item.get("rank_status", "same"), item.get("summary", "")
             e = _get_trend_emoji(st)
-            prefix = f"{e} " if e else ""
-            title = f"{prefix}{kw} {stats_emoji}  {sc}: "
-
-            separators = 4
-            max_desc = MAX_POST_CHARS - len(header) - len(sig) - len(title) - separators - BUFFER_CHARS
-            if max_desc < 20:
-                return False
-
+            title = f"{e + ' ' if e else ''}{kw} {stats_emoji}  {sc}: "
+            max_desc = MAX_POST_CHARS - len(header) - len(sig) - len(title) - 4 - BUFFER_CHARS
+            if max_desc < 20: return False
             desc = generator.generate_digest(llm, kw, summary, max_desc)
-            if len(desc) > max_desc:
-                desc = _cut_at_sentence(desc, max_desc)
-            
+            if len(desc) > max_desc: desc = _cut_at_sentence(desc, max_desc)
             final_post = f"{header}\n\n{title}{desc}\n\n{sig}"
-            
             if len(final_post) > MAX_POST_CHARS:
                 final_post = final_post[:MAX_POST_CHARS].rsplit(' ', 1)[0] + "...\n\n" + sig
-
-            if config.RAW_DEBUG:
-                logger.info(f"=== RAW-FULL-POST ===\n{final_post}\n=== END ===")
-
+            if config.RAW_DEBUG: logger.info(f"=== RAW-FULL-POST ===\n{final_post}\n=== END ===")
             resp = await bsky.post_root(client, config.BOT_DID, final_post)
-            uri = resp.get("uri")
-            if uri:
-                utils.update_github_secret("LAST_FULL_DIGEST", datetime.now(timezone.utc).isoformat())
-                utils.update_github_secret("ACTIVE_DIGEST_URI", uri)
+            if resp.get("uri"):
+                now_utc = datetime.now(timezone.utc).isoformat()
+                utils.update_github_secret("LAST_FULL_DIGEST", now_utc)
+                utils.update_github_secret("ACTIVE_DIGEST_URI", resp["uri"])
                 posted = True
-
     except Exception as e:
-        logger.error(f"[DIGEST] Post failed: {e}")
-
+        logger.error(f"[digest] Post failed: {e}")
     return posted

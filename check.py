@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 def _check_timer(last_key: str, interval_sec: int) -> bool:
     last_str = os.getenv(last_key, "").strip()
     if not last_str:
-        logger.warning(f"[timer] {last_key} is empty. Returning due=True")
+        logger.debug(f"[timer] {last_key} is empty. Returning due=True")
         return True
     try:
         last_dt = datetime.fromisoformat(last_str)
@@ -23,10 +23,10 @@ def _check_timer(last_key: str, interval_sec: int) -> bool:
             last_dt = last_dt.replace(tzinfo=timezone.utc)
         delta = (datetime.now(timezone.utc) - last_dt).total_seconds()
         is_due = delta >= interval_sec
-        logger.info(f"[timer] {last_key} delta={delta:.0f}s, due={is_due}")
+        logger.debug(f"[timer] {last_key} delta={delta:.0f}s, due={is_due}")
         return is_due
     except Exception as e:
-        logger.error(f"[timer] {last_key} parse error: {e}. Returning due=True")
+        logger.warning(f"[timer] {last_key} parse error: {e}. Returning due=True")
         return True
 
 async def run():
@@ -39,7 +39,6 @@ async def run():
     try:
         await bsky.login_with_cache(client, config.BOT_HANDLE, config.BOT_PASSWORD)
         notifs = await bsky.fetch_notifications(client, limit=100, seen_at=last_processed)
-        total_notifs = len(notifs)
         active_uri = os.getenv("ACTIVE_DIGEST_URI", "").strip()
         for n in notifs:
             idx = n.get("indexedAt", "")
@@ -61,22 +60,26 @@ async def run():
                 owner_count += 1
     finally:
         await client.aclose()
+        
     digest_task_type = "none"
     if _check_timer("LAST_MINI_DIGEST", 4 * 3600):
         tasks.append({"type": "digest_mini"})
         digest_task_type = "mini"
         utils.update_github_secret("LAST_MINI_DIGEST", now_utc)
-        logger.info("[TIMER] LAST_MINI_DIGEST reset successfully (pre-emptive).")
+        logger.debug("[TIMER] LAST_MINI_DIGEST reset")
     elif _check_timer("LAST_FULL_DIGEST", 2 * 3600):
         tasks.append({"type": "digest_full"})
         digest_task_type = "full"
         utils.update_github_secret("LAST_FULL_DIGEST", now_utc)
-        logger.info("[TIMER] LAST_FULL_DIGEST reset successfully (pre-emptive).")
+        logger.debug("[TIMER] LAST_FULL_DIGEST reset")
+        
     with open("work_data.json", "w") as f:
         json.dump({"tasks": tasks}, f)
+        
     utils.update_github_secret("LAST_PROCESSED", now_utc)
     relevant = owner_count + digest_comment_count
-    logger.info(f"[checker] Received {total_notifs} notifs. Relevant: {relevant} (Owner: {owner_count}, Digest comments: {digest_comment_count}, Digest task: {digest_task_type}). Total queued: {len(tasks)}. LAST_PROCESSED updated.")
+    logger.info(f"[checker] Tasks: {len(tasks)} (Owner: {owner_count}, Comments: {digest_comment_count}, Digest: {digest_task_type})")
+    
     out_path = os.getenv("GITHUB_OUTPUT")
     if out_path:
         with open(out_path, "a") as f:

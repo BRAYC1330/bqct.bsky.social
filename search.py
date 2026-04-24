@@ -10,11 +10,12 @@ async def get_trending_topics_raw() -> list:
         async with httpx.AsyncClient(timeout=httpx.Timeout(config.REQUEST_TIMEOUT, connect=config.CONNECT_TIMEOUT)) as client:
             r = await client.get("https://api.chainbase.com/tops/v1/tool/list-trending-topics?language=en", timeout=config.SEARCH_TIMEOUT)
             if r.status_code != 200:
+                logger.warning(f"[search] Chainbase trends status: {r.status_code}")
                 return []
             from parser_chainbase import parse_trending_items
             return parse_trending_items(r.json())
     except Exception as e:
-        logger.error(f"[SEARCH] Trend fetch failed: {e}")
+        logger.error(f"[search] Trend fetch failed: {e}")
         return []
 
 async def fetch_tavily(query: str, time_range: str = "") -> str:
@@ -22,12 +23,7 @@ async def fetch_tavily(query: str, time_range: str = "") -> str:
         return ""
     url = "https://api.tavily.com/search"
     headers = {"Authorization": f"Bearer {config.TAVILY_API_KEY}", "Content-Type": "application/json"}
-    payload = {
-        "query": query,
-        "search_depth": "basic",
-        "max_results": 3,
-        "include_raw_content": "text"
-    }
+    payload = {"query": query, "search_depth": "basic", "max_results": 3, "include_raw_content": "text"}
     if time_range and time_range.lower() in ("day", "week", "month", "year"):
         payload["time_range"] = time_range.lower()
     try:
@@ -37,7 +33,7 @@ async def fetch_tavily(query: str, time_range: str = "") -> str:
             from parser_tavily import clean_search_results
             return clean_search_results(r.json().get("results", []))
     except Exception as e:
-        logger.error(f"[tavily] Error: {e}")
+        logger.error(f"[search] Tavily error: {e}")
         return ""
 
 async def fetch_chainbase(query: str) -> str:
@@ -48,10 +44,11 @@ async def fetch_chainbase(query: str) -> str:
             url = f"https://api.chainbase.com/tops/v1/tool/search-narrative-candidates?keyword={query}"
             r = await client.get(url, timeout=config.SEARCH_TIMEOUT)
             if r.status_code != 200:
+                logger.warning(f"[search] Chainbase search status: {r.status_code}")
                 return ""
             from parser_chainbase import format_chainbase_results, parse_search_results
             items = parse_search_results(r.json())
             return format_chainbase_results(items)
     except Exception as e:
-        logger.error(f"[chainbase] Error: {e}")
+        logger.error(f"[search] Chainbase error: {e}")
         return ""

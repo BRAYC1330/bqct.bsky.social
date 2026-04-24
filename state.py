@@ -12,52 +12,34 @@ CHUNK_MARKERS = ["[CH:0/2]", "[CH:1/2]", "[CH:2/2]"]
 
 def _get_slots(thread_id: str) -> list:
     base = utils.hash_to_slot(thread_id, config.CONTEXT_SLOT_COUNT)
-    return [
-        base,
-        (base + 1) % config.CONTEXT_SLOT_COUNT,
-        (base + 2) % config.CONTEXT_SLOT_COUNT
-    ]
+    return [base, (base + 1) % config.CONTEXT_SLOT_COUNT, (base + 2) % config.CONTEXT_SLOT_COUNT]
 
 def load_context(thread_id: str) -> str:
     slots = _get_slots(thread_id)
     parts = []
-    is_chunked = False
-    
     for i, slot in enumerate(slots):
         val = os.getenv(f"CONTEXT_{slot}", "").strip()
-        if not val:
-            continue
+        if not val: continue
         if val.startswith(CHUNK_MARKERS[i]):
             parts.append(val[len(CHUNK_MARKERS[i]):])
-            is_chunked = True
+        elif i == 0:
+            return val
         else:
-            if i == 0:
-                return val
             break
-            
-    if not parts:
-        return ""
+    if not parts: return ""
     return " ".join(parts)
 
 def save_context(thread_id: str, llm, history: str):
-    if not history:
-        return
+    if not history: return
     memory = generator.update_context_memory(llm, history)
-    if not memory:
-        return
-
+    if not memory: return
     slots = _get_slots(thread_id)
-    
     if len(memory) > OVERFLOW_THRESHOLD:
         chunk_len = (len(memory) + 2) // 3
-        c1 = memory[:chunk_len]
-        c2 = memory[chunk_len:chunk_len*2]
-        c3 = memory[chunk_len*2:]
-        
-        utils.update_github_secret(f"CONTEXT_{slots[0]}", f"{CHUNK_MARKERS[0]}{c1}")
-        utils.update_github_secret(f"CONTEXT_{slots[1]}", f"{CHUNK_MARKERS[1]}{c2}")
-        utils.update_github_secret(f"CONTEXT_{slots[2]}", f"{CHUNK_MARKERS[2]}{c3}")
-        logger.info(f"[state] Context split across 3 slots: {slots}")
+        utils.update_github_secret(f"CONTEXT_{slots[0]}", f"{CHUNK_MARKERS[0]}{memory[:chunk_len]}")
+        utils.update_github_secret(f"CONTEXT_{slots[1]}", f"{CHUNK_MARKERS[1]}{memory[chunk_len:chunk_len*2]}")
+        utils.update_github_secret(f"CONTEXT_{slots[2]}", f"{CHUNK_MARKERS[2]}{memory[chunk_len*2:]}")
+        logger.debug(f"[state] Context split across slots {slots}")
     else:
         utils.update_github_secret(f"CONTEXT_{slots[0]}", memory)
-        logger.info(f"[state] Context saved to slot {slots[0]}")
+        logger.debug(f"[state] Context saved to slot {slots[0]}")

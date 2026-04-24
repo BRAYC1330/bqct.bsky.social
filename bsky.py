@@ -15,7 +15,7 @@ async def login_with_cache(client, handle, password):
             with open(session_path) as f:
                 sess = json.load(f)
             client.headers["Authorization"] = f"Bearer {sess['accessJwt']}"
-            logger.info("[bsky] Session loaded from cache")
+            logger.debug("[bsky] Session loaded from cache")
             return
         except Exception:
             pass
@@ -25,7 +25,7 @@ async def login_with_cache(client, handle, password):
     client.headers["Authorization"] = f"Bearer {sess['accessJwt']}"
     with open(session_path, "w") as f:
         json.dump(sess, f)
-    logger.info("[bsky] New session created and cached")
+    logger.debug("[bsky] New session created")
 
 async def post_root(client, bot_did, text):
     record = {"$type": "app.bsky.feed.post", "text": text, "createdAt": datetime.now(timezone.utc).isoformat()}
@@ -45,7 +45,7 @@ async def post_reply(client, bot_did, text, root_uri, root_cid, parent_uri, pare
 async def fetch_thread_chain(client, uri):
     r = await client.get("https://bsky.social/xrpc/app.bsky.feed.getPostThread", params={"uri": uri, "depth": 0})
     if r.status_code != 200:
-        logger.warning(f"[bsky] [get_thread_raw] Failed: {r.status_code}")
+        logger.warning(f"[bsky] Thread fetch failed: {r.status_code}")
         return None
     data = r.json()
     thread = data.get("thread", {})
@@ -58,13 +58,7 @@ async def fetch_thread_chain(client, uri):
     root_cid = root_ref.get("cid") if root_ref.get("cid") else post.get("cid", "")
     root_text = record.get("text", "") if root_uri == uri else ""
     parent_cid = parent_ref.get("cid", "") if parent_ref else ""
-    return {
-        "root_uri": root_uri,
-        "root_cid": root_cid,
-        "root_text": root_text,
-        "parent_cid": parent_cid,
-        "chain": [{"record": record, "author": post.get("author", {})}]
-    }
+    return {"root_uri": root_uri, "root_cid": root_cid, "root_text": root_text, "parent_cid": parent_cid, "chain": [{"record": record, "author": post.get("author", {})}]}
 
 async def fetch_notifications(client, limit=100, seen_at=None):
     params = {"limit": limit}
