@@ -27,6 +27,7 @@ REQUEST_TIMEOUT = _env_int("REQUEST_TIMEOUT", 60)
 CONNECT_TIMEOUT = _env_int("CONNECT_TIMEOUT", 10)
 TOKEN_TO_CHAR_RATIO = _env_float("TOKEN_TO_CHAR_RATIO", 0.6)
 RAW_DEBUG = os.getenv("RAW_DEBUG", "true").lower() == "true"
+DEBUG_OWNER = os.getenv("DEBUG_OWNER", "false").lower() == "true"
 BOT_DID = _require("BOT_DID")
 BOT_HANDLE = _require("BOT_HANDLE")
 BOT_PASSWORD = _require("BOT_PASSWORD")
