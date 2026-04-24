@@ -26,7 +26,7 @@ async def process(client, llm, task):
     
     if config.DEBUG_OWNER:
         logger.info(f"[DEBUG-OWNER] SEARCH_QUERY: !c → keyword='{keyword}'")
-        logger.info(f"[DEBUG-OWNER] SEARCH_RAW: {search_data[:200]}{'...' if len(search_data)>200 else ''} ({len(search_data)} chars)")
+        logger.info(f"[DEBUG-OWNER] SEARCH_RAW: {search_data}")
     
     chain = await bsky.fetch_thread_chain(client, uri)
     if not chain:
@@ -65,8 +65,8 @@ async def process(client, llm, task):
         if embeds.get("reposts"):
             for r in embeds["reposts"]:
                 logger.info(f"[DEBUG-OWNER] EMBED_REPOST: Author='{r['author']}' | Text='{r['text']}' | URI='...{r['uri'][-15:]}'")
-        logger.info(f"[DEBUG-OWNER] RAW_THREAD: {full_thread_text[:300]}{'...' if len(full_thread_text)>300 else ''}")
-        logger.info(f"[DEBUG-OWNER] CONTEXT: [MEMORY] {final_context[:100] if final_context else 'None'} | [ROOT_THREAD] {root_thread[:100]} | [SEARCH] {combined_search[:100] if combined_search else 'None'}")
+        logger.info(f"[DEBUG-OWNER] RAW_THREAD: {full_thread_text}")
+        logger.info(f"[DEBUG-OWNER] CONTEXT: [MEMORY] {final_context} | [ROOT_THREAD] {root_thread} | [SEARCH] {combined_search}")
         logger.info(f"[DEBUG-OWNER] PRIORITY: [SEARCH] > [ROOT_THREAD] > [MEMORY]")
 
     reply = generator.get_reply(llm, final_context, root_thread, combined_search, user_text)

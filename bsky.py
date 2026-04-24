@@ -8,6 +8,20 @@ from logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
 
+def _extract_texts(node):
+    texts = []
+    if not node or not isinstance(node, dict): return texts
+    post = node.get("post", {})
+    if not post: return texts
+    record = post.get("record", {})
+    if record and record.get("text"):
+        texts.append(record["text"])
+    elif post.get("value", {}).get("text"):
+        texts.append(post["value"]["text"])
+    for r in node.get("replies", []):
+        texts.extend(_extract_texts(r))
+    return texts
+
 async def login_with_cache(client, handle, password):
     session_path = "session.json"
     if os.path.exists(session_path):
@@ -43,7 +57,7 @@ async def post_reply(client, bot_did, text, root_uri, root_cid, parent_uri, pare
     return r.json()
 
 async def fetch_thread_chain(client, uri):
-    r = await client.get("https://bsky.social/xrpc/app.bsky.feed.getPostThread", params={"uri": uri, "depth": 0})
+    r = await client.get("https://bsky.social/xrpc/app.bsky.feed.getPostThread", params={"uri": uri, "depth": 10})
     if r.status_code != 200:
         logger.warning(f"[bsky] Thread fetch failed: {r.status_code}")
         return None
@@ -59,6 +73,9 @@ async def fetch_thread_chain(client, uri):
     root_text = record.get("text", "") if root_uri == uri else ""
     parent_cid = parent_ref.get("cid", "") if parent_ref else ""
 
+    all_texts = _extract_texts(thread)
+    full_thread_text = " ".join(all_texts)
+
     embeds = {"links": [], "reposts": []}
     raw_embed = post.get("embed", {})
     if raw_embed:
@@ -69,13 +86,13 @@ async def fetch_thread_chain(client, uri):
             rec = raw_embed.get("record", {})
             if rec.get("$type") == "app.bsky.embed.record#viewRecord":
                 val = rec.get("value", {})
-                embeds["reposts"].append({
-                    "author": rec.get("author", {}).get("handle"),
-                    "text": val.get("text", "")[:150],
-                    "uri": rec.get("uri")
-                })
+                embeds["reposts"].append({"author": rec.get("author", {}).get("handle"), "text": val.get("text", "")[:150], "uri": rec.get("uri")})
 
-    return {"root_uri": root_uri, "root_cid": root_cid, "root_text": root_text, "parent_cid": parent_cid, "embeds": embeds}
+    return {
+        "root_uri": root_uri, "root_cid": root_cid, "root_text": root_text,
+        "parent_cid": parent_cid, "embeds": embeds,
+        "all_texts": all_texts, "full_text": full_thread_text
+    }
 
 async def fetch_notifications(client, limit=100, seen_at=None):
     params = {"limit": limit}
