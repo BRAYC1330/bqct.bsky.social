@@ -235,7 +235,7 @@ def flatten_thread_nodes(node: Dict, parent_uri: Optional[str] = None, out: Opti
             flatten_thread_nodes(r, post.get("uri", ""), out)
     return out
 
-def parse_thread(thread_ Dict) -> Dict:
+def parse_thread(thread_data: Dict) -> Dict:
     nodes = flatten_thread_nodes(thread_data.get("thread", {}))
     root = next((n for n in nodes if n.get("is_root")), {"uri": "", "cid": "", "text": ""})
     comments = [n for n in nodes if not n.get("is_root") and n.get("uri") != root["uri"]]
