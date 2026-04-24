@@ -104,7 +104,7 @@ async def _extract_clean_url_content(url: str) -> Optional[str]:
 def _extract_urls_from_text(text: str) -> List[str]:
     return re.findall(r'https?://[^\s<>"{}|\\^`\[\]]+', text)
 
-async def _parse_thread_nodes(node, parent_uri, client, token, quoted_cache, link_cache, all_nodes):
+async def _parse_thread_nodes(node, parent_uri, client, token, quoted_cache, link_cache, all_nodes, visited_uris, allowed_handles):
     if not node or node.get("$type") in ["app.bsky.feed.defs#notFoundPost", "app.bsky.feed.defs#blockedPost"]:
         return
     post = node.get("post", {})
@@ -112,9 +112,23 @@ async def _parse_thread_nodes(node, parent_uri, client, token, quoted_cache, lin
     if not record:
         return
     node_uri = post.get("uri")
+    if node_uri in visited_uris:
+        return
+    visited_uris.add(node_uri)
+    
     author = post.get("author", {})
     did = author.get("did", "")
     handle = author.get("handle", did.split(":")[-1] if ":" in did else "unknown")
+    
+    if handle not in allowed_handles:
+        for reply_node in node.get("replies", []):
+            if isinstance(reply_node, dict):
+                await _parse_thread_nodes(reply_node, node_uri, client, token, quoted_cache, link_cache, all_nodes, visited_uris, allowed_handles)
+        parent = node.get("parent", {})
+        if parent and "post" in parent:
+            await _parse_thread_nodes(parent, node_uri, client, token, quoted_cache, link_cache, all_nodes, visited_uris, allowed_handles)
+        return
+    
     txt = record.get("text", "")
     embed = record.get("embed")
     alts = []
@@ -181,22 +195,27 @@ async def _parse_thread_nodes(node, parent_uri, client, token, quoted_cache, lin
         "parent_uri": parent_uri,
         "did": did,
         "handle": handle,
-        "text": txt,
+        "text": f"@{handle}: {txt}" if handle else txt,
         "alts": alts,
         "link_hints": link_hints,
         "is_root": (parent_uri is None)
     })
     
+    parent = node.get("parent", {})
+    if parent and "post" in parent:
+        await _parse_thread_nodes(parent, node_uri, client, token, quoted_cache, link_cache, all_nodes, visited_uris, allowed_handles)
+    
     for reply_node in node.get("replies", []):
         if isinstance(reply_node, dict):
-            await _parse_thread_nodes(reply_node, node_uri, client, token, quoted_cache, link_cache, all_nodes)
+            await _parse_thread_nodes(reply_node, node_uri, client, token, quoted_cache, link_cache, all_nodes, visited_uris, allowed_handles)
 
-async def parse_thread_full(raw_response: dict, client: httpx.AsyncClient, token: str) -> dict:
+async def parse_thread_full(raw_response: dict, client: httpx.AsyncClient, token: str, allowed_handles: Set[str]) -> dict:
     all_nodes = []
     quoted_cache = {}
     link_cache = {}
+    visited_uris: Set[str] = set()
     thread = raw_response.get("thread", {})
-    await _parse_thread_nodes(thread, None, client, token, quoted_cache, link_cache, all_nodes)
+    await _parse_thread_nodes(thread, None, client, token, quoted_cache, link_cache, all_nodes, visited_uris, allowed_handles)
     texts = [n["text"] for n in all_nodes if n["text"]]
     links = list(set(l for n in all_nodes for l in n.get("link_hints", []) if l.startswith("[URL:") or l.startswith("[Linked")))
     return {"texts": texts, "links": links, "nodes": all_nodes}
@@ -216,7 +235,7 @@ def flatten_thread_nodes(node: Dict, parent_uri: Optional[str] = None, out: Opti
             flatten_thread_nodes(r, post.get("uri", ""), out)
     return out
 
-def parse_thread(thread_data: Dict) -> Dict:
+def parse_thread(thread_ Dict) -> Dict:
     nodes = flatten_thread_nodes(thread_data.get("thread", {}))
     root = next((n for n in nodes if n.get("is_root")), {"uri": "", "cid": "", "text": ""})
     comments = [n for n in nodes if not n.get("is_root") and n.get("uri") != root["uri"]]

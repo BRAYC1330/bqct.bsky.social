@@ -26,24 +26,39 @@ async def process(client, llm, task):
         logger.info(f"=== OWNER-RAW-API-RESPONSE ===\n{raw_preview}\n=== END ===")
 
     token = chain_raw.get("access_jwt", "")
-    thread_content = await parsers.parse_thread_full(chain_raw["raw"], client, token)
+    allowed_handles = {config.BOT_HANDLE, "brayc1330.bsky.social"}
+    thread_content = await parsers.parse_thread_full(chain_raw["raw"], client, token, allowed_handles)
     all_nodes = thread_content.get("nodes", [])
     
-    recent_messages = [n["text"] for n in all_nodes[-5:] if n.get("text")]
-    all_texts = [n["text"] for n in all_nodes if n.get("text")]
-    link_texts = []
+    filtered_nodes = [n for n in all_nodes if n.get("handle") in allowed_handles]
+    recent_messages = [n["text"] for n in filtered_nodes[-4:] if n.get("text")]
     
+    root_node = next((n for n in filtered_nodes if n.get("is_root")), None)
+    root_embed_text = ""
+    if root_node:
+        root_record = chain_raw["raw"].get("thread", {}).get("post", {}).get("record", {})
+        embed = root_record.get("embed", {})
+        if embed:
+            embed_text, _ = parsers._extract_embed_full(embed)
+            if embed_text:
+                root_embed_text = f" {embed_text}"
+    
+    root_thread = f"{root_node['text']}{root_embed_text}" if root_node else ""
+    
+    middle_messages = [n["text"] for n in filtered_nodes[1:-4] if n.get("text")] if len(filtered_nodes) > 5 else []
+    
+    link_texts = []
     link_tasks = [utils.fetch_url_content(url) for url in thread_content["links"][:5]]
     results = await asyncio.gather(*link_tasks)
     link_texts = [r for r in results if r]
 
-    combined_raw = all_texts + link_texts
+    combined_raw = recent_messages + ([root_thread] if root_thread else []) + middle_messages + link_texts
     if config.RAW_DEBUG:
-        logger.info(f"=== OWNER-RAW-THREAD ===\nuri={uri}\ntexts_count={len(all_texts)}\nlinks={thread_content['links']}\ncombined_raw_len={len(' '.join(combined_raw))}\ncombined_raw_preview={' '.join(combined_raw)[:800]}")
+        logger.info(f"=== OWNER-RAW-THREAD ===\nuri={uri}\ntexts_count={len(combined_raw)}\nlinks={thread_content['links']}\ncombined_raw_len={len(' '.join(combined_raw))}\ncombined_raw_preview={' '.join(combined_raw)[:800]}")
 
-    root_thread = memory.compress_thread_context(llm, combined_raw)
+    compressed_root = memory.compress_thread_context(llm, combined_raw)
     if config.RAW_DEBUG:
-        logger.info(f"=== OWNER-COMPRESSED-ROOT ===\n{root_thread}\n=== END ===")
+        logger.info(f"=== OWNER-COMPRESSED-ROOT ===\n{compressed_root}\n=== END ===")
 
     root_uri = chain_raw["root_uri"]
     root_cid = chain_raw["root_cid"]
@@ -85,7 +100,7 @@ async def process(client, llm, task):
         suffix = f"\n\nQwen | {'Chainbase' if is_c else 'Tavily'}"
 
     budget = 300 - len(suffix)
-    final_ctx = memory.merge_contexts(mem, root_thread, search_data, user_text, recent_messages)
+    final_ctx = memory.merge_contexts(mem, compressed_root, search_data, user_text, recent_messages)
     if config.RAW_DEBUG:
         logger.info(f"=== OWNER-FINAL-CTX ===\n{final_ctx}\n=== END ===")
     

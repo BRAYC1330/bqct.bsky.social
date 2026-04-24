@@ -17,6 +17,17 @@ with open(PROMPTS_PATH, "r", encoding="utf-8") as f:
 
 _model_cache: Optional[Llama] = None
 
+_KEYWORD_SYNONYMS = {
+    "ALTOS": ["ALTCOIN", "ALT"],
+    "BTC": ["BITCOIN", "BTC"],
+    "ETH": ["ETHEREUM", "ETH"],
+    "AI": ["ARTIFICIAL-INTELLIGENCE", "AI"],
+    "DEFI": ["DECENTRALIZED-FINANCE", "DEFI"],
+    "NFT": ["NON-FUNGIBLE-TOKEN", "NFT"],
+    "LAYER2": ["L2", "LAYER-2"],
+    "RWA": ["REAL-WORLD-ASSETS", "RWA"],
+}
+
 def _run_llm(llm, prompt: str, max_tokens: int = 150, temperature: float = 0.7) -> str:
     try:
         out = llm(prompt, max_tokens=max_tokens, temperature=temperature)
@@ -72,7 +83,13 @@ def extract_chainbase_keywords_multi(llm, user_query: str) -> list:
     try:
         raw = _run_llm(llm, prompt, max_tokens=40, temperature=0.1).upper()
         candidates = [re.sub(r'[^A-Z0-9\-]', '', k.strip()) for k in raw.split(",")[:3]]
-        return [k for k in candidates if k and 2 <= len(k) <= 20]
+        expanded = []
+        for kw in candidates:
+            if kw in _KEYWORD_SYNONYMS:
+                expanded.extend(_KEYWORD_SYNONYMS[kw])
+            elif kw:
+                expanded.append(kw)
+        return [k for k in expanded if k and 2 <= len(k) <= 20][:3]
     except:
         return []
 
