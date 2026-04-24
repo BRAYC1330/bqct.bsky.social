@@ -3,9 +3,13 @@ import hashlib
 import os
 import subprocess
 import logging
-from httpx import AsyncClient, HTTPStatusError, Timeout
 import config
+import generator
+import state
+import bsky
+import parser as ctx_parser
 from logging_config import setup_logging
+
 setup_logging()
 logger = logging.getLogger(__name__)
 
@@ -31,12 +35,7 @@ def update_github_secret(key: str, value: str) -> None:
 def _get_active_digest_uri() -> str:
     return os.environ.get("ACTIVE_DIGEST_URI", "").strip()
 
-async def process_reply(client, llm, task, max_chars=280, suffix="", temperature=0.7, search_data="", link_content=""):
-    import parser as ctx_parser
-    import state
-    import generator
-    import bsky
-    
+async def process_reply(client, llm, task, max_chars=240, suffix="", temperature=0.7, search_data="", link_content=""):
     uri = task["uri"]
     user_text = task["text"]
     
@@ -49,23 +48,21 @@ async def process_reply(client, llm, task, max_chars=280, suffix="", temperature
     parent_cid = chain.get("parent_cid", "")
     
     memory = state.load_context(root_uri)
-    root_thread = f"Root: {chain.get('root_text', '')[:200]}"
+    root_thread = chain.get("root_text", "")[:200]
     
     combined_search = search_data
     if link_content:
         combined_search = f"{search_data}\n\n[EXTRACTED_LINKS]\n{link_content}" if search_data else f"[EXTRACTED_LINKS]\n{link_content}"
     
-    final_ctx = ctx_parser.prepare_context(memory, root_thread, combined_search, user_text)
+    reply = generator.get_reply(llm, memory, root_thread, combined_search, user_text)
     
-    reply = generator.get_answer(llm, final_ctx, user_text, combined_search, max_chars=max_chars, temperature=temperature)
-    if count_graphemes(reply) > 293:
-        reply = generator.get_answer(llm, final_ctx, user_text, combined_search, max_chars=260, temperature=temperature)
-    if count_graphemes(reply) > 293:
-        return
+    if count_graphemes(reply) > 240:
+        reply = reply[:240].rsplit(" ", 1)[0] + "..."
     
     reply = reply.strip() + suffix
     
     await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, uri, parent_cid)
     
     if root_uri != _get_active_digest_uri():
-        state.save_context(root_uri, generator.update_summary(llm, memory, user_text, reply))
+        history = f"Root: {root_thread} | Query: {user_text} | Search: {combined_search[:300]} | Reply: {reply}"
+        state.save_context(root_uri, llm, history)

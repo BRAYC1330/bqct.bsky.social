@@ -21,10 +21,7 @@ def _cut_at_sentence(text: str, max_len: int) -> str:
     if len(text) <= max_len:
         return text
     truncated = text[:max_len]
-    last_period = truncated.rfind('.')
-    last_exclaim = truncated.rfind('!')
-    last_question = truncated.rfind('?')
-    last_end = max(last_period, last_exclaim, last_question)
+    last_end = max(truncated.rfind('.'), truncated.rfind('!'), truncated.rfind('?'))
     if last_end > max_len * 0.6:
         return truncated[:last_end + 1].strip()
     return truncated.rsplit(' ', 1)[0].strip() + "..."
@@ -70,7 +67,6 @@ async def run(client, llm, task_type="digest_mini"):
             final_post = f"{header}\n\n{body}\n\n{sig}"
 
             if len(final_post) > MAX_POST_CHARS:
-                logger.warning(f"[DIGEST] Mini post too long: {len(final_post)} chars")
                 return False
 
             if config.RAW_DEBUG:
@@ -79,8 +75,7 @@ async def run(client, llm, task_type="digest_mini"):
             resp = await bsky.post_root(client, config.BOT_DID, final_post)
             uri = resp.get("uri")
             if uri:
-                now_utc = datetime.now(timezone.utc).isoformat()
-                utils.update_github_secret("LAST_MINI_DIGEST", now_utc)
+                utils.update_github_secret("LAST_MINI_DIGEST", datetime.now(timezone.utc).isoformat())
                 utils.update_github_secret("ACTIVE_DIGEST_URI", uri)
                 posted = True
 
@@ -97,26 +92,16 @@ async def run(client, llm, task_type="digest_mini"):
             separators = 4
             max_desc = MAX_POST_CHARS - len(header) - len(sig) - len(title) - separators - BUFFER_CHARS
             if max_desc < 20:
-                logger.warning(f"[DIGEST] Not enough space for description: {max_desc} chars")
                 return False
 
-            prompt = generator.DIGEST_REFINE_SYSTEM.format(keyword=kw, summary=summary, max_desc_chars=max_desc)
-            prompt += f"\n\nSTRICT: Output MUST be ≤ {max_desc} characters including spaces. Stop exactly at limit."
-            
-            response = llm(prompt, max_tokens=min(max_desc + 20, 120), temperature=0.2)
-            desc = response["choices"][0]["text"].strip().split("\n")[0]
-            
+            desc = generator.generate_digest(llm, kw, summary, max_desc)
             if len(desc) > max_desc:
                 desc = _cut_at_sentence(desc, max_desc)
             
             final_post = f"{header}\n\n{title}{desc}\n\n{sig}"
             
             if len(final_post) > MAX_POST_CHARS:
-                logger.warning(f"[DIGEST] Final post still too long: {len(final_post)} chars, trimming...")
-                final_post = final_post[:MAX_POST_CHARS].rsplit(' ', 1)[0] + "..." + f"\n\n{sig}"
-                if len(final_post) > MAX_POST_CHARS:
-                    logger.error(f"[DIGEST] Cannot fit post within limit, skipping")
-                    return False
+                final_post = final_post[:MAX_POST_CHARS].rsplit(' ', 1)[0] + "...\n\n" + sig
 
             if config.RAW_DEBUG:
                 logger.info(f"=== RAW-FULL-POST ===\n{final_post}\n=== END ===")
@@ -124,8 +109,7 @@ async def run(client, llm, task_type="digest_mini"):
             resp = await bsky.post_root(client, config.BOT_DID, final_post)
             uri = resp.get("uri")
             if uri:
-                now_utc = datetime.now(timezone.utc).isoformat()
-                utils.update_github_secret("LAST_FULL_DIGEST", now_utc)
+                utils.update_github_secret("LAST_FULL_DIGEST", datetime.now(timezone.utc).isoformat())
                 utils.update_github_secret("ACTIVE_DIGEST_URI", uri)
                 posted = True
 

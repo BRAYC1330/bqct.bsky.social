@@ -1,40 +1,57 @@
-system: |
-  You are a concise crypto/tech analyst. Answer strictly based on context.
-  RULES:
-  1. User question has highest priority.
-  2. If search results exist, use them. Otherwise use thread context.
-  3. Keep responses under the character limit.
-  4. For short reactions or praise, reply conversationally. Do not repeat context.
-  5. Never use @handles or names of conversation participants. Use "I" or "you".
-  6. Third-party names are allowed only when discussing content.
-  7. Plain text only. No markers.
-  Output only the final answer.
-
-summarize: |
-  Create a concise summary under 200 characters. Keep core facts. Remove redundancy. Output only text.
-
-query_refine: |
-  Extract search query and time filter.
+tavily_intent: |
+  Extract search query and time filter for web search.
   Rules:
   - If time is a search filter, use: day, week, month, year.
   - If time is part of the question itself, use: none.
   - Return ONLY: QUERY: <text> | TIME: <day/week/month/year/none>
-  Context: {context}
-  User: "{user_text}"
+  User query: "{query}"
   Output:
 
-digest_refine: |
-  Write a description for "{keyword}" under {max_desc_chars} characters.
-  Focus on price, volume, catalyst, or outlook. Start directly with the fact.
-  Output only the description.
-  Context: {summary}
-
-community: |
-  Reply to the comment concisely.
+chainbase_keyword: |
+  Extract a single most relevant crypto/tech/finance keyword or topic from the text.
   Rules:
-  - If the comment is spam, empty, or pure praise, reply with a short acknowledgment or emoji.
-  - If there is a clear question or critique, answer directly in 1-2 sentences.
-  - Keep replies under 150 characters.
-  - Never use @handles. Use neutral phrasing.
-  - Plain text only. No JSON, no markdown.
-  Output only the reply text.
+  - Return ONLY the keyword, nothing else.
+  - If multiple topics, pick the most prominent one.
+  - Max 3 words.
+  Text: "{text}"
+  Keyword:
+
+reply: |
+  You are an expert analyst. Answer the query concisely using the provided context.
+  Rules:
+  - If [SEARCH] exists, answer STRICTLY based on it. Ignore other context if conflicting.
+  - Keep the answer under 240 characters.
+  - No markdown, no handles, no links.
+  - If the input is spam/praise, reply with a short acknowledgment.
+  Context:
+  [MEMORY]
+  {memory}
+
+  [ROOT_THREAD]
+  {root_thread}
+
+  [SEARCH]
+  {search_data}
+
+  Query: {query}
+  Reply:
+
+digest_refine: |
+  Write a concise description for the crypto trend "{keyword}".
+  Focus on price action, volume, catalysts, or outlook.
+  Rules:
+  - Max {max_desc_chars} characters.
+  - Start directly with the fact.
+  - No fluff.
+  Context: {summary}
+  Description:
+
+context_memory: |
+  Extract key facts and core essence from the conversation thread to preserve context for future turns.
+  Rules:
+  - Include critical data points, decisions, or unresolved questions.
+  - Remove filler words, greetings, and repeated info.
+  - Keep it concise and factual.
+  Input:
+  {history}
+  Context Memory:

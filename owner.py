@@ -4,6 +4,7 @@ import generator
 import search
 import utils
 from logging_config import setup_logging
+
 setup_logging()
 logger = logging.getLogger(__name__)
 
@@ -18,12 +19,14 @@ async def process(client, llm, task):
     
     if do_search:
         clean_text = user_text.replace("!t", "").replace("!c", "").strip()
-        search_query, time_range = generator.extract_search_intent(llm, "", clean_text)
-        if search_query:
-            if "!c" in user_text.lower():
-                search_data = await search.fetch_chainbase(search_query)
-            else:
+        if "!t" in user_text.lower():
+            search_query, time_range = generator.extract_tavily_intent(llm, clean_text)
+            if search_query:
                 search_data = await search.fetch_tavily(search_query, time_range)
+        elif "!c" in user_text.lower():
+            search_query = generator.extract_chainbase_keyword(llm, clean_text)
+            if search_query:
+                search_data = await search.fetch_chainbase(search_query)
     
     urls = URL_PATTERN.findall(user_text)
     if urls:
@@ -36,4 +39,4 @@ async def process(client, llm, task):
                 contents.append(f"[LINK:{url}]\n{content}")
         link_content = "\n\n".join(contents)
     
-    await utils.process_reply(client, llm, task, max_chars=280, suffix="", temperature=0.7, search_data=search_data, link_content=link_content)
+    await utils.process_reply(client, llm, task, max_chars=240, suffix="", temperature=0.7, search_data=search_data, link_content=link_content)
