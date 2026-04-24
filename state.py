@@ -1,47 +1,38 @@
 import os
 import hashlib
-import asyncio
-import json
+import subprocess
 import logging
-import re
 import config
 from logging_config import setup_logging
-from utils import update_github_secret
 setup_logging()
 logger = logging.getLogger(__name__)
-
-def _validate_input(value: str) -> bool:
-    return bool(re.match(r'^[a-zA-Z0-9_\-\.:@/]+$', value))
-
 def _slot(tid: str) -> int:
-    if not _validate_input(tid):
-        raise ValueError("Invalid thread_id")
     return int(hashlib.sha256(tid.encode()).hexdigest(), 16) % config.CONTEXT_SLOT_COUNT
-
-def load_thread_context(thread_id: str) -> str:
-    if not _validate_input(thread_id):
-        return ""
+def load_context(thread_id: str) -> str:
     slot = _slot(thread_id)
     return os.getenv(f"CONTEXT_{slot}", "") or ""
-
-async def save_thread_context(thread_id: str, memory: str):
-    if not _validate_input(thread_id) or not _validate_input(memory):
-        return
+def save_context(thread_id: str, memory: str):
     slot = _slot(thread_id)
     repo = os.environ.get("GITHUB_REPOSITORY", "")
     pat = os.environ.get("PAT", "")
     if not repo or not pat or not memory:
         return
-    await update_github_secret(f"CONTEXT_{slot}", memory, pat, repo)
-
-def load_digest_context() -> str:
-    raw = os.environ.get("CONTEXT_DIGEST", "")
-    if not raw:
-        return ""
+    cmd = ["gh", "secret", "set", f"CONTEXT_{slot}", "--body", memory[:250], "--repo", repo]
     try:
-        data = json.loads(raw)
-        if isinstance(data, list):
-            return "\n".join(f"{i.get('keyword', '')} (score: {i.get('score', 0)}): {i.get('summary', '')}" for i in data)
-        return ""
-    except json.JSONDecodeError:
-        return ""
+        subprocess.run(cmd, env={**os.environ, "GH_TOKEN": pat}, check=True, capture_output=True)
+    except Exception as e:
+        logger.error(f"[CTX] Save failed: {e}")
+def merge_contexts(memory: str, root_thread: str, search_data: str, user_query: str) -> str:
+    parts = []
+    if memory:
+        parts.append(f"[MEMORY]\n{memory}")
+    if root_thread:
+        parts.append(f"[ROOT_THREAD]\n{root_thread}")
+    if search_data:
+        parts.append(f"[SEARCH]\n{search_data}")
+    if user_query:
+        parts.append(f"[QUERY]\n{user_query}")
+    final = "\n".join(parts)
+    if config.RAW_DEBUG:
+        logger.info(f"=== RAW-FINAL-CONTEXT ===\n{final}\n=== END ===")
+    return final

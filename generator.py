@@ -2,12 +2,10 @@ import os
 import pathlib
 import yaml
 import logging
-import re
-from typing import Optional
 from llama_cpp import Llama
 import config
-from utils import sanitize_prompt
 from logging_config import setup_logging
+
 setup_logging()
 logger = logging.getLogger(__name__)
 
@@ -15,44 +13,26 @@ PROMPTS_PATH = pathlib.Path(__file__).parent / "prompts.yaml"
 with open(PROMPTS_PATH, "r", encoding="utf-8") as f:
     _prompts = yaml.safe_load(f)
 
-_model_cache: Optional[Llama] = None
+SYSTEM_PROMPT = _prompts["system"]
+SUMMARIZE_SYSTEM = _prompts["summarize"]
+QUERY_REFINE_SYSTEM = _prompts["query_refine"]
+DIGEST_REFINE_SYSTEM = _prompts["digest_refine"]
+COMMUNITY_SYSTEM = _prompts["community"]
 
-def __getattr__(name: str):
-    if name in _prompts:
-        return _prompts[name]
-    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
-
-def _run_llm(llm, prompt: str, max_tokens: int = 150, temperature: float = 0.7) -> str:
-    try:
-        out = llm(prompt, max_tokens=max_tokens, temperature=temperature)
-        return out["choices"][0]["text"].strip()
-    except Exception:
-        return ""
-
-def get_model() -> Optional[Llama]:
-    global _model_cache
-    if _model_cache is not None:
-        logger.debug("[generator] Using cached model instance")
-        return _model_cache
-    
+def get_model():
     model_path = config.MODEL_PATH
     if not os.path.exists(model_path):
-        logger.error(f"[generator] Model file not found: {model_path}")
+        logger.error(f"[generator] Model not found: {model_path}")
         return None
-    
     try:
         llm = Llama(
             model_path=model_path,
             n_ctx=config.MODEL_N_CTX,
             n_gpu_layers=0,
             n_threads=config.MODEL_N_THREADS,
-            n_batch=1024,
-            n_ubatch=1024,
-            mmap=True,
-            mlock=True,
-            verbose=False,
+            n_batch=512,
+            verbose=False
         )
-        _model_cache = llm
         logger.info(f"[generator] Model loaded: {os.path.basename(model_path)}")
         return llm
     except Exception as e:
@@ -60,57 +40,42 @@ def get_model() -> Optional[Llama]:
         return None
 
 def extract_search_intent(llm, context: str, user_query: str) -> tuple:
-    logger.info(f"[GENERATOR:INTENT] Context preview: {context[:200]}... | Query: '{user_query}'")
-    prompt = _prompts["extract_search_intent"].format(context=sanitize_prompt(context), user_text=sanitize_prompt(user_query))
+    prompt = f"""Extract search query and time filter.
+Rules:
+- If time is a search filter, use: day, week, month, year.
+- If time is part of the question itself, use: none.
+- Return ONLY: QUERY: <text> | TIME: <day/week/month/year/none>
+Context: {context}
+User: "{user_query}"
+Output:"""
     try:
-        raw = _run_llm(llm, prompt, max_tokens=60, temperature=0.1)
-        logger.info(f"[GENERATOR:INTENT] Raw output: '{raw}'")
+        raw = llm(prompt, max_tokens=60, temperature=0.1)
         if "| TIME:" in raw:
             q_part, t_part = raw.split("| TIME:", 1)
             query = q_part.replace("QUERY:", "").strip()
             time_range = t_part.strip().lower()
-            logger.info(f"[GENERATOR:INTENT] Parsed: query='{query}' time='{time_range}'")
-            return query, time_range if time_range in ("day", "week", "month", "year") else ""
-    except Exception as e:
-        logger.error(f"[GENERATOR:INTENT] Parse error: {e}")
-    return user_query, ""
-
-def extract_chainbase_keywords_multi(llm, user_query: str) -> list:
-    logger.info(f"[GENERATOR:KEYWORDS] Input query: '{user_query}'")
-    prompt = _prompts["extract_chainbase_keywords"].format(user_query=sanitize_prompt(user_query))
-    try:
-        raw = _run_llm(llm, prompt, max_tokens=40, temperature=0.1).upper()
-        logger.info(f"[GENERATOR:KEYWORDS] Raw keywords: '{raw}'")
-        candidates = [re.sub(r'[^A-Z0-9\-]', '', k.strip()) for k in raw.split(",")[:3]]
-        result = [k for k in candidates if k and 2 <= len(k) <= 20]
-        logger.info(f"[GENERATOR:KEYWORDS] Final keywords: {result}")
-        return result
-    except Exception as e:
-        logger.error(f"[GENERATOR:KEYWORDS] Error: {e}")
-        return []
-
-def filter_search_results_by_intent(llm, intent_query: str, results: list) -> list:
-    if not results:
-        return []
-    summaries = "\n".join([f"- {r.get('keyword','')}: {r.get('summary','')[:100]}" for r in results[:5]])
-    prompt = _prompts["filter_results_by_intent"].format(intent_query=sanitize_prompt(intent_query), summaries=summaries)
-    try:
-        raw = _run_llm(llm, prompt, max_tokens=30, temperature=0.1).upper()
-        if "NONE" in raw:
-            return []
-        keep_ids = set(re.findall(r'[A-Z0-9\-]+', raw))
-        return [r for r in results if r.get("id") in keep_ids or any(kw in r.get("keyword","").upper() for kw in keep_ids)]
+            if time_range not in ("day", "week", "month", "year"):
+                time_range = ""
+            return query, time_range
+        return user_query, ""
     except:
-        return results[:2]
+        return user_query, ""
 
-def get_answer(llm, context: str, user_query: str, search_data: str = "", fallback_topics: str = "", max_chars: int = 270, temperature: float = 0.7) -> str:
-    if fallback_topics and not search_data:
-        prompt = _prompts["get_answer_fallback"].format(fallback_topics=fallback_topics, max_chars=max_chars)
-    else:
-        prompt = _prompts["get_answer_standard"].format(
-            context=sanitize_prompt(context),
-            user_query=sanitize_prompt(user_query),
-            search_data=sanitize_prompt(search_data) if search_data else "N/A",
-            max_chars=max_chars
-        )
-    return _run_llm(llm, prompt, max_tokens=150, temperature=temperature)
+def get_answer(llm, context: str, user_query: str, search_data: str = "", max_chars: int = 280, temperature: float = 0.7) -> str:
+    prompt = f"""You are a concise crypto/tech analyst. Reply in 1-2 short sentences.
+Context: {context}
+Query: {user_query}
+Search: {search_data if search_data else "N/A"}
+Rules:
+- Max {max_chars} characters including spaces and emojis.
+- No hashtags, no links, no markdown.
+- Be helpful and direct.
+Reply:"""
+    output = llm(prompt, max_tokens=150, temperature=temperature)
+    response = output["choices"][0]["text"]
+    return response.strip()
+
+def update_summary(llm, memory: str, user_query: str, reply: str) -> str:
+    if not memory:
+        return f"Q: {user_query[:100]} -> A: {reply[:100]}"
+    return memory[-200:] + f" | Q: {user_query[:50]} -> A: {reply[:50]}"

@@ -2,36 +2,24 @@ import asyncio
 import hashlib
 import re
 import logging
-import html
-import httpx
-import os
 from httpx import HTTPStatusError
-from typing import Optional
-import config
-try:
-    import trafilatura
-    TRAFILATURA_AVAILABLE = True
-except ImportError:
-    TRAFILATURA_AVAILABLE = False
 
-def sanitize_prompt(text: str) -> str:
-    if not text:
-        return ""
-    injection_patterns = [
-        r'(?i)ignore\s+(previous|all)\s+instructions',
-        r'(?i)system\s*(override|prompt|instruction)',
-        r'(?i)forget\s+all\s+rules',
-        r'(?i)you\s+are\s+now\s+',
-        r'(?i)from\s+now\s+on\s+',
-        r'(?i)disregard\s+(the\s+)?(above|previous)',
-        r'(?i)new\s+instruction[s]?:',
+class SecretFilter(logging.Filter):
+    SECRET_PATTERNS = [
+        r'Bearer\s+[A-Za-z0-9\-_\.]+',
+        r'password["\']?\s*[:=]\s*["\']?[^"\',\s}]+',
+        r'api[_-]?key["\']?\s*[:=]\s*["\']?[^"\',\s}]+',
+        r'PAT["\']?\s*[:=]\s*["\']?[^"\',\s}]+',
+        r'did:[^"\',\s}]+',
     ]
-    for pattern in injection_patterns:
-        text = re.sub(pattern, '[BLOCKED]', text, flags=re.I)
-    text = re.sub(r'\{\{.*?\}\}|\{%.*?%\}|\{#.*?#\}', '', text)
-    text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', text)
-    text = re.sub(r'[`\'"\\<>]', '', text)
-    return text.strip()
+    REPLACEMENT = "[REDACTED]"
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage() if hasattr(record, 'getMessage') else str(record.msg)
+        for pattern in self.SECRET_PATTERNS:
+            msg = re.sub(pattern, self.REPLACEMENT, msg, flags=re.IGNORECASE)
+        record.msg = msg
+        record.args = None
+        return True
 
 def sanitize_for_prompt(text: str) -> str:
     if not text:
@@ -42,47 +30,10 @@ def sanitize_for_prompt(text: str) -> str:
     text = text.replace('"', '\\"').replace("'", "\\'")
     return text.strip()
 
-def is_valid_length(text: str, max_len: int = 300) -> bool:
-    return len(text) <= max_len
+def count_graphemes(text: str) -> int:
+    return len(text) if text else 0
 
-def summarize_search_for_context(search_data: str, max_chars: int = 100) -> str:
-    if not search_data:
-        return ""
-    parts = search_data.split(" | ")
-    if parts:
-        clean = re.sub(r'^[^\w\s]*', '', parts[0])
-        return clean[:max_chars]
-    return re.sub(r'[|{}]', '', search_data)[:max_chars]
-
-def update_summary(memory: str, user_query: str, reply: str) -> str:
-    if not memory:
-        return f"Q: {user_query[:100]} -> A: {reply[:100]}"
-    return memory[-200:] + f" | Q: {user_query[:50]} -> A: {reply[:50]}"
-
-def format_fallback_topics(topics: list) -> str:
-    if not topics:
-        return ""
-    return ", ".join(topics)
-
-async def fetch_url_content(url: str) -> str:
-    if not TRAFILATURA_AVAILABLE:
-        return ""
-    try:
-        async with httpx.AsyncClient(timeout=5) as client:
-            r = await client.get(url, follow_redirects=True)
-            r.raise_for_status()
-            content = trafilatura.extract(r.text)
-            if content:
-                return re.sub(r'\s+', ' ', content.strip())[:400]
-            return ""
-    except Exception:
-        return ""
-
-async def with_retry(func, max_attempts: int = None, backoff: float = None):
-    if max_attempts is None:
-        max_attempts = config.HTTP_MAX_RETRIES
-    if backoff is None:
-        backoff = config.HTTP_BACKOFF
+async def with_retry(func, max_attempts: int = 3, backoff: float = 1.5):
     for attempt in range(max_attempts):
         try:
             return await func()
@@ -99,42 +50,3 @@ async def with_retry(func, max_attempts: int = None, backoff: float = None):
 
 def hash_to_slot(value: str, slot_count: int) -> int:
     return int(hashlib.sha256(value.encode()).hexdigest(), 16) % slot_count
-
-async def update_github_secret(
-    key: str,
-    value: str,
-    pat: Optional[str] = None,
-    repo: Optional[str] = None
-) -> bool:
-    pat = pat or os.environ.get("PAT", "")
-    repo = repo or os.environ.get("GITHUB_REPOSITORY", "")
-    if not all([key, value, pat, repo]):
-        return False
-    try:
-        env = {**os.environ, "GH_TOKEN": pat}
-        proc = await asyncio.create_subprocess_exec(
-            "gh", "secret", "set", key, "--body", value, "--repo", repo,
-            env=env,
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL
-        )
-        await proc.communicate()
-        return proc.returncode == 0
-    except Exception:
-        return False
-
-async def with_rate_limit_retry(
-    func,
-    max_retries: int = 3,
-    base_delay: float = 1.0
-):
-    for attempt in range(max_retries):
-        try:
-            return await func()
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 429 and attempt < max_retries - 1:
-                retry_after = e.response.headers.get("Retry-After")
-                delay = float(retry_after) if retry_after else base_delay * (2 ** attempt)
-                await asyncio.sleep(delay)
-                continue
-            raise

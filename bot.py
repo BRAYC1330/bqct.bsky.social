@@ -4,62 +4,61 @@ import asyncio
 import logging
 import httpx
 import config
+import generator
+import bsky
+import community
+import owner
+import digest
 from logging_config import setup_logging
-from collections import deque
-from time import time
 setup_logging()
 logger = logging.getLogger(__name__)
 
-_rl_queue, _rl_max, _rl_win = deque(), 10, 60
-
-def check_rate_limit() -> bool:
-    now = time()
-    while _rl_queue and _rl_queue[0] < now - _rl_win:
-        _rl_queue.popleft()
-    if len(_rl_queue) >= _rl_max:
-        return False
-    _rl_queue.append(now)
-    return True
-
 async def main():
     logger.info("[main] === START ===")
+    
     if not os.path.exists("work_data.json"):
+        logger.error("[main] work_data.json NOT FOUND")
         return
-    def _load():
-        with open("work_data.json") as f:
-            return json.load(f)
-    data = await asyncio.to_thread(_load)
+    logger.info("[main] work_data.json found, loading...")
+    
+    with open("work_data.json") as f:
+        data = json.load(f)
     tasks = data.get("tasks", [])
+    logger.info(f"[main] Tasks loaded: {tasks}")
+    
     if not tasks:
+        logger.warning("[main] Tasks list is EMPTY")
         return
-
-    task_types = {t.get("type") for t in tasks}
-    llm = None
-    if task_types & {"digest_mini", "digest_full", "digest_comment", "owner_command"}:
-        import generator
-        llm = generator.get_model()
-        if not llm:
-            return
-
-    import bsky
-    async with httpx.AsyncClient(timeout=30) as client:
+    
+    llm = generator.get_model()
+    if not llm:
+        logger.error("[main] Failed to load model")
+        return
+    
+    client = httpx.AsyncClient(timeout=30)
+    try:
         await bsky.login_with_cache(client, config.BOT_HANDLE, config.BOT_PASSWORD)
+        
         for idx, task in enumerate(tasks):
-            if not check_rate_limit():
-                await asyncio.sleep(1)
-                continue
             t_type = task.get("type", "UNKNOWN")
             uri = task.get("uri", "N/A")[:40]
-            logger.info(f"[main] Task #{idx}: type={t_type}, uri={uri}")
+            logger.info(f"[main] Processing task #{idx}: type={t_type}, uri={uri}")
+            
             if t_type in ("digest_mini", "digest_full"):
-                import digest
-                await digest.run(client, llm, t_type)
+                logger.info(f"[main] Calling digest.run({t_type})")
+                result = await digest.run(client, llm, t_type)
+                logger.info(f"[main] digest.run returned: {result}")
             elif t_type == "digest_comment":
-                import community
+                logger.info("[main] Calling community.process")
                 await community.process(client, llm, task)
             elif t_type == "owner_command":
-                import owner
+                logger.info("[main] Calling owner.process")
                 await owner.process(client, llm, task)
+            else:
+                logger.warning(f"[main] Unknown task type: {t_type}")
+    finally:
+        await client.aclose()
+    
     logger.info("[main] === DONE ===")
 
 if __name__ == "__main__":

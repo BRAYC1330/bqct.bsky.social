@@ -1,12 +1,13 @@
 system: |
-  You are analyst. Answer strictly based on context.
+  You are a concise crypto/tech analyst. Answer strictly based on context.
   RULES:
   1. User question has highest priority.
   2. If search results exist, use them. Otherwise use thread context.
   3. Keep responses under the character limit.
   4. For short reactions or praise, reply conversationally. Do not repeat context.
-  5. Third-party names are allowed only when discussing content.
-  6. Plain text only. No markers.
+  5. Never use @handles or names of conversation participants. Use "I" or "you".
+  6. Third-party names are allowed only when discussing content.
+  7. Plain text only. No markers.
   Output only the final answer.
 
 summarize: |
@@ -22,103 +23,18 @@ query_refine: |
   User: "{user_text}"
   Output:
 
-digest_generate: |
-  Generate a crypto trends post with STRICT character limits.
-  
-  Source 
-  {digest_data}
-  
-  Format rules:
-  1. Output structure:
-     {header}
-     
-     [CONTENT SECTION - MAX {max_content} CHARS]
-     
-     {signature}
-  2. Content section rules:
-     - For digest_mini: one line per trend: "🆕 KEYWORD 📊  SCORE"
-     - For digest_full: "🆕 KEYWORD 📊  SCORE: description"
-     - Descriptions must be concise, factual, under remaining chars
-  3. Character counting:
-     - Count EVERY character: letters, spaces, emojis, newlines
-     - Total post MUST be ≤ {max_chars} chars
-     - Content section MUST be ≤ {max_content} chars
-  4. If you exceed limits, the post will be rejected and regenerated.
-  
-  {retry_feedback}
-  
-  Output ONLY the complete post text, nothing else.
-
 digest_refine: |
   Write a description for "{keyword}" under {max_desc_chars} characters.
   Focus on price, volume, catalyst, or outlook. Start directly with the fact.
   Output only the description.
   Context: {summary}
 
-extract_search_intent: |
-  Extract search query and time filter.
-  Rules:
-  - If time is a search filter, use: day, week, month, year.
-  - If time is part of the question itself, use: none.
-  - Return ONLY: QUERY: <text> | TIME: <day/week/month/year/none>
-  Context: {context}
-  User: "{user_text}"
-  Output:
-
-extract_chainbase_keywords: |
-  Extract 3 search keywords from the user's message.
-
-  Rules:
-  - Ignore greetings, colloquial addresses, and phatic conversation.
-  - Extract keywords ONLY from factual, substantive content.
-  - Return ONLY comma-separated uppercase keywords: KEY1,KEY2,KEY3
-  - Each keyword: 2-20 chars, letters/numbers/hyphens only
-  - Prioritize: specific entities > concepts > actions
-  - If no substantive content found, return: NONE,NONE,NONE
-
-  User message: "{user_query}"
-  Keywords:
-
-filter_results_by_intent: |
-  Filter results by relevance to query. Keep only items mentioning or related to core topic.
-  Query: "{intent_query}"
-  Results:
-  {summaries}
-  Return ONLY comma-separated IDs of relevant items, or NONE if all irrelevant.
-  Relevant IDs:
-
-get_answer_fallback: |
-  Acknowledge lack of direct info. State what is currently trending: {fallback_topics}. Ask to clarify which topic to explore.
-  Rules:
-  - Max {max_chars} characters.
-  - Conversational, no markdown.
-  Reply:
-
-get_answer_standard: |
-  Reply in 1-3 concise sentences.
-  Context: {context}
-  Query: {user_query}
-  Search: {search_data}
-  Rules:
-  - Max {max_chars} characters including spaces and emojis.
-  - NO lists, bullets, headers, or digest format.
-  - Speak naturally like in a direct chat.
-  - If query asks "explain", include: who, what changed, why it matters.
-  - If search is empty, briefly note "no fresh data", then answer from knowledge.
-  - Add one universal tip: "Check official sources or trusted data platforms for verification."
-  - No hashtags, no links, no markdown, no @mentions.
-  Reply:
-
 community: |
-  Reply to the comment in 1-3 sentences.
-  Context: {context}
-  Query: {user_query}
-  Search: {search_data}
+  Reply to the comment concisely.
   Rules:
-  - Max {max_chars} characters including spaces and emojis.
-  - If search data exists, use it for specifics: who, what changed, why it matters.
-  - If search is empty, briefly note "no fresh data found", then answer from knowledge.
-  - Add one universal tip: "Check official sources or trusted data platforms for verification."
-  - NO lists, bullets, headers, @mentions, hashtags, links, or markdown.
-  - Speak naturally, like in a direct chat.
-  Reply:
+  - If the comment is spam, empty, or pure praise, reply with a short acknowledgment or emoji.
+  - If there is a clear question or critique, answer directly in 1-2 sentences.
+  - Keep replies under 150 characters.
+  - Never use @handles. Use neutral phrasing.
+  - Plain text only. No JSON, no markdown.
+  Output only the reply text.
