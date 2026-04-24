@@ -25,7 +25,7 @@ query_refine: |
 digest_generate: |
   Generate a crypto trends post with STRICT character limits.
   
-  Source data:
+  Source 
   {digest_data}
   
   Format rules:
@@ -66,14 +66,21 @@ extract_search_intent: |
   Output:
 
 extract_chainbase_keywords: |
-  Generate 3 search keywords for narrative API, in priority order.
-  Rules:
-  - First: compound query combining main concepts from the request
-  - Second: simplified version with core terms only
-  - Third: single most relevant identifier (ticker, project name, or concept)
+  Extract 3 search keywords from the user's message.
+
+  Analysis steps:
+  1. Identify the core subject or topic — what the user actually wants to know about.
+  2. Ignore phatic expressions: greetings, farewells, colloquial addresses, filler words.
+  3. Ignore meta-commands and question framing: "tell me", "what about", "explain", "which", etc.
+  4. Extract keywords ONLY from the substantive part identified in step 1.
+
+  Output rules:
   - Return ONLY comma-separated uppercase keywords: KEY1,KEY2,KEY3
-  - Max 20 chars per keyword, letters/numbers/hyphens only.
-  Query: "{user_query}"
+  - Each keyword: 2-20 chars, letters/numbers/hyphens only
+  - Prioritize: specific entities > concepts > actions
+  - If no substantive content found, return: NONE,NONE,NONE
+
+  User message: "{user_query}"
   Keywords:
 
 filter_results_by_intent: |
