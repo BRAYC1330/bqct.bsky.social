@@ -68,13 +68,9 @@ extract_search_intent: |
 extract_chainbase_keywords: |
   Extract 3 search keywords from the user's message.
 
-  Analysis steps:
-  1. Identify the core subject or topic — what the user actually wants to know about.
-  2. Ignore phatic expressions: greetings, farewells, colloquial addresses, filler words.
-  3. Ignore meta-commands and question framing: "tell me", "what about", "explain", "which", etc.
-  4. Extract keywords ONLY from the substantive part identified in step 1.
-
-  Output rules:
+  Rules:
+  - Ignore greetings, colloquial addresses, and phatic conversation.
+  - Extract keywords ONLY from factual, substantive content.
   - Return ONLY comma-separated uppercase keywords: KEY1,KEY2,KEY3
   - Each keyword: 2-20 chars, letters/numbers/hyphens only
   - Prioritize: specific entities > concepts > actions

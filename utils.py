@@ -28,7 +28,6 @@ def sanitize_prompt(text: str) -> str:
     ]
     for pattern in injection_patterns:
         text = re.sub(pattern, '[BLOCKED]', text, flags=re.I)
-    text = html.escape(text)
     text = re.sub(r'\{\{.*?\}\}|\{%.*?%\}|\{#.*?#\}', '', text)
     text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', text)
     text = re.sub(r'[`\'"\\<>]', '', text)

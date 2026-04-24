@@ -19,13 +19,17 @@ async def get_trending_topics_raw(client: httpx.AsyncClient) -> list:
     if _trend_cache is not None and now - _trend_cache_time < _trend_cache_ttl:
         return _trend_cache
     try:
-        r = await client.get("https://api.chainbase.com/tops/v1/tool/list-trending-topics?language=en", timeout=config.SEARCH_TIMEOUT)
+        endpoint = "https://api.chainbase.com/tops/v1/tool/list-trending-topics"
+        logger.info(f"[SEARCH:API] GET {endpoint}?language=en")
+        r = await client.get(f"{endpoint}?language=en", timeout=config.SEARCH_TIMEOUT)
         if r.status_code != 200:
+            logger.warning(f"[SEARCH:API] HTTP {r.status_code} from {endpoint}")
             return []
         _trend_cache = parsers.parse_trends(r.json())
         _trend_cache_time = now
         if config.RAW_DEBUG:
             logger.info(f"=== RAW-TRENDS ===\n{json.dumps(_trend_cache, ensure_ascii=False, indent=2)}\n=== END ===")
+        logger.info(f"[SEARCH:API] Trends cached: {len(_trend_cache)} items")
         return _trend_cache
     except Exception as e:
         logger.error(f"[SEARCH] Trend fetch failed: {e}")
@@ -44,14 +48,15 @@ async def fetch_tavily(client: httpx.AsyncClient, query: str, time_range: str = 
         logger.warning("[SEARCH:TAVILY] API key not set")
         return ""
     try:
+        endpoint = "https://api.tavily.com/search"
         payload = {"query": query, "search_depth": "basic", "max_results": 3, "include_raw_content": True}
         if time_range:
             payload["time_range"] = time_range
-        logger.info(f"[SEARCH:TAVILY] Request payload: {json.dumps(payload)}")
-        r = await client.post("https://api.tavily.com/search", headers={"Authorization": f"Bearer {config.TAVILY_API_KEY}"}, json=payload)
+        logger.info(f"[SEARCH:TAVILY] POST {endpoint} | payload: {json.dumps(payload)}")
+        r = await client.post(endpoint, headers={"Authorization": f"Bearer {config.TAVILY_API_KEY}"}, json=payload)
         r.raise_for_status()
         result = clean_search_results(r.json().get("results", []))
-        logger.info(f"[SEARCH:TAVILY] Response received: {len(result)} chars | Preview: '{result[:100]}...'")
+        logger.info(f"[SEARCH:TAVILY] Response: {len(result)} chars | Preview: '{result[:100]}...'")
         return result
     except Exception as e:
         logger.error(f"[SEARCH:TAVILY] Error: {e}")
@@ -61,11 +66,12 @@ async def fetch_chainbase_raw(client: httpx.AsyncClient, keyword: str) -> list:
     logger.info(f"[SEARCH:CHAINBASE] Keyword query: '{keyword}'")
     try:
         safe_kw = httpx.URL(keyword).raw_path.decode()
-        url = f"https://api.chainbase.com/tops/v1/tool/search-narrative-candidates?keyword={safe_kw}"
-        logger.info(f"[SEARCH:CHAINBASE] Request URL: {url}")
+        endpoint = "https://api.chainbase.com/tops/v1/tool/search-narrative-candidates"
+        url = f"{endpoint}?keyword={safe_kw}"
+        logger.info(f"[SEARCH:CHAINBASE] GET {url}")
         r = await client.get(url, timeout=config.SEARCH_TIMEOUT)
         if r.status_code != 200:
-            logger.warning(f"[SEARCH:CHAINBASE] HTTP {r.status_code}")
+            logger.warning(f"[SEARCH:CHAINBASE] HTTP {r.status_code} from {endpoint}")
             return []
         data = r.json()
         items = data.get("items", [])
@@ -80,7 +86,7 @@ async def fetch_chainbase_raw(client: httpx.AsyncClient, keyword: str) -> list:
             for item in items[:5]
         ]
         preview = result[0].get('keyword', 'None') if result else 'None'
-        logger.info(f"[SEARCH:CHAINBASE] Response received: {len(result)} items | Top keyword: '{preview}'")
+        logger.info(f"[SEARCH:CHAINBASE] Response: {len(result)} items | Top: '{preview}'")
         return result
     except Exception as e:
         logger.error(f"[SEARCH:CHAINBASE] Error: {e}")
