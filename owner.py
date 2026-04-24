@@ -5,7 +5,6 @@ import config
 import bsky
 import generator
 import search
-import state
 import memory
 from logging_config import setup_logging
 setup_logging()
@@ -30,12 +29,14 @@ async def process(client, llm, task):
         mem = state.load_thread_context(root_uri)
 
     search_data = ""
-    fallback_topics = []
+    suffix = "\n\nQwen"
+    is_c = "!c" in user_text.lower()
+    is_t = "!t" in user_text.lower()
 
-    if "!c" in user_text.lower():
+    if is_c:
+        suffix = "\n\nQwen | Chainbase"
         clean = user_text.replace("!c", "").strip()
         keywords = generator.extract_chainbase_keywords_multi(llm, clean)
-
         for kw in keywords:
             raw_items = await search.fetch_chainbase_raw(client, kw)
             if raw_items:
@@ -46,26 +47,21 @@ async def process(client, llm, task):
                         for it in filtered[:2]
                     ])
                     break
-                else:
-                    for item in raw_items[:2]:
-                        fb = f"{item['keyword']} ({config.TREND_EMOJIS.get(item.get('rank_status','same'),'')})"
-                        if fb not in fallback_topics:
-                            fallback_topics.append(fb)
-            await asyncio.sleep(0.5)
-
-    elif "!t" in user_text.lower():
+            await asyncio.sleep(0.3)
+    elif is_t:
+        suffix = "\n\nQwen | Tavily"
         clean = user_text.replace("!t", "").strip()
         search_query, time_range = generator.extract_search_intent(llm, "", clean)
         if search_query:
             search_data = await search.fetch_tavily(client, search_query, time_range)
 
+    budget = 300 - len(suffix)
     final_ctx = memory.merge_contexts(mem, root_thread, search_data, user_text)
-    fallback_str = memory.format_fallback_topics(fallback_topics)
-
-    reply = generator.get_answer(llm, final_ctx, user_text, search_data, fallback_str, max_chars=270, temperature=0.7).strip() + "\n\nQwen"
-    if len(reply) > 295:
-        reply = generator.get_answer(llm, final_ctx, user_text, search_data, fallback_str, max_chars=240, temperature=0.7).strip() + "\n\nQwen"
-    if len(reply) > 295:
+    reply = generator.get_answer(llm, final_ctx, user_text, search_data, max_chars=budget, temperature=0.7).strip() + suffix
+    
+    if len(reply) > 298:
+        reply = generator.get_answer(llm, final_ctx, user_text, search_data, max_chars=budget - 10, temperature=0.7).strip() + suffix
+    if len(reply) > 298:
         return
 
     await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, uri, parent_cid)
