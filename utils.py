@@ -44,7 +44,7 @@ def sanitize_for_prompt(text: str) -> str:
 def is_valid_length(text: str, max_len: int = 300) -> bool:
     return len(text) <= max_len
 
-def summarize_search_for_context(search_ str, max_chars: int = 100) -> str:
+def summarize_search_for_context(search_data: str, max_chars: int = 100) -> str:
     if not search_data:
         return ""
     parts = search_data.split(" | ")
