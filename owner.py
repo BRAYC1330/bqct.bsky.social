@@ -96,7 +96,7 @@ async def process(client, llm, task):
             search_data = await search.fetch_tavily(client, search_query, time_range)
 
     suffix = "\n\nQwen"
-    if (is_c or is_t) and search_
+    if (is_c or is_t) and search_data:
         suffix = f"\n\nQwen | {'Chainbase' if is_c else 'Tavily'}"
 
     budget = 300 - len(suffix)

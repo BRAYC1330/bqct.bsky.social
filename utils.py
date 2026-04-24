@@ -4,7 +4,9 @@ import re
 import logging
 import html
 import httpx
+import os
 from httpx import HTTPStatusError
+from typing import Optional
 import config
 try:
     import trafilatura
@@ -98,3 +100,42 @@ async def with_retry(func, max_attempts: int = None, backoff: float = None):
 
 def hash_to_slot(value: str, slot_count: int) -> int:
     return int(hashlib.sha256(value.encode()).hexdigest(), 16) % slot_count
+
+async def update_github_secret(
+    key: str,
+    value: str,
+    pat: Optional[str] = None,
+    repo: Optional[str] = None
+) -> bool:
+    pat = pat or os.environ.get("PAT", "")
+    repo = repo or os.environ.get("GITHUB_REPOSITORY", "")
+    if not all([key, value, pat, repo]):
+        return False
+    try:
+        env = {**os.environ, "GH_TOKEN": pat}
+        proc = await asyncio.create_subprocess_exec(
+            "gh", "secret", "set", key, "--body", value, "--repo", repo,
+            env=env,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL
+        )
+        await proc.communicate()
+        return proc.returncode == 0
+    except Exception:
+        return False
+
+async def with_rate_limit_retry(
+    func,
+    max_retries: int = 3,
+    base_delay: float = 1.0
+):
+    for attempt in range(max_retries):
+        try:
+            return await func()
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 429 and attempt < max_retries - 1:
+                retry_after = e.response.headers.get("Retry-After")
+                delay = float(retry_after) if retry_after else base_delay * (2 ** attempt)
+                await asyncio.sleep(delay)
+                continue
+            raise

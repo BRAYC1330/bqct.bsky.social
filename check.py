@@ -9,14 +9,9 @@ import config
 import bsky
 import parsers
 from logging_config import setup_logging
+from utils import update_github_secret
 setup_logging()
 logger = logging.getLogger(__name__)
-
-async def update_secret(key: str, value: str, pat: str, repo: str):
-    if not value or not repo or not pat:
-        return
-    proc = await asyncio.create_subprocess_exec("gh", "secret", "set", key, "--body", value, "--repo", repo, env={**os.environ, "GH_TOKEN": pat}, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-    await proc.communicate()
 
 def _check_timer(last_key: str, interval_sec: int) -> bool:
     last_str = os.getenv(last_key, "").strip()
@@ -66,17 +61,17 @@ async def run():
     if _check_timer("LAST_MINI_DIGEST", 4 * 3600):
         tasks.append({"type": "digest_mini"})
         digest_task_type = "digest_mini"
-        await update_secret("LAST_MINI_DIGEST", now_utc, pat, repo)
+        await update_github_secret("LAST_MINI_DIGEST", now_utc, pat, repo)
     elif _check_timer("LAST_FULL_DIGEST", 2 * 3600):
         tasks.append({"type": "digest_full"})
         digest_task_type = "digest_full"
-        await update_secret("LAST_FULL_DIGEST", now_utc, pat, repo)
+        await update_github_secret("LAST_FULL_DIGEST", now_utc, pat, repo)
 
     def _write_work_data():
         with open("work_data.json", "w") as f:
             json.dump({"tasks": tasks}, f)
     await asyncio.to_thread(_write_work_data)
-    await update_secret("LAST_PROCESSED", now_utc, pat, repo)
+    await update_github_secret("LAST_PROCESSED", now_utc, pat, repo)
 
     logger.info(f"[checker] Received {len(notifs)} notifs. Relevant: {owner_count + digest_comment_count} (Owner: {owner_count}, Digest: {digest_comment_count}, Task: {digest_task_type}). Total: {len(tasks)}.")
     out_path = os.getenv("GITHUB_OUTPUT")

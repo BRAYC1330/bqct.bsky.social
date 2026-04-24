@@ -6,6 +6,7 @@ import logging
 import re
 import config
 from logging_config import setup_logging
+from utils import update_github_secret
 setup_logging()
 logger = logging.getLogger(__name__)
 
@@ -31,14 +32,7 @@ async def save_thread_context(thread_id: str, memory: str):
     pat = os.environ.get("PAT", "")
     if not repo or not pat or not memory:
         return
-    env = {**os.environ, "GH_TOKEN": pat}
-    proc = await asyncio.create_subprocess_exec(
-        "gh", "secret", "set", f"CONTEXT_{slot}", "--body", memory, "--repo", repo,
-        env=env,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE
-    )
-    await proc.communicate()
+    await update_github_secret(f"CONTEXT_{slot}", memory, pat, repo)
 
 def load_digest_context() -> str:
     raw = os.environ.get("CONTEXT_DIGEST", "")

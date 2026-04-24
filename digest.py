@@ -9,6 +9,7 @@ import search
 import generator
 import bsky
 from logging_config import setup_logging
+from utils import update_github_secret
 setup_logging()
 logger = logging.getLogger(__name__)
 
@@ -17,12 +18,6 @@ MAX_ATTEMPTS = 3
 
 def _validate_trend_item(item: dict) -> bool:
     return isinstance(item, dict) and isinstance(item.get("keyword"), str) and isinstance(item.get("summary"), str) and not re.search(r'[<>"\'`;{}\\]', item["keyword"]) and not re.search(r'[<>"\'`;{}\\]', item["summary"])
-
-async def _update_gh_secret(key: str, value: str, pat: str, repo: str):
-    if not value or not repo or not pat:
-        return
-    proc = await asyncio.create_subprocess_exec("gh", "secret", "set", key, "--body", value, "--repo", repo, env={**os.environ, "GH_TOKEN": pat}, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-    await proc.communicate()
 
 def _get_trend_emoji(rank_status: str) -> str:
     return config.TREND_EMOJIS.get(re.sub(r'[^a-zA-Z]', '', str(rank_status).lower()), "")
@@ -97,5 +92,10 @@ async def run(client, llm, task_type="digest_mini"):
 
     if posted and uri:
         now_utc = datetime.now(timezone.utc).isoformat()
-        await asyncio.gather(_update_gh_secret("LAST_MINI_DIGEST" if task_type == "digest_mini" else "LAST_FULL_DIGEST", now_utc, pat, repo), _update_gh_secret("ACTIVE_DIGEST_URI", uri, pat, repo), _update_gh_secret("CONTEXT_DIGEST", json.dumps(ctx_entries, ensure_ascii=False), pat, repo), return_exceptions=True)
+        await asyncio.gather(
+            update_github_secret("LAST_MINI_DIGEST" if task_type == "digest_mini" else "LAST_FULL_DIGEST", now_utc, pat, repo),
+            update_github_secret("ACTIVE_DIGEST_URI", uri, pat, repo),
+            update_github_secret("CONTEXT_DIGEST", json.dumps(ctx_entries, ensure_ascii=False), pat, repo),
+            return_exceptions=True
+        )
     return posted
