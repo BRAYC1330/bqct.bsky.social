@@ -1,33 +1,33 @@
 import os
 import logging
-import subprocess
 import json
 from datetime import datetime, timezone
 import config
 import search
 import generator
 import bsky
+import utils
 from logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
 
 MAX_POST_CHARS = 300
-
-def _update_gh_secret(key, value):
-    if not value:
-        return
-    repo = os.environ.get("GITHUB_REPOSITORY", "")
-    pat = os.environ.get("PAT", "")
-    if not repo or not pat:
-        return
-    cmd = ["gh", "secret", "set", key, "--body", value, "--repo", repo]
-    try:
-        subprocess.run(cmd, env={**os.environ, "GH_TOKEN": pat}, check=True, capture_output=True)
-    except Exception as e:
-        logger.error(f"[DIGEST] Secret update failed: {e}")
+BUFFER_CHARS = 10
 
 def _get_trend_emoji(rank_status: str) -> str:
     return config.TREND_EMOJIS.get(rank_status.lower(), "")
+
+def _cut_at_sentence(text: str, max_len: int) -> str:
+    if len(text) <= max_len:
+        return text
+    truncated = text[:max_len]
+    last_period = truncated.rfind('.')
+    last_exclaim = truncated.rfind('!')
+    last_question = truncated.rfind('?')
+    last_end = max(last_period, last_exclaim, last_question)
+    if last_end > max_len * 0.6:
+        return truncated[:last_end + 1].strip()
+    return truncated.rsplit(' ', 1)[0].strip() + "..."
 
 async def run(client, llm, task_type="digest_mini"):
     trends = await search.get_trending_topics_raw()
@@ -50,7 +50,6 @@ async def run(client, llm, task_type="digest_mini"):
     try:
         if task_type == "digest_mini":
             lines = []
-            ctx_entries = []
             current_len = len(header) + len(sig) + 2
             for item in trends[:6]:
                 kw = item.get("keyword", "?")
@@ -62,13 +61,6 @@ async def run(client, llm, task_type="digest_mini"):
                 if current_len + line_len > MAX_POST_CHARS:
                     break
                 lines.append(line)
-                ctx_entries.append({
-                    "id": item.get("id", ""),
-                    "keyword": kw,
-                    "summary": item.get("summary", ""),
-                    "score": sc,
-                    "rank_status": st
-                })
                 current_len += line_len
 
             if not lines:
@@ -77,6 +69,10 @@ async def run(client, llm, task_type="digest_mini"):
             body = "\n".join(lines)
             final_post = f"{header}\n\n{body}\n\n{sig}"
 
+            if len(final_post) > MAX_POST_CHARS:
+                logger.warning(f"[DIGEST] Mini post too long: {len(final_post)} chars")
+                return False
+
             if config.RAW_DEBUG:
                 logger.info(f"=== RAW-MINI-POST ===\n{final_post}\n=== END ===")
 
@@ -84,9 +80,8 @@ async def run(client, llm, task_type="digest_mini"):
             uri = resp.get("uri")
             if uri:
                 now_utc = datetime.now(timezone.utc).isoformat()
-                _update_gh_secret("LAST_MINI_DIGEST", now_utc)
-                _update_gh_secret("ACTIVE_DIGEST_URI", uri)
-                _update_gh_secret("CONTEXT_DIGEST", json.dumps(ctx_entries, ensure_ascii=False))
+                utils.update_github_secret("LAST_MINI_DIGEST", now_utc)
+                utils.update_github_secret("ACTIVE_DIGEST_URI", uri)
                 posted = True
 
         elif task_type == "digest_full":
@@ -99,25 +94,29 @@ async def run(client, llm, task_type="digest_mini"):
             prefix = f"{e} " if e else ""
             title = f"{prefix}{kw} {stats_emoji}  {sc}: "
 
-            max_desc = MAX_POST_CHARS - len(header) - len(sig) - len(title) - 2
+            separators = 4
+            max_desc = MAX_POST_CHARS - len(header) - len(sig) - len(title) - separators - BUFFER_CHARS
             if max_desc < 20:
-                logger.warning("[DIGEST] Not enough space for description")
+                logger.warning(f"[DIGEST] Not enough space for description: {max_desc} chars")
                 return False
 
             prompt = generator.DIGEST_REFINE_SYSTEM.format(keyword=kw, summary=summary, max_desc_chars=max_desc)
-            response = llm(prompt, max_tokens=min(max_desc + 30, 150), temperature=0.3)
+            prompt += f"\n\nSTRICT: Output MUST be ≤ {max_desc} characters including spaces. Stop exactly at limit."
+            
+            response = llm(prompt, max_tokens=min(max_desc + 20, 120), temperature=0.2)
             desc = response["choices"][0]["text"].strip().split("\n")[0]
             
             if len(desc) > max_desc:
-                words = desc.split()
-                desc = ""
-                for word in words:
-                    if len(desc) + len(word) + 1 <= max_desc:
-                        desc = (desc + " " + word).strip()
-                    else:
-                        break
-
+                desc = _cut_at_sentence(desc, max_desc)
+            
             final_post = f"{header}\n\n{title}{desc}\n\n{sig}"
+            
+            if len(final_post) > MAX_POST_CHARS:
+                logger.warning(f"[DIGEST] Final post still too long: {len(final_post)} chars, trimming...")
+                final_post = final_post[:MAX_POST_CHARS].rsplit(' ', 1)[0] + "..." + f"\n\n{sig}"
+                if len(final_post) > MAX_POST_CHARS:
+                    logger.error(f"[DIGEST] Cannot fit post within limit, skipping")
+                    return False
 
             if config.RAW_DEBUG:
                 logger.info(f"=== RAW-FULL-POST ===\n{final_post}\n=== END ===")
@@ -126,15 +125,8 @@ async def run(client, llm, task_type="digest_mini"):
             uri = resp.get("uri")
             if uri:
                 now_utc = datetime.now(timezone.utc).isoformat()
-                _update_gh_secret("LAST_FULL_DIGEST", now_utc)
-                _update_gh_secret("ACTIVE_DIGEST_URI", uri)
-                _update_gh_secret("CONTEXT_DIGEST", json.dumps([{
-                    "id": item.get("id", ""),
-                    "keyword": kw,
-                    "summary": summary,
-                    "score": sc,
-                    "rank_status": st
-                }], ensure_ascii=False))
+                utils.update_github_secret("LAST_FULL_DIGEST", now_utc)
+                utils.update_github_secret("ACTIVE_DIGEST_URI", uri)
                 posted = True
 
     except Exception as e:
