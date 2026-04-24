@@ -62,6 +62,8 @@ async def process(client, llm, task):
 
     root_uri = chain_raw["root_uri"]
     root_cid = chain_raw["root_cid"]
+    target_uri = chain_raw.get("target_uri", uri)
+    target_cid = chain_raw.get("target_cid", "")
     parent_uri = chain_raw["parent_uri"]
     parent_cid = chain_raw["parent_cid"]
     active_digest = os.environ.get("ACTIVE_DIGEST_URI", "").strip()
@@ -112,10 +114,13 @@ async def process(client, llm, task):
 
     if config.RAW_DEBUG:
         logger.info(f"=== OWNER-REPLY ===\n{reply}\n=== END ===")
+    
+    logger.info(f"[owner] Reply context: target_uri={target_uri[:40]} target_cid={target_cid[:20]} root_uri={root_uri[:40]}")
+    logger.info(f"[owner] Reply generated: {reply[:100]}...")
 
-    await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, parent_uri, parent_cid)
+    await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, target_uri, target_cid)
     if root_uri != active_digest:
         search_summary = memory.format_search_summary(search_data)
         new_mem = memory.update_and_truncate(mem, user_text, reply, search_summary)
         await state.save_thread_context(root_uri, new_mem)
-    logger.info(f"[owner] Replied to {uri[:40]}...")
+    logger.info(f"[owner] Replied to {target_uri[:40]}...")

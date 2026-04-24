@@ -9,7 +9,6 @@ import search
 import generator
 import bsky
 from logging_config import setup_logging
-from utils import update_github_secret
 setup_logging()
 logger = logging.getLogger(__name__)
 
@@ -73,7 +72,7 @@ async def run(client, llm, task_type="digest_mini"):
                 digest_data = f"{kw}: {clean_summary}"
                 ctx_entries = [{"id": re.sub(r'[^\w\-]', '', str(item["id"])), "keyword": kw, "summary": item["summary"], "score": sc, "rank_status": item["rank_status"]}]
 
-            prompt = generator.DIGEST_GENERATE.format(digest_data=digest_data, max_chars=MAX_POST_CHARS, max_content=max_content, header=header, signature=sig, retry_feedback=retry_feedback)
+            prompt = generator.digest_generate.format(digest_data=digest_data, max_chars=MAX_POST_CHARS, max_content=max_content, header=header, signature=sig, retry_feedback=retry_feedback)
             response = llm(prompt, max_tokens=150, temperature=0.7 if task_type == "digest_mini" else 0.3)
             final_post = response["choices"][0]["text"].strip()
 
@@ -93,9 +92,9 @@ async def run(client, llm, task_type="digest_mini"):
     if posted and uri:
         now_utc = datetime.now(timezone.utc).isoformat()
         await asyncio.gather(
-            update_github_secret("LAST_MINI_DIGEST" if task_type == "digest_mini" else "LAST_FULL_DIGEST", now_utc, pat, repo),
-            update_github_secret("ACTIVE_DIGEST_URI", uri, pat, repo),
-            update_github_secret("CONTEXT_DIGEST", json.dumps(ctx_entries, ensure_ascii=False), pat, repo),
+            utils.update_github_secret("LAST_MINI_DIGEST" if task_type == "digest_mini" else "LAST_FULL_DIGEST", now_utc, pat, repo),
+            utils.update_github_secret("ACTIVE_DIGEST_URI", uri, pat, repo),
+            utils.update_github_secret("CONTEXT_DIGEST", json.dumps(ctx_entries, ensure_ascii=False), pat, repo),
             return_exceptions=True
         )
     return posted

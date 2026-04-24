@@ -71,13 +71,16 @@ async def fetch_thread_chain(client: httpx.AsyncClient, uri: str):
     data = r.json()
     thread = data.get("thread", {})
     root = _find_root(thread)
+    target_post = _find_target_post(thread, uri)
     parent_info = _get_parent_info(thread, uri)
     return {
         "raw": data,
         "root_uri": root.get("uri", ""),
         "root_cid": root.get("cid", ""),
         "root_text": root.get("record", {}).get("text", ""),
-        "parent_uri": parent_info.get("uri", uri),
+        "target_uri": uri,
+        "target_cid": target_post.get("cid", "") if target_post else "",
+        "parent_uri": parent_info.get("uri", ""),
         "parent_cid": parent_info.get("cid", ""),
         "access_jwt": client.headers.get("Authorization", "").replace("Bearer ", "")
     }
@@ -89,6 +92,19 @@ def _find_root(node: dict) -> dict:
     if parent and "post" in parent:
         return _find_root(parent)
     return node.get("post", {})
+
+def _find_target_post(node: dict, target_uri: str) -> dict:
+    if not node or "post" not in node:
+        return {}
+    post = node.get("post", {})
+    if post.get("uri") == target_uri:
+        return post
+    for reply in node.get("replies", []):
+        if isinstance(reply, dict):
+            result = _find_target_post(reply, target_uri)
+            if result.get("uri"):
+                return result
+    return {}
 
 def _get_parent_info(node: dict, target_uri: str) -> dict:
     if not node or "post" not in node:

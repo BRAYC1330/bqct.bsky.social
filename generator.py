@@ -28,6 +28,11 @@ _KEYWORD_SYNONYMS = {
     "RWA": ["REAL-WORLD-ASSETS", "RWA"],
 }
 
+def __getattr__(name: str):
+    if name in _prompts:
+        return _prompts[name]
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
+
 def _run_llm(llm, prompt: str, max_tokens: int = 150, temperature: float = 0.7) -> str:
     try:
         out = llm(prompt, max_tokens=max_tokens, temperature=temperature)
