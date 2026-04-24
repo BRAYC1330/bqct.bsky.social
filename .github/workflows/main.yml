@@ -25,7 +25,7 @@ jobs:
           key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
           restore-keys: |
             ${{ runner.os }}-pip-
-      - name: Install lightweight deps
+      - name: Install checker deps
         run: pip install httpx
       - name: Check
         id: checker
@@ -45,8 +45,8 @@ jobs:
         if: steps.checker.outputs.status == 'true'
         run: |
           pip install --upgrade pip setuptools wheel
-          pip install --prefer-binary llama-cpp-python==0.3.20
-          pip install pyyaml PyNaCl
+          CMAKE_ARGS="-DGGML_BLAS=OFF -DGGML_CUDA=OFF" pip install --prefer-binary llama-cpp-python==0.3.20
+          pip install pyyaml PyNaCl trafilatura
       - name: Cache model
         if: steps.checker.outputs.status == 'true'
         uses: actions/cache@v4
