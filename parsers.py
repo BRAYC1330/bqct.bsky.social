@@ -1,6 +1,6 @@
 import logging
 import re
-from typing import List, Dict, Optional, Set
+from typing import List, Dict, Optional, Set, TypedDict
 import httpx
 try:
     import trafilatura
@@ -9,6 +9,28 @@ except ImportError:
     TRAFILATURA_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
+
+class PostNode(TypedDict):
+    uri: str
+    cid: str
+    handle: str
+    text: str
+    is_root: bool
+
+class NotificationItem(TypedDict):
+    uri: str
+    reason: str
+    author_did: str
+    text: str
+    indexed_at: str
+    parent_uri: str
+
+class TrendItem(TypedDict):
+    id: str
+    keyword: str
+    summary: str
+    score: int
+    rank_status: str
 
 def _extract_embed_full(embed: Optional[Dict]) -> tuple:
     parts, alts = [], []
@@ -178,3 +200,42 @@ async def parse_thread_full(raw_response: dict, client: httpx.AsyncClient, token
     texts = [n["text"] for n in all_nodes if n["text"]]
     links = list(set(l for n in all_nodes for l in n.get("link_hints", []) if l.startswith("[URL:") or l.startswith("[Linked")))
     return {"texts": texts, "links": links, "nodes": all_nodes}
+
+def flatten_thread_nodes(node: Dict, parent_uri: Optional[str] = None, out: Optional[List[PostNode]] = None) -> List[PostNode]:
+    if out is None:
+        out = []
+    if not node or node.get("$type") in ["app.bsky.feed.defs#notFoundPost", "app.bsky.feed.defs#blockedPost"]:
+        return out
+    post = node.get("post", {})
+    record = post.get("record", {})
+    if not record:
+        return out
+    out.append({"uri": post.get("uri", ""), "cid": post.get("cid", ""), "handle": post.get("author", {}).get("handle", ""), "text": record.get("text", ""), "is_root": parent_uri is None})
+    for r in node.get("replies", []):
+        if isinstance(r, dict):
+            flatten_thread_nodes(r, post.get("uri", ""), out)
+    return out
+
+def parse_thread(thread_data: Dict) -> Dict:
+    nodes = flatten_thread_nodes(thread_data.get("thread", {}))
+    root = next((n for n in nodes if n.get("is_root")), {"uri": "", "cid": "", "text": ""})
+    comments = [n for n in nodes if not n.get("is_root") and n.get("uri") != root["uri"]]
+    return {"uri": root["uri"], "cid": root["cid"], "text": root["text"], "comments": comments, "nodes": nodes}
+
+def parse_notifications(raw_json: Dict) -> List[NotificationItem]:
+    items = []
+    for n in raw_json.get("notifications", []):
+        record = n.get("record", {})
+        parent_uri = record.get("reply", {}).get("parent", {}).get("uri", "") if isinstance(record, dict) and "reply" in record else ""
+        items.append({"uri": n.get("uri", ""), "reason": n.get("reason", ""), "author_did": n.get("author", {}).get("did", ""), "text": (record.get("text") or "").strip(), "indexed_at": n.get("indexedAt", ""), "parent_uri": parent_uri})
+    return items
+
+def parse_trends(raw_json: Dict) -> List[TrendItem]:
+    items = raw_json.get("items", []) if isinstance(raw_json, dict) else []
+    result = []
+    for i in items:
+        kw = i.get("keyword", "")
+        if kw and sum(1 for c in kw if ord(c) < 128) / len(kw) > 0.7:
+            result.append({"id": str(i.get("id", "")), "keyword": kw, "summary": i.get("summary", ""), "score": int(i.get("score", 0)), "rank_status": i.get("rank_status", "same")})
+    result.sort(key=lambda x: x["score"], reverse=True)
+    return result
