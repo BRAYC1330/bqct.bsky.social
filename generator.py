@@ -59,7 +59,7 @@ def extract_chainbase_keyword(llm, text: str) -> str:
     except Exception:
         return text[:30]
 
-def get_reply(llm, memory: str, root_thread: str, search_data: str, query: str) -> str:
+def get_reply(llm, memory: str, root_thread: str, search_ str, query: str) -> str:
     prompt = _prompts["reply"].format(
         memory=memory or "None",
         root_thread=root_thread or "None",
@@ -89,7 +89,7 @@ def generate_digest(llm, keyword: str, summary: str, max_chars: int) -> str:
 def update_context_memory(llm, history: str) -> str:
     prompt = _prompts["context_memory"].format(history=history[:1500])
     try:
-        raw = llm(prompt, max_tokens=100, temperature=0.3)
+        raw = llm(prompt, max_tokens=300, temperature=0.3)
         return raw["choices"][0]["text"].strip()
     except Exception as e:
         logger.error(f"[generator] update_context_memory failed: {e}")
