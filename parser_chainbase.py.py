@@ -35,3 +35,16 @@ def format_chainbase_results(items: List[Dict]) -> str:
         summary = item.get("summary", "")[:200]
         lines.append(f"{i}. {kw} (Score: {score:.1f} | Rank: {rank} | Trend: {status})\nSummary: {summary}")
     return "\n\n".join(lines)
+
+def parse_digest_context(items: List[Dict], limit: int = 6) -> List[Dict]:
+    result = []
+    for item in items[:limit]:
+        result.append({
+            "id": item.get("id", ""),
+            "keyword": item.get("keyword", ""),
+            "summary": item.get("summary", ""),
+            "score": item.get("score", 0),
+            "rank_status": item.get("rank_status", "same"),
+            "is_new": item.get("is_new", False)
+        })
+    return result

@@ -24,12 +24,3 @@ def flatten_thread(thread_node: Dict, parent_uri: Optional[str] = None, out: Opt
         if isinstance(reply_node, dict):
             flatten_thread(reply_node, post.get("uri", ""), out)
     return out
-
-async def parse_thread(thread_data: Dict, root_uri: str = "") -> List[Dict]:
-    return flatten_thread(thread_data.get("thread", {}))
-
-async def parse_digest_thread(thread_data: Dict) -> Dict:
-    nodes = flatten_thread(thread_data.get("thread", {}))
-    root = next((n for n in nodes if n.get("is_root")), {"uri": "", "cid": "", "text": ""})
-    comments = [n for n in nodes if not n.get("is_root") and n.get("uri") != root["uri"]]
-    return {"uri": root["uri"], "cid": root["cid"], "text": root["text"], "comments": comments}
