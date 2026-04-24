@@ -9,6 +9,7 @@ import config
 import parsers
 
 logger = logging.getLogger(__name__)
+_session_cache = {}
 _session_key = None
 
 def _get_fernet_key() -> Fernet:
@@ -28,8 +29,10 @@ async def login_with_cache(client: httpx.AsyncClient, handle: str, password: str
             fernet = _get_fernet_key()
             decrypted = fernet.decrypt(encrypted)
             sess = json.loads(decrypted.decode())
-            if time.time() < sess.get("expires_at", 0):
+            expires_at = sess.get("expires_at", 0)
+            if time.time() < expires_at:
                 client.headers["Authorization"] = f"Bearer {sess['accessJwt']}"
+                logger.info("[bsky] Session loaded from cache")
                 return
         except Exception:
             pass
@@ -38,10 +41,12 @@ async def login_with_cache(client: httpx.AsyncClient, handle: str, password: str
     sess = r.json()
     client.headers["Authorization"] = f"Bearer {sess['accessJwt']}"
     sess["expires_at"] = time.time() + 3600
-    encrypted = _get_fernet_key().encrypt(json.dumps(sess).encode())
+    fernet = _get_fernet_key()
+    encrypted = fernet.encrypt(json.dumps(sess).encode())
     with open(session_path, "wb") as f:
         f.write(encrypted)
     os.chmod(session_path, 0o600)
+    logger.info("[bsky] New session created and cached")
 
 async def post_root(client: httpx.AsyncClient, bot_did: str, text: str):
     record = {"$type": "app.bsky.feed.post", "text": text, "createdAt": datetime.now(timezone.utc).isoformat()}
@@ -51,8 +56,10 @@ async def post_root(client: httpx.AsyncClient, bot_did: str, text: str):
     return r.json()
 
 async def post_reply(client: httpx.AsyncClient, bot_did: str, text: str, root_uri: str, root_cid: str, parent_uri: str, parent_cid: str):
-    reply_ref = {"root": {"uri": root_uri, "cid": root_cid}, "parent": {"uri": parent_uri, "cid": parent_cid}}
-    record = {"$type": "app.bsky.feed.post", "text": text, "createdAt": datetime.now(timezone.utc).isoformat(), "reply": reply_ref}
+    if not parent_cid or not parent_uri:
+        logger.warning(f"[bsky] post_reply called with empty parent: uri={parent_uri}, cid={parent_cid}")
+    reply = {"root": {"uri": root_uri, "cid": root_cid}, "parent": {"uri": parent_uri, "cid": parent_cid}}
+    record = {"$type": "app.bsky.feed.post", "text": text, "createdAt": datetime.now(timezone.utc).isoformat(), "reply": reply}
     body = {"repo": bot_did, "collection": "app.bsky.feed.post", "record": record}
     r = await client.post("https://bsky.social/xrpc/com.atproto.repo.createRecord", json=body)
     r.raise_for_status()
@@ -61,18 +68,21 @@ async def post_reply(client: httpx.AsyncClient, bot_did: str, text: str, root_ur
 async def fetch_thread_chain(client: httpx.AsyncClient, uri: str):
     r = await client.get("https://bsky.social/xrpc/app.bsky.feed.getPostThread", params={"uri": uri, "depth": 10, "parentHeight": 10})
     r.raise_for_status()
-    thread = r.json().get("thread", {})
+    data = r.json()
+    thread = data.get("thread", {})
     root = _find_root(thread)
-    target = _find_target(thread, uri)
-    parent = _get_parent(thread, uri)
+    target_post = _find_target_post(thread, uri)
+    parent_info = _get_parent_info(thread, uri)
     return {
+        "raw": data,
         "root_uri": root.get("uri", ""),
         "root_cid": root.get("cid", ""),
         "root_text": root.get("record", {}).get("text", ""),
         "target_uri": uri,
-        "target_cid": target.get("cid", "") if target else "",
-        "parent_uri": parent.get("uri", "") if parent else "",
-        "parent_cid": parent.get("cid", "") if parent else ""
+        "target_cid": target_post.get("cid", "") if target_post else "",
+        "parent_uri": parent_info.get("uri", ""),
+        "parent_cid": parent_info.get("cid", ""),
+        "access_jwt": client.headers.get("Authorization", "").replace("Bearer ", "")
     }
 
 def _find_root(node: dict) -> dict:
@@ -83,7 +93,7 @@ def _find_root(node: dict) -> dict:
         return _find_root(parent)
     return node.get("post", {})
 
-def _find_target(node: dict, target_uri: str) -> dict:
+def _find_target_post(node: dict, target_uri: str) -> dict:
     if not node or "post" not in node:
         return {}
     post = node.get("post", {})
@@ -91,22 +101,34 @@ def _find_target(node: dict, target_uri: str) -> dict:
         return post
     for reply in node.get("replies", []):
         if isinstance(reply, dict):
-            found = _find_target(reply, target_uri)
-            if found.get("uri"):
-                return found
+            result = _find_target_post(reply, target_uri)
+            if result.get("uri"):
+                return result
     return {}
 
-def _get_parent(node: dict, target_uri: str) -> dict:
+def _get_parent_info(node: dict, target_uri: str) -> dict:
     if not node or "post" not in node:
         return {}
     post = node.get("post", {})
     if post.get("uri") == target_uri:
         parent = node.get("parent", {})
         if parent and "post" in parent:
-            return parent["post"]
+            p = parent["post"]
+            return {"uri": p.get("uri", ""), "cid": p.get("cid", "")}
+        return {"uri": "", "cid": ""}
     for reply in node.get("replies", []):
         if isinstance(reply, dict):
-            found = _get_parent(reply, target_uri)
-            if found.get("uri"):
-                return found
+            result = _get_parent_info(reply, target_uri)
+            if result.get("uri"):
+                return result
     return {}
+
+async def get_trending_topics_raw(client: httpx.AsyncClient) -> list:
+    try:
+        resp = await client.get("https://api.chainbase.com/v1/trending/crypto", timeout=config.SEARCH_TIMEOUT)
+        resp.raise_for_status()
+        raw_data = resp.json()
+        return parsers.parse_trends(raw_data)
+    except Exception as e:
+        logger.error(f"[search] Failed to fetch trending topics: {e}")
+        return []
