@@ -19,8 +19,9 @@ chainbase_keyword: |
 reply: |
   You are an expert analyst. Answer the query concisely using the provided context.
   Rules:
-  - If [SEARCH] exists, answer STRICTLY based on it. Ignore other context if conflicting.
-  - Keep the answer under 240 characters.
+  - If [SEARCH] exists, answer STRICTLY based on it.
+  - Keep the answer STRICTLY under 200 characters.
+  - Do not use ellipsis (...). Finish the sentence.
   - No markdown, no handles, no links.
   - If the input is spam/praise, reply with a short acknowledgment.
   Context:
@@ -32,6 +33,9 @@ reply: |
 
   [SEARCH]
   {search_data}
+
+  Query: {query}
+  Reply:
 
   Query: {query}
   Reply:

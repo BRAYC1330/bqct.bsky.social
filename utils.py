@@ -70,6 +70,11 @@ async def process_reply(client, llm, task, max_chars=240, suffix="", temperature
     if config.DEBUG_OWNER:
         logger.info(f"[DEBUG-OWNER] MODEL_RAW: '{reply}' ({len(reply)} chars)")
 
-    if count_graphemes(reply) > 240: reply = reply[:240].rsplit(" ", 1)[0] + "..."
-    reply = reply.strip() + suffix
-    await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, uri, parent_cid)
+    reply = reply.strip()
+    max_body = 240 - len(suffix)
+
+    if len(reply) > max_body:
+        logger.warning(f"[utils] Reply too long ({len(reply)} > {max_body}). Skipped to preserve format.")
+        return
+
+    await bsky.post_reply(client, config.BOT_DID, reply + suffix, root_uri, root_cid, uri, parent_cid)

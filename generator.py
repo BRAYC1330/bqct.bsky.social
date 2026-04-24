@@ -53,7 +53,7 @@ def get_reply(llm, memory: str, root_thread: str, search_data: str, query: str) 
     prompt = _prompts["reply"].format(memory=memory or "None", root_thread=root_thread or "None", search_data=search_data or "None", query=query)
     if config.DEBUG_OWNER: logger.info(f"[DEBUG-OWNER] PROMPT_REPLY:\n{prompt}")
     try:
-        raw = llm(prompt, max_tokens=150, temperature=0.7)
+        raw = llm(prompt, max_tokens=80, temperature=0.7)
         return raw["choices"][0]["text"].strip()
     except Exception as e:
         logger.error(f"[generator] get_reply failed: {e}")
