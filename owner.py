@@ -6,6 +6,8 @@ import bsky
 import generator
 import search
 import memory
+import parsers
+import utils
 from logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -13,15 +15,40 @@ logger = logging.getLogger(__name__)
 async def process(client, llm, task):
     uri = task["uri"]
     user_text = task["text"]
-    chain = await bsky.fetch_thread_chain(client, uri)
-    if not chain:
+    chain_raw = await bsky.fetch_thread_chain(client, uri)
+    if not chain_raw:
         return
 
-    root_uri = chain["root_uri"]
-    root_cid = chain["root_cid"]
-    parent_cid = chain.get("parent_cid", "")
+    thread_content = parsers.extract_thread_content(chain_raw)
+    all_texts = thread_content["texts"]
+    link_texts = []
+    
+    link_tasks = [utils.fetch_url_content(url) for url in thread_content["links"][:5]]
+    results = await asyncio.gather(*link_tasks)
+    link_texts = [r for r in results if r]
+
+    repost_uris = thread_content["reposts"][:2]
+    repost_texts = []
+    for rep_uri in repost_uris:
+        rep_chain = await bsky.fetch_thread_chain(client, rep_uri)
+        if rep_chain:
+            rep_data = parsers.extract_thread_content(rep_chain)
+            repost_texts.extend(rep_data["texts"])
+
+    combined_raw = all_texts + link_texts + repost_texts
+    
+    if config.RAW_DEBUG:
+        logger.info(f"=== OWNER-RAW-THREAD ===\nuri={uri}\ntexts={len(all_texts)}\nlinks={thread_content['links']}\nreposts={repost_uris}\ncombined_raw_len={len(' '.join(combined_raw))}")
+
+    root_thread = memory.compress_thread_context(llm, combined_raw)
+
+    if config.RAW_DEBUG:
+        logger.info(f"=== OWNER-COMPRESSED-ROOT ===\n{root_thread}\n=== END ===")
+
+    root_uri = chain_raw.get("thread", {}).get("post", {}).get("uri", "")
+    root_cid = chain_raw.get("thread", {}).get("post", {}).get("cid", "")
+    parent_cid = ""
     active_digest = os.environ.get("ACTIVE_DIGEST_URI", "").strip()
-    root_thread = f"Root: {chain['root_text'][:200]}"
 
     if root_uri == active_digest:
         mem = state.load_digest_context()
@@ -57,12 +84,19 @@ async def process(client, llm, task):
 
     budget = 300 - len(suffix)
     final_ctx = memory.merge_contexts(mem, root_thread, search_data, user_text)
+    
+    if config.RAW_DEBUG:
+        logger.info(f"=== OWNER-FINAL-CTX ===\n{final_ctx}\n=== END ===")
+    
     reply = generator.get_answer(llm, final_ctx, user_text, search_data, max_chars=budget, temperature=0.7).strip() + suffix
     
     if len(reply) > 298:
         reply = generator.get_answer(llm, final_ctx, user_text, search_data, max_chars=budget - 10, temperature=0.7).strip() + suffix
     if len(reply) > 298:
         return
+
+    if config.RAW_DEBUG:
+        logger.info(f"=== OWNER-REPLY ===\n{reply}\n=== END ===")
 
     await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, uri, parent_cid)
 

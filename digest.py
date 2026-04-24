@@ -74,7 +74,8 @@ async def run(client, llm, task_type="digest_mini"):
                 prefix = f"{e} " if e else ""
                 title = f"{prefix}{kw} {config.TREND_STATS_EMOJI}  {sc}: "
                 max_content = MAX_POST_CHARS - len(header) - len(sig) - 4
-                digest_data = f"{kw}: {re.sub(r'[<>"\'`;{}\\]', '', item['summary'])}"
+                clean_summary = re.sub(r'[<>"\'`;{}\\]', '', item['summary'])
+                digest_data = f"{kw}: {clean_summary}"
                 ctx_entries = [{"id": re.sub(r'[^\w\-]', '', str(item["id"])), "keyword": kw, "summary": item["summary"], "score": sc, "rank_status": item["rank_status"]}]
 
             prompt = generator.DIGEST_GENERATE.format(digest_data=digest_data, max_chars=MAX_POST_CHARS, max_content=max_content, header=header, signature=sig, retry_feedback=retry_feedback)

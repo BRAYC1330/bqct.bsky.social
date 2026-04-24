@@ -3,8 +3,14 @@ import hashlib
 import re
 import logging
 import html
+import httpx
 from httpx import HTTPStatusError
 import config
+try:
+    import trafilatura
+    TRAFILATURA_AVAILABLE = True
+except ImportError:
+    TRAFILATURA_AVAILABLE = False
 
 def sanitize_prompt(text: str) -> str:
     if not text:
@@ -38,7 +44,7 @@ def sanitize_for_prompt(text: str) -> str:
 def is_valid_length(text: str, max_len: int = 300) -> bool:
     return len(text) <= max_len
 
-def summarize_search_for_context(search_data: str, max_chars: int = 100) -> str:
+def summarize_search_for_context(search_ str, max_chars: int = 100) -> str:
     if not search_data:
         return ""
     parts = search_data.split(" | ")
@@ -56,6 +62,20 @@ def format_fallback_topics(topics: list) -> str:
     if not topics:
         return ""
     return ", ".join(topics)
+
+async def fetch_url_content(url: str) -> str:
+    if not TRAFILATURA_AVAILABLE:
+        return ""
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            r = await client.get(url, follow_redirects=True)
+            r.raise_for_status()
+            content = trafilatura.extract(r.text)
+            if content:
+                return re.sub(r'\s+', ' ', content.strip())[:400]
+            return ""
+    except Exception:
+        return ""
 
 async def with_retry(func, max_attempts: int = None, backoff: float = None):
     if max_attempts is None:

@@ -1,5 +1,5 @@
 import logging
-from typing import List, Dict, Optional, TypedDict
+from typing import List, Dict, Optional, TypedDict, Set
 
 class PostNode(TypedDict):
     uri: str
@@ -63,3 +63,43 @@ def parse_trends(raw_json: Dict) -> List[TrendItem]:
             result.append({"id": str(i.get("id", "")), "keyword": kw, "summary": i.get("summary", ""), "score": int(i.get("score", 0)), "rank_status": i.get("rank_status", "same")})
     result.sort(key=lambda x: x["score"], reverse=True)
     return result
+
+def extract_thread_content(thread_data: Dict) -> Dict:
+    visited_uris: Set[str] = set()
+    texts = []
+    links = []
+    reposts = []
+
+    def _walk(node: Dict, depth: int = 0):
+        if not node or depth > 10:
+            return
+        post = node.get("post", {})
+        uri = post.get("uri", "")
+        if uri in visited_uris:
+            return
+        visited_uris.add(uri)
+        
+        record = post.get("record", {})
+        text = record.get("text", "").strip()
+        if text:
+            texts.append(text)
+        
+        embed = record.get("embed", {})
+        embed_type = embed.get("$type", "")
+        
+        if embed_type == "app.bsky.embed.external":
+            ext = embed.get("external", {})
+            link = ext.get("uri", "")
+            if link and link.startswith("http"):
+                links.append(link)
+        elif embed_type == "app.bsky.embed.record":
+            rep_uri = embed.get("record", {}).get("uri", "")
+            if rep_uri:
+                reposts.append(rep_uri)
+        
+        for reply in node.get("replies", []):
+            if isinstance(reply, dict):
+                _walk(reply, depth + 1)
+
+    _walk(thread_data.get("thread", {}))
+    return {"texts": texts, "links": list(dict.fromkeys(links)), "reposts": list(dict.fromkeys(reposts))}
