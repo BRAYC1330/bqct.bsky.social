@@ -22,18 +22,14 @@ class SecretFilter(logging.Filter):
 def setup_logging():
     level_str = os.getenv('LOG_LEVEL', 'INFO').upper()
     level = getattr(logging, level_str, logging.INFO)
-    
     fmt = '%(asctime)s.%(msecs)03dZ [%(levelname)s] [%(name)s] %(message)s'
     datefmt = '%Y-%m-%dT%H:%M:%S'
-    
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(logging.Formatter(fmt, datefmt=datefmt))
     handler.addFilter(SecretFilter())
-    
     root = logging.getLogger()
     root.setLevel(level)
     root.handlers = [handler]
-    
     logging.getLogger('httpx').setLevel(logging.WARNING)
     logging.getLogger('httpcore').setLevel(logging.WARNING)
     logging.getLogger('urllib3').setLevel(logging.WARNING)

@@ -1,16 +1,9 @@
-import os
 import logging
 import httpx
-import json
 import config
 from logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
-
-def is_english_text(text: str) -> bool:
-    if not text:
-        return False
-    return sum(1 for c in text if ord(c) < 128) / len(text) > 0.7
 
 async def get_trending_topics_raw() -> list:
     try:
@@ -18,40 +11,47 @@ async def get_trending_topics_raw() -> list:
             r = await client.get("https://api.chainbase.com/tops/v1/tool/list-trending-topics?language=en", timeout=config.SEARCH_TIMEOUT)
             if r.status_code != 200:
                 return []
-            data = r.json()
-            items = data.get("items", []) if isinstance(data, dict) else (data if isinstance(data, list) else [])
-            eng = [i for i in items if is_english_text(i.get('keyword', '')) and is_english_text(i.get('summary', ''))]
-            eng.sort(key=lambda x: x.get('score', 0), reverse=True)
-            if config.RAW_DEBUG:
-                logger.info(f"=== RAW-TRENDS ===\n{json.dumps(eng[:10], ensure_ascii=False, indent=2)}\n=== END ===")
-            return eng[:10]
+            from parser_chainbase import parse_trending_items
+            return parse_trending_items(r.json())
     except Exception as e:
         logger.error(f"[SEARCH] Trend fetch failed: {e}")
         return []
-
-def clean_search_results(raw) -> str:
-    if not raw:
-        return ""
-    if isinstance(raw, list):
-        return " ".join([r.get("title", "") + " " + r.get("content", "")[:150] for r in raw])
-    return str(raw)[:500]
 
 async def fetch_tavily(query: str, time_range: str = "") -> str:
     if not config.TAVILY_API_KEY:
         return ""
     url = "https://api.tavily.com/search"
     headers = {"Authorization": f"Bearer {config.TAVILY_API_KEY}", "Content-Type": "application/json"}
-    payload = {"query": query, "search_depth": "basic", "max_results": 3, "include_raw_content": True}
-    if time_range:
-        payload["time_range"] = time_range
+    payload = {
+        "query": query,
+        "search_depth": "basic",
+        "max_results": 3,
+        "include_raw_content": "text"
+    }
+    if time_range and time_range.lower() in ("day", "week", "month", "year"):
+        payload["time_range"] = time_range.lower()
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             r = await client.post(url, headers=headers, json=payload)
             r.raise_for_status()
+            from parser_tavily import clean_search_results
             return clean_search_results(r.json().get("results", []))
     except Exception as e:
         logger.error(f"[tavily] Error: {e}")
         return ""
 
 async def fetch_chainbase(query: str) -> str:
-    return ""
+    if not query:
+        return ""
+    try:
+        async with httpx.AsyncClient(timeout=config.SEARCH_TIMEOUT) as client:
+            url = f"https://api.chainbase.com/tops/v1/tool/search-narrative-candidates?keyword={query}"
+            r = await client.get(url, timeout=config.SEARCH_TIMEOUT)
+            if r.status_code != 200:
+                return ""
+            from parser_chainbase import format_chainbase_results, parse_search_results
+            items = parse_search_results(r.json())
+            return format_chainbase_results(items)
+    except Exception as e:
+        logger.error(f"[chainbase] Error: {e}")
+        return ""

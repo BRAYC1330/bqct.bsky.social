@@ -1,34 +1,17 @@
 import asyncio
 import hashlib
-import re
+import os
+import subprocess
 import logging
-from httpx import HTTPStatusError
-
-class SecretFilter(logging.Filter):
-    SECRET_PATTERNS = [
-        r'Bearer\s+[A-Za-z0-9\-_\.]+',
-        r'password["\']?\s*[:=]\s*["\']?[^"\',\s}]+',
-        r'api[_-]?key["\']?\s*[:=]\s*["\']?[^"\',\s}]+',
-        r'PAT["\']?\s*[:=]\s*["\']?[^"\',\s}]+',
-        r'did:[^"\',\s}]+',
-    ]
-    REPLACEMENT = "[REDACTED]"
-    def filter(self, record: logging.LogRecord) -> bool:
-        msg = record.getMessage() if hasattr(record, 'getMessage') else str(record.msg)
-        for pattern in self.SECRET_PATTERNS:
-            msg = re.sub(pattern, self.REPLACEMENT, msg, flags=re.IGNORECASE)
-        record.msg = msg
-        record.args = None
-        return True
-
-def sanitize_for_prompt(text: str) -> str:
-    if not text:
-        return ""
-    text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', text)
-    text = re.sub(r'\s+', ' ', text)
-    text = re.sub(r'[{}`\\]', '', text)
-    text = text.replace('"', '\\"').replace("'", "\\'")
-    return text.strip()
+from httpx import AsyncClient, HTTPStatusError, Timeout
+import config
+import parser as ctx_parser
+import state
+import generator
+import bsky
+from logging_config import setup_logging
+setup_logging()
+logger = logging.getLogger(__name__)
 
 def count_graphemes(text: str) -> int:
     return len(text) if text else 0
@@ -50,3 +33,41 @@ async def with_retry(func, max_attempts: int = 3, backoff: float = 1.5):
 
 def hash_to_slot(value: str, slot_count: int) -> int:
     return int(hashlib.sha256(value.encode()).hexdigest(), 16) % slot_count
+
+def get_async_client(timeout: float = 30.0) -> AsyncClient:
+    return AsyncClient(timeout=Timeout(timeout, connect=config.CONNECT_TIMEOUT))
+
+def update_github_secret(key: str, value: str) -> None:
+    if not value or not key:
+        return
+    repo = os.environ.get("GITHUB_REPOSITORY", "")
+    pat = os.environ.get("PAT", "")
+    if not repo or not pat:
+        return
+    cmd = ["gh", "secret", "set", key, "--body", value, "--repo", repo]
+    try:
+        subprocess.run(cmd, env={**os.environ, "GH_TOKEN": pat}, check=True, capture_output=True)
+    except Exception as e:
+        logger.error(f"[utils] Secret update failed: {e}")
+
+async def process_reply(client, llm, task, max_chars=280, suffix="", temperature=0.7, search_data=""):
+    uri = task["uri"]
+    user_text = task["text"]
+    chain = await bsky.fetch_thread_chain(client, uri)
+    if not chain:
+        return
+    root_uri = chain.get("root_uri", task.get("parent_uri", uri))
+    root_cid = chain.get("root_cid", "")
+    parent_cid = chain.get("parent_cid", "")
+    memory = state.load_context(root_uri)
+    root_thread = f"Root: {chain.get('root_text', '')[:200]}"
+    final_ctx = ctx_parser.prepare_context(memory, root_thread, search_data, user_text)
+    reply = generator.get_answer(llm, final_ctx, user_text, search_data, max_chars=max_chars, temperature=temperature)
+    if count_graphemes(reply) > 293:
+        reply = generator.get_answer(llm, final_ctx, user_text, search_data, max_chars=260, temperature=temperature)
+    if count_graphemes(reply) > 293:
+        return
+    reply = reply.strip() + suffix
+    await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, uri, parent_cid)
+    if root_uri != os.environ.get("ACTIVE_DIGEST_URI", "").strip():
+        state.save_context(root_uri, generator.update_summary(llm, memory, user_text, reply))

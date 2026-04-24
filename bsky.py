@@ -8,9 +8,6 @@ from logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
 
-async def get_client():
-    return httpx.AsyncClient(timeout=30)
-
 async def login_with_cache(client, handle, password):
     session_path = "session.json"
     if os.path.exists(session_path):
@@ -54,7 +51,6 @@ async def fetch_thread_chain(client, uri):
     thread = data.get("thread", {})
     post = thread.get("post", {})
     record = post.get("record", {})
-    author = post.get("author", {})
     reply_ref = record.get("reply", {})
     root_ref = reply_ref.get("root", {}) if reply_ref else {}
     parent_ref = reply_ref.get("parent", {}) if reply_ref else {}
@@ -67,5 +63,13 @@ async def fetch_thread_chain(client, uri):
         "root_cid": root_cid,
         "root_text": root_text,
         "parent_cid": parent_cid,
-        "chain": [{"record": record, "author": author}]
+        "chain": [{"record": record, "author": post.get("author", {})}]
     }
+
+async def fetch_notifications(client, limit=100, seen_at=None):
+    params = {"limit": limit}
+    if seen_at and seen_at not in ("{}", "null", "none"):
+        params["seen_at"] = seen_at
+    r = await client.get("https://bsky.social/xrpc/app.bsky.notification.listNotifications", params=params, timeout=15)
+    r.raise_for_status()
+    return r.json().get("notifications", [])
