@@ -60,7 +60,6 @@ async def run():
                 owner_count += 1
     finally:
         await client.aclose()
-        
     digest_task_type = "none"
     if _check_timer("LAST_MINI_DIGEST", 4 * 3600):
         tasks.append({"type": "digest_mini"})
@@ -72,14 +71,10 @@ async def run():
         digest_task_type = "full"
         utils.update_github_secret("LAST_FULL_DIGEST", now_utc)
         logger.debug("[TIMER] LAST_FULL_DIGEST reset")
-        
     with open("work_data.json", "w") as f:
         json.dump({"tasks": tasks}, f)
-        
     utils.update_github_secret("LAST_PROCESSED", now_utc)
-    relevant = owner_count + digest_comment_count
-    logger.info(f"[checker] Tasks: {len(tasks)} (Owner: {owner_count}, Comments: {digest_comment_count}, Digest: {digest_task_type})")
-    
+    logger.info(f"[checker] Tasks: {len(tasks)} (Owner: {owner_count}, Community: {digest_comment_count}, Digest: {digest_task_type})")
     out_path = os.getenv("GITHUB_OUTPUT")
     if out_path:
         with open(out_path, "a") as f:
