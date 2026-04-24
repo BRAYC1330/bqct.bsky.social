@@ -3,6 +3,7 @@ import asyncio
 import hashlib
 import subprocess
 import logging
+import config
 from logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -32,7 +33,6 @@ async def process_reply(client, llm, task, max_chars=240, suffix="", temperature
     import state
     import generator
     import bsky
-    import config
 
     uri = task["uri"]
     user_text = task["text"]
@@ -49,7 +49,24 @@ async def process_reply(client, llm, task, max_chars=240, suffix="", temperature
     if link_content:
         combined_search = f"{search_data}\n\n[EXTRACTED_LINKS]\n{link_content}" if search_data else f"[EXTRACTED_LINKS]\n{link_content}"
 
+    if config.DEBUG_OWNER:
+        embeds = chain.get("embeds", {})
+        if embeds.get("links"):
+            for l in embeds["links"]:
+                logger.info(f"[DEBUG-OWNER] EMBED_LINK: URL='{l['url']}' | Title='{l['title']}' | Desc='{l['desc']}'")
+        if embeds.get("reposts"):
+            for r in embeds["reposts"]:
+                logger.info(f"[DEBUG-OWNER] EMBED_REPOST: Author='{r['author']}' | Text='{r['text']}' | URI='...{r['uri'][-15:]}'")
+        
+        logger.info(f"[DEBUG-OWNER] RAW_THREAD: Root: '{root_thread}'")
+        logger.info(f"[DEBUG-OWNER] CONTEXT: [MEMORY] {memory[:100] if memory else 'None'} | [ROOT_THREAD] {root_thread[:100]} | [SEARCH] {combined_search[:100] if combined_search else 'None'}")
+        logger.info(f"[DEBUG-OWNER] PRIORITY: [SEARCH] > [ROOT_THREAD] > [MEMORY]")
+
     reply = generator.get_reply(llm, memory, root_thread, combined_search, user_text)
+    
+    if config.DEBUG_OWNER:
+        logger.info(f"[DEBUG-OWNER] MODEL_RAW: '{reply}' ({len(reply)} chars)")
+
     if count_graphemes(reply) > 240:
         reply = reply[:240].rsplit(" ", 1)[0] + "..."
     

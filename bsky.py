@@ -58,7 +58,24 @@ async def fetch_thread_chain(client, uri):
     root_cid = root_ref.get("cid") if root_ref.get("cid") else post.get("cid", "")
     root_text = record.get("text", "") if root_uri == uri else ""
     parent_cid = parent_ref.get("cid", "") if parent_ref else ""
-    return {"root_uri": root_uri, "root_cid": root_cid, "root_text": root_text, "parent_cid": parent_cid, "chain": [{"record": record, "author": post.get("author", {})}]}
+
+    embeds = {"links": [], "reposts": []}
+    raw_embed = post.get("embed", {})
+    if raw_embed:
+        if raw_embed.get("$type") == "app.bsky.embed.external#view":
+            ext = raw_embed.get("external", {})
+            embeds["links"].append({"url": ext.get("uri"), "title": ext.get("title"), "desc": ext.get("description", "")[:150]})
+        elif raw_embed.get("$type") == "app.bsky.embed.record#view":
+            rec = raw_embed.get("record", {})
+            if rec.get("$type") == "app.bsky.embed.record#viewRecord":
+                val = rec.get("value", {})
+                embeds["reposts"].append({
+                    "author": rec.get("author", {}).get("handle"),
+                    "text": val.get("text", "")[:150],
+                    "uri": rec.get("uri")
+                })
+
+    return {"root_uri": root_uri, "root_cid": root_cid, "root_text": root_text, "parent_cid": parent_cid, "embeds": embeds}
 
 async def fetch_notifications(client, limit=100, seen_at=None):
     params = {"limit": limit}
