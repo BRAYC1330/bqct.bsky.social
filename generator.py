@@ -91,7 +91,7 @@ def filter_search_results_by_intent(llm, intent_query: str, results: list) -> li
         return results[:2]
 
 def get_answer(llm, context: str, user_query: str, search_data: str = "", fallback_topics: str = "", max_chars: int = 270, temperature: float = 0.7) -> str:
-    if fallback_topics and not search_
+    if fallback_topics and not search_data:
         prompt = _prompts["get_answer_fallback"].format(fallback_topics=fallback_topics, max_chars=max_chars)
     else:
         prompt = _prompts["get_answer_standard"].format(
