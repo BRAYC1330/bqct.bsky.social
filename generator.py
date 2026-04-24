@@ -48,17 +48,16 @@ def extract_chainbase_keyword(llm, text: str) -> str:
         keyword = raw.strip().split("\n")[0].replace("KEYWORD:", "").strip().strip('"')
         keyword = re.sub(r'[^a-zA-Z0-9\s]', '', keyword).strip()
         words = keyword.split()
-        if len(words) > 3:
-            return " ".join(words[:3])
+        if len(words) > 3: return " ".join(words[:3])
         if not keyword or len(keyword) > 50: return text[:30]
         return keyword
     except Exception: return text[:30]
 
-def get_reply(llm, memory: str, root_thread: str, search_data: str, query: str) -> str:
+def get_reply(llm, memory: str, root_thread: str, search_ str, query: str) -> str:
     prompt = _prompts["reply"].format(memory=memory or "None", root_thread=root_thread or "None", search_data=search_data or "None", query=query)
     if config.DEBUG_OWNER: logger.info(f"[DEBUG-OWNER] PROMPT_REPLY:\n{prompt}")
     try:
-        raw = llm(prompt, max_tokens=65, temperature=0.7)
+        raw = llm(prompt, max_tokens=75, temperature=0.7)
         return raw["choices"][0]["text"].strip()
     except Exception as e:
         logger.error(f"[generator] get_reply failed: {e}")
