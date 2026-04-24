@@ -4,11 +4,6 @@ import asyncio
 import logging
 import httpx
 import config
-import generator
-import bsky
-import community
-import owner
-import digest
 from logging_config import setup_logging
 from collections import deque
 from time import time
@@ -38,10 +33,15 @@ async def main():
     if not tasks:
         return
 
-    llm = generator.get_model()
-    if not llm:
-        return
+    task_types = {t.get("type") for t in tasks}
+    llm = None
+    if task_types & {"digest_mini", "digest_full", "digest_comment", "owner_command"}:
+        import generator
+        llm = generator.get_model()
+        if not llm:
+            return
 
+    import bsky
     async with httpx.AsyncClient(timeout=30) as client:
         await bsky.login_with_cache(client, config.BOT_HANDLE, config.BOT_PASSWORD)
         for idx, task in enumerate(tasks):
@@ -52,10 +52,13 @@ async def main():
             uri = task.get("uri", "N/A")[:40]
             logger.info(f"[main] Task #{idx}: type={t_type}, uri={uri}")
             if t_type in ("digest_mini", "digest_full"):
+                import digest
                 await digest.run(client, llm, t_type)
             elif t_type == "digest_comment":
+                import community
                 await community.process(client, llm, task)
             elif t_type == "owner_command":
+                import owner
                 await owner.process(client, llm, task)
     logger.info("[main] === DONE ===")
 

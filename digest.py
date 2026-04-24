@@ -121,7 +121,8 @@ async def run(client, llm, task_type="digest_mini"):
                 max_content = _calculate_max_content(task_type, trends_count=1)
                 title_prefix, ctx_entry = _build_full_digest_line(trends[0])
                 ctx_entries = [ctx_entry]
-                digest_data = f"{trends[0]['keyword']}: {re.sub(r'[<>"\'`;{}\\]', '', trends[0]['summary'])}"
+                clean_summary = re.sub(r'[<>"\'`;{}\\]', '', trends[0]['summary'])
+                digest_data = f"{trends[0]['keyword']}: {clean_summary}"
 
             final_post = await _generate_digest_post(llm, task_type, digest_data, header, sig, max_content, attempt)
             
