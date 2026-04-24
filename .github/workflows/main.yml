@@ -74,7 +74,6 @@ jobs:
         env:
           PYTHONUNBUFFERED: "1"
           ACTIVE_DIGEST_URI: ${{ secrets.ACTIVE_DIGEST_URI }}
-          CONTEXT_DIGEST: ${{ secrets.CONTEXT_DIGEST }}
           BOT_HANDLE: ${{ secrets.BOT_HANDLE }}
           BOT_PASSWORD: ${{ secrets.BOT_PASSWORD }}
           BOT_DID: ${{ secrets.BOT_DID }}
