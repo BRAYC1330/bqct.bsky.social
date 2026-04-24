@@ -17,17 +17,6 @@ with open(PROMPTS_PATH, "r", encoding="utf-8") as f:
 
 _model_cache: Optional[Llama] = None
 
-_KEYWORD_SYNONYMS = {
-    "ALTOS": ["ALTCOIN", "ALT"],
-    "BTC": ["BITCOIN", "BTC"],
-    "ETH": ["ETHEREUM", "ETH"],
-    "AI": ["ARTIFICIAL-INTELLIGENCE", "AI"],
-    "DEFI": ["DECENTRALIZED-FINANCE", "DEFI"],
-    "NFT": ["NON-FUNGIBLE-TOKEN", "NFT"],
-    "LAYER2": ["L2", "LAYER-2"],
-    "RWA": ["REAL-WORLD-ASSETS", "RWA"],
-}
-
 def __getattr__(name: str):
     if name in _prompts:
         return _prompts[name]
@@ -71,31 +60,33 @@ def get_model() -> Optional[Llama]:
         return None
 
 def extract_search_intent(llm, context: str, user_query: str) -> tuple:
+    logger.info(f"[GENERATOR:INTENT] Context preview: {context[:200]}... | Query: '{user_query}'")
     prompt = _prompts["extract_search_intent"].format(context=sanitize_prompt(context), user_text=sanitize_prompt(user_query))
     try:
         raw = _run_llm(llm, prompt, max_tokens=60, temperature=0.1)
+        logger.info(f"[GENERATOR:INTENT] Raw output: '{raw}'")
         if "| TIME:" in raw:
             q_part, t_part = raw.split("| TIME:", 1)
             query = q_part.replace("QUERY:", "").strip()
             time_range = t_part.strip().lower()
+            logger.info(f"[GENERATOR:INTENT] Parsed: query='{query}' time='{time_range}'")
             return query, time_range if time_range in ("day", "week", "month", "year") else ""
-    except:
-        pass
+    except Exception as e:
+        logger.error(f"[GENERATOR:INTENT] Parse error: {e}")
     return user_query, ""
 
 def extract_chainbase_keywords_multi(llm, user_query: str) -> list:
+    logger.info(f"[GENERATOR:KEYWORDS] Input query: '{user_query}'")
     prompt = _prompts["extract_chainbase_keywords"].format(user_query=sanitize_prompt(user_query))
     try:
         raw = _run_llm(llm, prompt, max_tokens=40, temperature=0.1).upper()
+        logger.info(f"[GENERATOR:KEYWORDS] Raw keywords: '{raw}'")
         candidates = [re.sub(r'[^A-Z0-9\-]', '', k.strip()) for k in raw.split(",")[:3]]
-        expanded = []
-        for kw in candidates:
-            if kw in _KEYWORD_SYNONYMS:
-                expanded.extend(_KEYWORD_SYNONYMS[kw])
-            elif kw:
-                expanded.append(kw)
-        return [k for k in expanded if k and 2 <= len(k) <= 20][:3]
-    except:
+        result = [k for k in candidates if k and 2 <= len(k) <= 20]
+        logger.info(f"[GENERATOR:KEYWORDS] Final keywords: {result}")
+        return result
+    except Exception as e:
+        logger.error(f"[GENERATOR:KEYWORDS] Error: {e}")
         return []
 
 def filter_search_results_by_intent(llm, intent_query: str, results: list) -> list:

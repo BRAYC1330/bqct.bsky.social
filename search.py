@@ -39,29 +39,37 @@ def clean_search_results(raw) -> str:
     return str(raw)[:500]
 
 async def fetch_tavily(client: httpx.AsyncClient, query: str, time_range: str = "") -> str:
+    logger.info(f"[SEARCH:TAVILY] Query: '{query}' | Time: {time_range or 'any'}")
     if not config.TAVILY_API_KEY:
+        logger.warning("[SEARCH:TAVILY] API key not set")
         return ""
     try:
         payload = {"query": query, "search_depth": "basic", "max_results": 3, "include_raw_content": True}
         if time_range:
             payload["time_range"] = time_range
+        logger.info(f"[SEARCH:TAVILY] Request payload: {json.dumps(payload)}")
         r = await client.post("https://api.tavily.com/search", headers={"Authorization": f"Bearer {config.TAVILY_API_KEY}"}, json=payload)
         r.raise_for_status()
-        return clean_search_results(r.json().get("results", []))
+        result = clean_search_results(r.json().get("results", []))
+        logger.info(f"[SEARCH:TAVILY] Response: {len(result)} chars")
+        return result
     except Exception as e:
-        logger.error(f"[tavily] Error: {e}")
+        logger.error(f"[SEARCH:TAVILY] Error: {e}")
         return ""
 
 async def fetch_chainbase_raw(client: httpx.AsyncClient, keyword: str) -> list:
+    logger.info(f"[SEARCH:CHAINBASE] Keyword query: '{keyword}'")
     try:
         safe_kw = httpx.URL(keyword).raw_path.decode()
         url = f"https://api.chainbase.com/tops/v1/tool/search-narrative-candidates?keyword={safe_kw}"
+        logger.info(f"[SEARCH:CHAINBASE] Request URL: {url}")
         r = await client.get(url, timeout=config.SEARCH_TIMEOUT)
         if r.status_code != 200:
+            logger.warning(f"[SEARCH:CHAINBASE] HTTP {r.status_code}")
             return []
         data = r.json()
         items = data.get("items", [])
-        return [
+        result = [
             {
                 "id": str(item.get("id", "")),
                 "keyword": item.get("keyword", ""),
@@ -71,8 +79,10 @@ async def fetch_chainbase_raw(client: httpx.AsyncClient, keyword: str) -> list:
             }
             for item in items[:5]
         ]
+        logger.info(f"[SEARCH:CHAINBASE] Response: {len(result)} items")
+        return result
     except Exception as e:
-        logger.error(f"[chainbase] Error: {e}")
+        logger.error(f"[SEARCH:CHAINBASE] Error: {e}")
         return []
 
 async def fetch_chainbase(client: httpx.AsyncClient, keyword: str) -> str:

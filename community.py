@@ -30,6 +30,7 @@ async def process(client, llm, task):
     search_data = ""
     clean = user_text.strip()
 
+    logger.info(f"[COMMUNITY:SEARCH] Input: '{clean}' | Context preview: {root_thread[:100]}...")
     keywords = generator.extract_chainbase_keywords_multi(llm, clean)
     for kw in keywords:
         raw_items = await search.fetch_chainbase_raw(client, kw)
@@ -52,4 +53,4 @@ async def process(client, llm, task):
         return
 
     await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, uri, parent_cid)
-    logger.info(f"[community] Replied to {uri[:40]}...")
+    logger.info(f"[community] Replied to {uri[:40]}... | Reply preview: {reply[:80]}...")

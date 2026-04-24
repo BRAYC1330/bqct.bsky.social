@@ -79,6 +79,7 @@ async def process(client, llm, task):
     
     if is_c:
         clean = user_text.replace("!c", "").strip()
+        logger.info(f"[OWNER:SEARCH] Chainbase trigger | User text: '{clean}' | Context preview: {compressed_root[:150]}...")
         keywords = generator.extract_chainbase_keywords_multi(llm, clean)
         for kw in keywords:
             raw_items = await search.fetch_chainbase_raw(client, kw)
@@ -93,7 +94,8 @@ async def process(client, llm, task):
             await asyncio.sleep(0.3)
     elif is_t:
         clean = user_text.replace("!t", "").strip()
-        search_query, time_range = generator.extract_search_intent(llm, "", clean)
+        logger.info(f"[OWNER:SEARCH] Tavily trigger | User text: '{clean}' | Context preview: {compressed_root[:150]}...")
+        search_query, time_range = generator.extract_search_intent(llm, compressed_root, clean)
         if search_query:
             search_data = await search.fetch_tavily(client, search_query, time_range)
 
