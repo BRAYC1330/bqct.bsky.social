@@ -4,12 +4,10 @@ import os
 import subprocess
 import logging
 import config
-import generator
 import state
 import bsky
 import parser as ctx_parser
 from logging_config import setup_logging
-
 setup_logging()
 logger = logging.getLogger(__name__)
 
@@ -36,6 +34,8 @@ def _get_active_digest_uri() -> str:
     return os.environ.get("ACTIVE_DIGEST_URI", "").strip()
 
 async def process_reply(client, llm, task, max_chars=240, suffix="", temperature=0.7, search_data="", link_content=""):
+    import generator
+    
     uri = task["uri"]
     user_text = task["text"]
     
@@ -56,8 +56,8 @@ async def process_reply(client, llm, task, max_chars=240, suffix="", temperature
     
     reply = generator.get_reply(llm, memory, root_thread, combined_search, user_text)
     
-    if count_graphemes(reply) > 240:
-        reply = reply[:240].rsplit(" ", 1)[0] + "..."
+    if count_graphemes(reply) > max_chars:
+        reply = reply[:max_chars].rsplit(" ", 1)[0] + "..."
     
     reply = reply.strip() + suffix
     

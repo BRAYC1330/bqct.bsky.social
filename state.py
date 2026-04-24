@@ -2,9 +2,7 @@ import os
 import logging
 import config
 import utils
-import generator
 from logging_config import setup_logging
-
 setup_logging()
 logger = logging.getLogger(__name__)
 
@@ -13,6 +11,7 @@ def load_context(thread_id: str) -> str:
     return os.getenv(f"CONTEXT_{slot}", "") or ""
 
 def save_context(thread_id: str, llm, history: str):
+    import generator
     if not history:
         return
     memory = load_context(thread_id)
