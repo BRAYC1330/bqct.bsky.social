@@ -64,9 +64,43 @@ async def post_reply(client: httpx.AsyncClient, bot_did: str, text: str, root_ur
     return r.json()
 
 async def fetch_thread_chain(client: httpx.AsyncClient, uri: str):
-    r = await client.get("https://bsky.social/xrpc/app.bsky.feed.getPostThread", params={"uri": uri, "depth": 0})
-    if r.status_code != 200:
-        logger.warning(f"[bsky] get_thread_raw failed: {r.status_code}")
-        return None
-    parsed = parsers.parse_thread(r.json())
-    return {"root_uri": parsed["uri"], "root_cid": parsed["cid"], "root_text": parsed["text"], "parent_cid": "", "chain": parsed["nodes"]}
+    r = await client.get("https://bsky.social/xrpc/app.bsky.feed.getPostThread", params={"uri": uri, "depth": 10, "parentHeight": 10})
+    r.raise_for_status()
+    data = r.json()
+    thread = data.get("thread", {})
+    root = _find_root(thread)
+    parent_info = _get_parent_info(thread, uri)
+    return {
+        "raw": data,
+        "root_uri": root.get("uri", ""),
+        "root_cid": root.get("cid", ""),
+        "root_text": root.get("record", {}).get("text", ""),
+        "parent_uri": parent_info.get("uri", uri),
+        "parent_cid": parent_info.get("cid", ""),
+        "access_jwt": client.headers.get("Authorization", "").replace("Bearer ", "")
+    }
+
+def _find_root(node: dict) -> dict:
+    if not node or "post" not in node:
+        return {}
+    parent = node.get("parent", {})
+    if parent and "post" in parent:
+        return _find_root(parent)
+    return node.get("post", {})
+
+def _get_parent_info(node: dict, target_uri: str) -> dict:
+    if not node or "post" not in node:
+        return {}
+    post = node.get("post", {})
+    if post.get("uri") == target_uri:
+        parent = node.get("parent", {})
+        if parent and "post" in parent:
+            p = parent["post"]
+            return {"uri": p.get("uri", ""), "cid": p.get("cid", "")}
+        return {"uri": "", "cid": ""}
+    for reply in node.get("replies", []):
+        if isinstance(reply, dict):
+            result = _get_parent_info(reply, target_uri)
+            if result.get("uri"):
+                return result
+    return {}

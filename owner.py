@@ -1,6 +1,7 @@
 import os
 import asyncio
 import logging
+import json
 import config
 import bsky
 import generator
@@ -20,7 +21,11 @@ async def process(client, llm, task):
     if not chain_raw:
         return
 
-    thread_content = parsers.extract_thread_content(chain_raw)
+    if config.RAW_DEBUG:
+        logger.info(f"=== OWNER-RAW-API-RESPONSE ===\n{json.dumps(chain_raw['raw'], indent=2, ensure_ascii=False)[:8000]}\n=== END ===")
+
+    token = chain_raw.get("access_jwt", "")
+    thread_content = await parsers.parse_thread_full(chain_raw["raw"], client, token)
     all_texts = thread_content["texts"]
     link_texts = []
     
@@ -28,27 +33,18 @@ async def process(client, llm, task):
     results = await asyncio.gather(*link_tasks)
     link_texts = [r for r in results if r]
 
-    repost_uris = thread_content["reposts"][:2]
-    repost_texts = []
-    for rep_uri in repost_uris:
-        rep_chain = await bsky.fetch_thread_chain(client, rep_uri)
-        if rep_chain:
-            rep_data = parsers.extract_thread_content(rep_chain)
-            repost_texts.extend(rep_data["texts"])
-
-    combined_raw = all_texts + link_texts + repost_texts
-    
+    combined_raw = all_texts + link_texts
     if config.RAW_DEBUG:
-        logger.info(f"=== OWNER-RAW-THREAD ===\nuri={uri}\ntexts={len(all_texts)}\nlinks={thread_content['links']}\nreposts={repost_uris}\ncombined_raw_len={len(' '.join(combined_raw))}")
+        logger.info(f"=== OWNER-RAW-THREAD ===\nuri={uri}\ntexts_count={len(all_texts)}\nlinks={thread_content['links']}\ncombined_raw_len={len(' '.join(combined_raw))}\ncombined_raw_preview={' '.join(combined_raw)[:800]}")
 
     root_thread = memory.compress_thread_context(llm, combined_raw)
-
     if config.RAW_DEBUG:
         logger.info(f"=== OWNER-COMPRESSED-ROOT ===\n{root_thread}\n=== END ===")
 
-    root_uri = chain_raw.get("thread", {}).get("post", {}).get("uri", "")
-    root_cid = chain_raw.get("thread", {}).get("post", {}).get("cid", "")
-    parent_cid = ""
+    root_uri = chain_raw["root_uri"]
+    root_cid = chain_raw["root_cid"]
+    parent_uri = chain_raw["parent_uri"]
+    parent_cid = chain_raw["parent_cid"]
     active_digest = os.environ.get("ACTIVE_DIGEST_URI", "").strip()
 
     if root_uri == active_digest:
@@ -85,12 +81,10 @@ async def process(client, llm, task):
 
     budget = 300 - len(suffix)
     final_ctx = memory.merge_contexts(mem, root_thread, search_data, user_text)
-    
     if config.RAW_DEBUG:
         logger.info(f"=== OWNER-FINAL-CTX ===\n{final_ctx}\n=== END ===")
     
     reply = generator.get_answer(llm, final_ctx, user_text, search_data, max_chars=budget, temperature=0.7).strip() + suffix
-    
     if len(reply) > 298:
         reply = generator.get_answer(llm, final_ctx, user_text, search_data, max_chars=budget - 10, temperature=0.7).strip() + suffix
     if len(reply) > 298:
@@ -99,11 +93,9 @@ async def process(client, llm, task):
     if config.RAW_DEBUG:
         logger.info(f"=== OWNER-REPLY ===\n{reply}\n=== END ===")
 
-    await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, uri, parent_cid)
-
+    await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, parent_uri, parent_cid)
     if root_uri != active_digest:
         search_summary = memory.format_search_summary(search_data)
         new_mem = memory.update_and_truncate(mem, user_text, reply, search_summary)
         await state.save_thread_context(root_uri, new_mem)
-
     logger.info(f"[owner] Replied to {uri[:40]}...")
