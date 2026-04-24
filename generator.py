@@ -75,14 +75,65 @@ Output:"""
     except:
         return user_query, ""
 
-def get_answer(llm, context: str, user_query: str, search_data: str = "", max_chars: int = 280, temperature: float = 0.7) -> str:
-    prompt = f"""Reply in 1-2 short sentences.
+def extract_chainbase_keywords_multi(llm, user_query: str) -> list:
+    prompt = f"""Generate 3 search keywords for crypto narrative API, priority order.
+Rules:
+- First: compound query combining main topics (e.g. "AI BTC", "quantum bitcoin")
+- Second: simplified compound (e.g. "BTC quantum")
+- Third: core ticker only (e.g. "BTC", "ETH")
+- Return ONLY comma-separated uppercase keywords: KEY1,KEY2,KEY3
+- Max 20 chars per keyword, letters/numbers/hyphens only.
+Query: "{_sanitize_input(user_query)}"
+Keywords:"""
+    try:
+        raw = llm(prompt, max_tokens=40, temperature=0.1)["choices"][0]["text"].strip().upper()
+        candidates = [re.sub(r'[^A-Z0-9\-]', '', k.strip()) for k in raw.split(",")[:3]]
+        return [k for k in candidates if k and 2 <= len(k) <= 20]
+    except:
+        return []
+
+def filter_search_results_by_intent(llm, intent_query: str, results: list) -> list:
+    if not results:
+        return []
+    summaries = "\n".join([f"- {r.get('keyword','')}: {r.get('summary','')[:100]}" for r in results[:5]])
+    prompt = f"""Filter results by relevance to query. Keep only items mentioning or related to core topic.
+Query: "{_sanitize_input(intent_query)}"
+Results:
+{summaries}
+Return ONLY comma-separated IDs of relevant items, or NONE if all irrelevant.
+Relevant IDs:"""
+    try:
+        raw = llm(prompt, max_tokens=30, temperature=0.1)["choices"][0]["text"].strip().upper()
+        if "NONE" in raw:
+            return []
+        keep_ids = set(re.findall(r'[A-Z0-9\-]+', raw))
+        return [r for r in results if r.get("id") in keep_ids or any(kw in r.get("keyword","").upper() for kw in keep_ids)]
+    except:
+        return results[:2]
+
+def summarize_search_for_context(search_data: str, max_chars: int = 100) -> str:
+    if not search_data:
+        return ""
+    parts = search_data.split(" | ")
+    if parts:
+        clean = re.sub(r'^[^\w\s]*', '', parts[0])
+        return clean[:max_chars]
+    return re.sub(r'[|{}]', '', search_data)[:max_chars]
+
+def get_answer(llm, context: str, user_query: str, search_data: str = "", fallback_topics: str = "", max_chars: int = 270, temperature: float = 0.7) -> str:
+    fallback_rule = ""
+    if fallback_topics and not search_data:
+        fallback_rule = f"\n- [FALLBACK] is active: Acknowledge lack of direct info. State what is currently trending: {fallback_topics}. Ask to clarify which topic to explore."
+    prompt = f"""Reply in 1-2 short conversational sentences.
 Context: {_sanitize_input(context)}
 Query: {_sanitize_input(user_query)}
 Search: {_sanitize_input(search_data) if search_data else "N/A"}
 Rules:
 - Max {max_chars} characters including spaces and emojis.
+- NO lists, bullets, headers, or digest format.
+- Speak naturally like in a direct chat.
 - No hashtags, no links, no markdown.
+{fallback_rule}
 - Be helpful and direct.
 Reply:"""
     return llm(prompt, max_tokens=150, temperature=temperature)["choices"][0]["text"].strip()

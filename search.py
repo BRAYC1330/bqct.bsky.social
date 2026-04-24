@@ -52,5 +52,39 @@ async def fetch_tavily(client: httpx.AsyncClient, query: str, time_range: str = 
         logger.error(f"[tavily] Error: {e}")
         return ""
 
-async def fetch_chainbase(client: httpx.AsyncClient, query: str) -> str:
-    return ""
+async def fetch_chainbase_raw(client: httpx.AsyncClient, keyword: str) -> list:
+    try:
+        safe_kw = httpx.URL(keyword).raw_path.decode()
+        url = f"https://api.chainbase.com/tops/v1/tool/search-narrative-candidates?keyword={safe_kw}"
+        r = await client.get(url, timeout=config.SEARCH_TIMEOUT)
+        if r.status_code != 200:
+            return []
+        data = r.json()
+        items = data.get("items", [])
+        return [
+            {
+                "id": str(item.get("id", "")),
+                "keyword": item.get("keyword", ""),
+                "summary": item.get("summary", ""),
+                "score": int(item.get("score", 0)),
+                "rank_status": item.get("rank_status", "same")
+            }
+            for item in items[:5]
+        ]
+    except Exception as e:
+        logger.error(f"[chainbase] Error: {e}")
+        return []
+
+async def fetch_chainbase(client: httpx.AsyncClient, keyword: str) -> str:
+    items = await fetch_chainbase_raw(client, keyword)
+    if not items:
+        return ""
+    lines = []
+    for item in items[:3]:
+        kw = item.get("keyword", "")
+        summary = item.get("summary", "")
+        score = item.get("score", 0)
+        rank = item.get("rank_status", "same")
+        emoji = config.TREND_EMOJIS.get(rank, "")
+        lines.append(f"{emoji} {kw} [{score}]: {summary[:150]}")
+    return " | ".join(lines)
