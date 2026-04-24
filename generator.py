@@ -5,7 +5,6 @@ import logging
 from llama_cpp import Llama
 import config
 from logging_config import setup_logging
-
 setup_logging()
 logger = logging.getLogger(__name__)
 
@@ -19,14 +18,7 @@ def get_model():
         logger.error(f"[generator] Model not found: {model_path}")
         return None
     try:
-        llm = Llama(
-            model_path=model_path,
-            n_ctx=config.MODEL_N_CTX,
-            n_gpu_layers=0,
-            n_threads=config.MODEL_N_THREADS,
-            n_batch=512,
-            verbose=False
-        )
+        llm = Llama(model_path=model_path, n_ctx=config.MODEL_N_CTX, n_gpu_layers=0, n_threads=config.MODEL_N_THREADS, n_batch=512, verbose=False)
         logger.info(f"[generator] Model loaded: {os.path.basename(model_path)}")
         return llm
     except Exception as e:
@@ -35,43 +27,31 @@ def get_model():
 
 def extract_tavily_intent(llm, query: str) -> tuple:
     prompt = _prompts["tavily_intent"].format(query=query)
-    if config.DEBUG_OWNER:
-        logger.info(f"[DEBUG-OWNER] PROMPT_TAVILY_INTENT:\n{prompt}")
+    if config.DEBUG_OWNER: logger.info(f"[DEBUG-OWNER] PROMPT_TAVILY_INTENT:\n{prompt}")
     try:
         raw = llm(prompt, max_tokens=60, temperature=0.1)
         if "| TIME:" in raw:
             q_part, t_part = raw.split("| TIME:", 1)
             query_out = q_part.replace("QUERY:", "").strip()
             time_range = t_part.strip().lower()
-            if time_range not in ("day", "week", "month", "year"):
-                time_range = ""
+            if time_range not in ("day", "week", "month", "year"): time_range = ""
             return query_out, time_range
         return query, ""
-    except Exception:
-        return query, ""
+    except Exception: return query, ""
 
 def extract_chainbase_keyword(llm, text: str) -> str:
     prompt = _prompts["chainbase_keyword"].format(text=text)
-    if config.DEBUG_OWNER:
-        logger.info(f"[DEBUG-OWNER] PROMPT_CHAINBASE_KEYWORD:\n{prompt}")
+    if config.DEBUG_OWNER: logger.info(f"[DEBUG-OWNER] PROMPT_CHAINBASE_KEYWORD:\n{prompt}")
     try:
         raw = llm(prompt, max_tokens=20, temperature=0.1)
         keyword = raw.strip().split("\n")[0].replace("KEYWORD:", "").strip().strip('"')
-        if not keyword or len(keyword) > 50:
-            return text[:30]
+        if not keyword or len(keyword) > 50: return text[:30]
         return keyword
-    except Exception:
-        return text[:30]
+    except Exception: return text[:30]
 
-def get_reply(llm, memory: str, root_thread: str, search_ str, query: str) -> str:
-    prompt = _prompts["reply"].format(
-        memory=memory or "None",
-        root_thread=root_thread or "None",
-        search_data=search_data or "None",
-        query=query
-    )
-    if config.DEBUG_OWNER:
-        logger.info(f"[DEBUG-OWNER] PROMPT_REPLY:\n{prompt}")
+def get_reply(llm, memory: str, root_thread: str, search_data: str, query: str) -> str:
+    prompt = _prompts["reply"].format(memory=memory or "None", root_thread=root_thread or "None", search_data=search_data or "None", query=query)
+    if config.DEBUG_OWNER: logger.info(f"[DEBUG-OWNER] PROMPT_REPLY:\n{prompt}")
     try:
         raw = llm(prompt, max_tokens=150, temperature=0.7)
         return raw["choices"][0]["text"].strip()
@@ -80,13 +60,8 @@ def get_reply(llm, memory: str, root_thread: str, search_ str, query: str) -> st
         return "Error generating reply."
 
 def generate_digest(llm, keyword: str, summary: str, max_chars: int) -> str:
-    prompt = _prompts["digest_refine"].format(
-        keyword=keyword,
-        summary=summary,
-        max_desc_chars=max_chars
-    )
-    if config.DEBUG_OWNER:
-        logger.info(f"[DEBUG-OWNER] PROMPT_DIGEST_REFINE:\n{prompt}")
+    prompt = _prompts["digest_refine"].format(keyword=keyword, summary=summary, max_desc_chars=max_chars)
+    if config.DEBUG_OWNER: logger.info(f"[DEBUG-OWNER] PROMPT_DIGEST_REFINE:\n{prompt}")
     try:
         raw = llm(prompt, max_tokens=min(max_chars + 20, 120), temperature=0.2)
         return raw["choices"][0]["text"].strip().split("\n")[0]
@@ -96,8 +71,7 @@ def generate_digest(llm, keyword: str, summary: str, max_chars: int) -> str:
 
 def update_context_memory(llm, history: str) -> str:
     prompt = _prompts["context_memory"].format(history=history[:1500])
-    if config.DEBUG_OWNER:
-        logger.info(f"[DEBUG-OWNER] PROMPT_CONTEXT_MEMORY:\n{prompt}")
+    if config.DEBUG_OWNER: logger.info(f"[DEBUG-OWNER] PROMPT_CONTEXT_MEMORY:\n{prompt}")
     try:
         raw = llm(prompt, max_tokens=300, temperature=0.3)
         return raw["choices"][0]["text"].strip()
