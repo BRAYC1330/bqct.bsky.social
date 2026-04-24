@@ -2,8 +2,29 @@ import asyncio
 import hashlib
 import re
 import logging
+import html
 from httpx import HTTPStatusError
 import config
+
+def sanitize_prompt(text: str) -> str:
+    if not text:
+        return ""
+    injection_patterns = [
+        r'(?i)ignore\s+(previous|all)\s+instructions',
+        r'(?i)system\s*(override|prompt|instruction)',
+        r'(?i)forget\s+all\s+rules',
+        r'(?i)you\s+are\s+now\s+',
+        r'(?i)from\s+now\s+on\s+',
+        r'(?i)disregard\s+(the\s+)?(above|previous)',
+        r'(?i)new\s+instruction[s]?:',
+    ]
+    for pattern in injection_patterns:
+        text = re.sub(pattern, '[BLOCKED]', text, flags=re.I)
+    text = html.escape(text)
+    text = re.sub(r'\{\{.*?\}\}|\{%.*?%\}|\{#.*?#\}', '', text)
+    text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', text)
+    text = re.sub(r'[`\'"\\<>]', '', text)
+    return text.strip()
 
 def sanitize_for_prompt(text: str) -> str:
     if not text:
@@ -16,6 +37,25 @@ def sanitize_for_prompt(text: str) -> str:
 
 def is_valid_length(text: str, max_len: int = 300) -> bool:
     return len(text) <= max_len
+
+def summarize_search_for_context(search_data: str, max_chars: int = 100) -> str:
+    if not search_data:
+        return ""
+    parts = search_data.split(" | ")
+    if parts:
+        clean = re.sub(r'^[^\w\s]*', '', parts[0])
+        return clean[:max_chars]
+    return re.sub(r'[|{}]', '', search_data)[:max_chars]
+
+def update_summary(memory: str, user_query: str, reply: str) -> str:
+    if not memory:
+        return f"Q: {user_query[:100]} -> A: {reply[:100]}"
+    return memory[-200:] + f" | Q: {user_query[:50]} -> A: {reply[:50]}"
+
+def format_fallback_topics(topics: list) -> str:
+    if not topics:
+        return ""
+    return ", ".join(topics)
 
 async def with_retry(func, max_attempts: int = None, backoff: float = None):
     if max_attempts is None:

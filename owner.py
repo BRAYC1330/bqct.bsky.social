@@ -6,6 +6,7 @@ import bsky
 import generator
 import search
 import state
+import memory
 from logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -24,9 +25,9 @@ async def process(client, llm, task):
     root_thread = f"Root: {chain['root_text'][:200]}"
 
     if root_uri == active_digest:
-        memory = state.load_digest_context()
+        mem = state.load_digest_context()
     else:
-        memory = state.load_thread_context(root_uri)
+        mem = state.load_thread_context(root_uri)
 
     search_data = ""
     fallback_topics = []
@@ -58,8 +59,8 @@ async def process(client, llm, task):
         if search_query:
             search_data = await search.fetch_tavily(client, search_query, time_range)
 
-    final_ctx = state.merge_contexts(memory, root_thread, search_data, user_text)
-    fallback_str = ", ".join(fallback_topics) if fallback_topics else ""
+    final_ctx = memory.merge_contexts(mem, root_thread, search_data, user_text)
+    fallback_str = memory.format_fallback_topics(fallback_topics)
 
     reply = generator.get_answer(llm, final_ctx, user_text, search_data, fallback_str, max_chars=270, temperature=0.7).strip() + "\n\nQwen"
     if len(reply) > 295:
@@ -70,11 +71,8 @@ async def process(client, llm, task):
     await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, uri, parent_cid)
 
     if root_uri != active_digest:
-        new_memory = generator.update_summary(llm, memory, user_text, reply)
-        if search_data:
-            search_summary = generator.summarize_search_for_context(search_data)
-            if search_summary:
-                new_memory = (new_memory + " | " + search_summary) if new_memory else search_summary
-        await state.save_thread_context(root_uri, new_memory)
+        search_summary = memory.format_search_summary(search_data)
+        new_mem = memory.update_and_truncate(mem, user_text, reply, search_summary)
+        await state.save_thread_context(root_uri, new_mem)
 
     logger.info(f"[owner] Replied to {uri[:40]}...")

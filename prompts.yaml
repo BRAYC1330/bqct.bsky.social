@@ -57,3 +57,52 @@ community: |
   - Never use @handles. Use neutral phrasing.
   - Plain text only. No JSON, no markdown.
   Output only the reply text.
+
+extract_search_intent: |
+  Extract search query and time filter.
+  Rules:
+  - If time is a search filter, use: day, week, month, year.
+  - If time is part of the question itself, use: none.
+  - Return ONLY: QUERY: <text> | TIME: <day/week/month/year/none>
+  Context: {context}
+  User: "{user_text}"
+  Output:
+
+extract_chainbase_keywords: |
+  Generate 3 search keywords for crypto narrative API, priority order.
+  Rules:
+  - First: compound query combining main topics (e.g. "AI BTC", "quantum bitcoin")
+  - Second: simplified compound (e.g. "BTC quantum")
+  - Third: core ticker only (e.g. "BTC", "ETH")
+  - Return ONLY comma-separated uppercase keywords: KEY1,KEY2,KEY3
+  - Max 20 chars per keyword, letters/numbers/hyphens only.
+  Query: "{user_query}"
+  Keywords:
+
+filter_results_by_intent: |
+  Filter results by relevance to query. Keep only items mentioning or related to core topic.
+  Query: "{intent_query}"
+  Results:
+  {summaries}
+  Return ONLY comma-separated IDs of relevant items, or NONE if all irrelevant.
+  Relevant IDs:
+
+get_answer_fallback: |
+  Acknowledge lack of direct info. State what is currently trending: {fallback_topics}. Ask to clarify which topic to explore.
+  Rules:
+  - Max {max_chars} characters.
+  - Conversational, no markdown.
+  Reply:
+
+get_answer_standard: |
+  Reply in 1-2 short conversational sentences.
+  Context: {context}
+  Query: {user_query}
+  Search: {search_data}
+  Rules:
+  - Max {max_chars} characters including spaces and emojis.
+  - NO lists, bullets, headers, or digest format.
+  - Speak naturally like in a direct chat.
+  - No hashtags, no links, no markdown.
+  - Be helpful and direct.
+  Reply:

@@ -51,15 +51,3 @@ def load_digest_context() -> str:
         return ""
     except json.JSONDecodeError:
         return ""
-
-def merge_contexts(memory: str, root_thread: str, search_data: str, user_query: str) -> str:
-    parts = []
-    if memory:
-        parts.append(f"[MEMORY]\n{memory}")
-    if root_thread:
-        parts.append(f"[ROOT_THREAD]\n{root_thread}")
-    if search_data:
-        parts.append(f"[SEARCH]\n{search_data}")
-    if user_query:
-        parts.append(f"[QUERY]\n{user_query}")
-    return "\n".join(parts)
