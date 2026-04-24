@@ -24,6 +24,17 @@ COMMUNITY_SYSTEM = _prompts["community"]
 def _sanitize_input(text: str) -> str:
     if not text:
         return ""
+    injection_patterns = [
+        r'(?i)ignore\s+(previous|all)\s+instructions',
+        r'(?i)system\s*(override|prompt|instruction)',
+        r'(?i)forget\s+all\s+rules',
+        r'(?i)you\s+are\s+now\s+',
+        r'(?i)from\s+now\s+on\s+',
+        r'(?i)disregard\s+(the\s+)?(above|previous)',
+        r'(?i)new\s+instruction[s]?:',
+    ]
+    for pattern in injection_patterns:
+        text = re.sub(pattern, '[BLOCKED]', text, flags=re.I)
     text = html.escape(text)
     text = re.sub(r'\{\{.*?\}\}|\{%.*?%\}|\{#.*?#\}', '', text)
     text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', text)

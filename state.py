@@ -3,7 +3,6 @@ import hashlib
 import asyncio
 import json
 import logging
-import shlex
 import re
 import config
 from logging_config import setup_logging
@@ -32,10 +31,13 @@ async def save_thread_context(thread_id: str, memory: str):
     pat = os.environ.get("PAT", "")
     if not repo or not pat or not memory:
         return
-    safe_memory = shlex.quote(memory[:250])
-    safe_repo = shlex.quote(repo)
-    safe_slot = shlex.quote(f"CONTEXT_{slot}")
-    proc = await asyncio.create_subprocess_exec("gh", "secret", "set", safe_slot, "--body", safe_memory, "--repo", safe_repo, env={**os.environ, "GH_TOKEN": pat}, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+    env = {**os.environ, "GH_TOKEN": pat}
+    proc = await asyncio.create_subprocess_exec(
+        "gh", "secret", "set", f"CONTEXT_{slot}", "--body", memory, "--repo", repo,
+        env=env,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE
+    )
     await proc.communicate()
 
 def load_digest_context() -> str:
