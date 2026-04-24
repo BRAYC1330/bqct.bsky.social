@@ -3,7 +3,6 @@ import re
 import generator
 import search
 import utils
-import link_extractor
 from logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -28,6 +27,7 @@ async def process(client, llm, task):
     
     urls = URL_PATTERN.findall(user_text)
     if urls:
+        import link_extractor
         extractor = link_extractor.LinkExtractor()
         contents = []
         for url in urls[:2]:
