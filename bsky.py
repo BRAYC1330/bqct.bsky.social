@@ -56,6 +56,8 @@ async def post_root(client: httpx.AsyncClient, bot_did: str, text: str):
     return r.json()
 
 async def post_reply(client: httpx.AsyncClient, bot_did: str, text: str, root_uri: str, root_cid: str, parent_uri: str, parent_cid: str):
+    if not parent_cid or not parent_uri:
+        logger.warning(f"[bsky] post_reply called with empty parent: uri={parent_uri}, cid={parent_cid}")
     reply = {"root": {"uri": root_uri, "cid": root_cid}, "parent": {"uri": parent_uri, "cid": parent_cid}}
     record = {"$type": "app.bsky.feed.post", "text": text, "createdAt": datetime.now(timezone.utc).isoformat(), "reply": reply}
     body = {"repo": bot_did, "collection": "app.bsky.feed.post", "record": record}

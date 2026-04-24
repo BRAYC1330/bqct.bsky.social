@@ -22,11 +22,15 @@ async def process(client, llm, task):
         return
 
     if config.RAW_DEBUG:
-        logger.info(f"=== OWNER-RAW-API-RESPONSE ===\n{json.dumps(chain_raw['raw'], indent=2, ensure_ascii=False)[:8000]}\n=== END ===")
+        raw_preview = json.dumps(chain_raw['raw'], indent=2, ensure_ascii=False)[:8000]
+        logger.info(f"=== OWNER-RAW-API-RESPONSE ===\n{raw_preview}\n=== END ===")
 
     token = chain_raw.get("access_jwt", "")
     thread_content = await parsers.parse_thread_full(chain_raw["raw"], client, token)
-    all_texts = thread_content["texts"]
+    all_nodes = thread_content.get("nodes", [])
+    
+    recent_messages = [n["text"] for n in all_nodes[-5:] if n.get("text")]
+    all_texts = [n["text"] for n in all_nodes if n.get("text")]
     link_texts = []
     
     link_tasks = [utils.fetch_url_content(url) for url in thread_content["links"][:5]]
@@ -53,12 +57,10 @@ async def process(client, llm, task):
         mem = state.load_thread_context(root_uri)
 
     search_data = ""
-    suffix = "\n\nQwen"
     is_c = "!c" in user_text.lower()
     is_t = "!t" in user_text.lower()
-
+    
     if is_c:
-        suffix = "\n\nQwen | Chainbase"
         clean = user_text.replace("!c", "").strip()
         keywords = generator.extract_chainbase_keywords_multi(llm, clean)
         for kw in keywords:
@@ -73,14 +75,17 @@ async def process(client, llm, task):
                     break
             await asyncio.sleep(0.3)
     elif is_t:
-        suffix = "\n\nQwen | Tavily"
         clean = user_text.replace("!t", "").strip()
         search_query, time_range = generator.extract_search_intent(llm, "", clean)
         if search_query:
             search_data = await search.fetch_tavily(client, search_query, time_range)
 
+    suffix = "\n\nQwen"
+    if (is_c or is_t) and search_
+        suffix = f"\n\nQwen | {'Chainbase' if is_c else 'Tavily'}"
+
     budget = 300 - len(suffix)
-    final_ctx = memory.merge_contexts(mem, root_thread, search_data, user_text)
+    final_ctx = memory.merge_contexts(mem, root_thread, search_data, user_text, recent_messages)
     if config.RAW_DEBUG:
         logger.info(f"=== OWNER-FINAL-CTX ===\n{final_ctx}\n=== END ===")
     

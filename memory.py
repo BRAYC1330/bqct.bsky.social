@@ -2,20 +2,22 @@ import re
 import logging
 logger = logging.getLogger(__name__)
 
-def merge_contexts(memory: str, root_thread: str, search_data: str, user_query: str) -> str:
+def merge_contexts(memory: str, root_thread: str, search_ str, user_query: str, recent_messages: list = None) -> str:
     parts = []
     if memory:
         parts.append(f"[MEMORY]\n{memory}")
+    if recent_messages:
+        parts.append(f"[RECENT]\n" + "\n".join(recent_messages[-5:]))
     if root_thread:
-        parts.append(f"[ROOT_THREAD]\n{root_thread}")
-    if search_data:
+        parts.append(f"[ROOT]\n{root_thread}")
+    if search_
         parts.append(f"[SEARCH]\n{search_data}")
     if user_query:
         parts.append(f"[QUERY]\n{user_query}")
     return "\n".join(parts)
 
-def format_search_summary(search_data: str, max_chars: int = 100) -> str:
-    if not search_data:
+def format_search_summary(search_ str, max_chars: int = 100) -> str:
+    if not search_
         return ""
     parts = search_data.split(" | ")
     if parts:
