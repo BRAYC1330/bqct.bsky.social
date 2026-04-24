@@ -23,24 +23,31 @@ query_refine: |
   Output:
 
 digest_generate: |
-  Generate a post about crypto trends.
+  Generate a crypto trends post with STRICT character limits.
   
+  Source data:
   {digest_data}
   
-  Rules:
-  - Total post must be EXACTLY under {max_chars} characters including all spaces, newlines, and emojis.
-  - Format:
-    {header}
-    
-    {content}
-    
-    {signature}
-  - Content must be {max_content} characters or less.
-  - Count every character carefully.
-  - If you exceed the limit, the post will be rejected.
+  Format rules:
+  1. Output structure:
+     {header}
+     
+     [CONTENT SECTION - MAX {max_content} CHARS]
+     
+     {signature}
+  2. Content section rules:
+     - For digest_mini: one line per trend: "🆕 KEYWORD 📊  SCORE"
+     - For digest_full: "🆕 KEYWORD 📊  SCORE: description"
+     - Descriptions must be concise, factual, under remaining chars
+  3. Character counting:
+     - Count EVERY character: letters, spaces, emojis, newlines
+     - Total post MUST be ≤ {max_chars} chars
+     - Content section MUST be ≤ {max_content} chars
+  4. If you exceed limits, the post will be rejected and regenerated.
+  
   {retry_feedback}
   
-  Output ONLY the complete post text.
+  Output ONLY the complete post text, nothing else.
 
 digest_refine: |
   Write a description for "{keyword}" under {max_desc_chars} characters.
