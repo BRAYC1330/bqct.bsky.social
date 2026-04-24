@@ -1,107 +1,124 @@
 import os
+import json
 import logging
 import httpx
 import time
-import json
+from datetime import datetime, timezone
+from cryptography.fernet import Fernet
 import config
 import parsers
-from logging_config import setup_logging
-setup_logging()
 logger = logging.getLogger(__name__)
 
-_trend_cache = None
-_trend_cache_time = 0
-_trend_cache_ttl = 300
+_session_cache = {}
+_session_key = None
 
-async def get_trending_topics_raw(client: httpx.AsyncClient) -> list:
-    global _trend_cache, _trend_cache_time
-    now = time.time()
-    if _trend_cache is not None and now - _trend_cache_time < _trend_cache_ttl:
-        return _trend_cache
-    try:
-        endpoint = "https://api.chainbase.com/tops/v1/tool/list-trending-topics"
-        logger.info(f"[SEARCH:API] GET {endpoint}?language=en")
-        r = await client.get(f"{endpoint}?language=en", timeout=config.SEARCH_TIMEOUT)
-        if r.status_code != 200:
-            logger.warning(f"[SEARCH:API] HTTP {r.status_code} from {endpoint}")
-            return []
-        _trend_cache = parsers.parse_trends(r.json())
-        _trend_cache_time = now
-        if config.RAW_DEBUG:
-            logger.info(f"=== RAW-TRENDS ===\n{json.dumps(_trend_cache, ensure_ascii=False, indent=2)}\n=== END ===")
-        logger.info(f"[SEARCH:API] Trends cached: {len(_trend_cache)} items")
-        return _trend_cache
-    except Exception as e:
-        logger.error(f"[SEARCH] Trend fetch failed: {e}")
-        return []
+def _get_fernet_key() -> Fernet:
+    global _session_key
+    if _session_key is None:
+        key = os.environ.get("SESSION_KEY", Fernet.generate_key().decode())
+        _session_key = Fernet(key.encode() if isinstance(key, str) else key)
+    return _session_key
 
-def clean_search_results(raw) -> str:
-    if not raw:
-        return ""
-    if isinstance(raw, list):
-        return " ".join([r.get("title", "") + " " + r.get("content", "")[:150] for r in raw])
-    return str(raw)[:500]
+async def login_with_cache(client: httpx.AsyncClient, handle: str, password: str):
+    session_path = "session.json"
+    if os.path.exists(session_path):
+        try:
+            os.chmod(session_path, 0o600)
+            with open(session_path, "rb") as f:
+                encrypted = f.read()
+            fernet = _get_fernet_key()
+            decrypted = fernet.decrypt(encrypted)
+            sess = json.loads(decrypted.decode())
+            expires_at = sess.get("expires_at", 0)
+            if time.time() < expires_at:
+                client.headers["Authorization"] = f"Bearer {sess['accessJwt']}"
+                logger.info("[bsky] Session loaded from cache")
+                return
+        except Exception:
+            pass
+    r = await client.post("https://bsky.social/xrpc/com.atproto.server.createSession", json={"identifier": handle, "password": password})
+    r.raise_for_status()
+    sess = r.json()
+    client.headers["Authorization"] = f"Bearer {sess['accessJwt']}"
+    sess["expires_at"] = time.time() + 3600
+    fernet = _get_fernet_key()
+    encrypted = fernet.encrypt(json.dumps(sess).encode())
+    with open(session_path, "wb") as f:
+        f.write(encrypted)
+    os.chmod(session_path, 0o600)
+    logger.info("[bsky] New session created and cached")
 
-async def fetch_tavily(client: httpx.AsyncClient, query: str, time_range: str = "") -> str:
-    logger.info(f"[SEARCH:TAVILY] Query: '{query}' | Time: {time_range or 'any'}")
-    if not config.TAVILY_API_KEY:
-        logger.warning("[SEARCH:TAVILY] API key not set")
-        return ""
-    try:
-        endpoint = "https://api.tavily.com/search"
-        payload = {"query": query, "search_depth": "basic", "max_results": 3, "include_raw_content": True}
-        if time_range:
-            payload["time_range"] = time_range
-        logger.info(f"[SEARCH:TAVILY] POST {endpoint} | payload: {json.dumps(payload)}")
-        r = await client.post(endpoint, headers={"Authorization": f"Bearer {config.TAVILY_API_KEY}"}, json=payload)
-        r.raise_for_status()
-        result = clean_search_results(r.json().get("results", []))
-        logger.info(f"[SEARCH:TAVILY] Response: {len(result)} chars | Preview: '{result[:100]}...'")
-        return result
-    except Exception as e:
-        logger.error(f"[SEARCH:TAVILY] Error: {e}")
-        return ""
+async def post_root(client: httpx.AsyncClient, bot_did: str, text: str):
+    record = {"$type": "app.bsky.feed.post", "text": text, "createdAt": datetime.now(timezone.utc).isoformat()}
+    body = {"repo": bot_did, "collection": "app.bsky.feed.post", "record": record}
+    r = await client.post("https://bsky.social/xrpc/com.atproto.repo.createRecord", json=body)
+    r.raise_for_status()
+    return r.json()
 
-async def fetch_chainbase_raw(client: httpx.AsyncClient, keyword: str) -> list:
-    logger.info(f"[SEARCH:CHAINBASE] Keyword query: '{keyword}'")
-    try:
-        safe_kw = httpx.URL(keyword).raw_path.decode()
-        endpoint = "https://api.chainbase.com/tops/v1/tool/search-narrative-candidates"
-        url = f"{endpoint}?keyword={safe_kw}"
-        logger.info(f"[SEARCH:CHAINBASE] GET {url}")
-        r = await client.get(url, timeout=config.SEARCH_TIMEOUT)
-        if r.status_code != 200:
-            logger.warning(f"[SEARCH:CHAINBASE] HTTP {r.status_code} from {endpoint}")
-            return []
-        data = r.json()
-        items = data.get("items", [])
-        result = [
-            {
-                "id": str(item.get("id", "")),
-                "keyword": item.get("keyword", ""),
-                "summary": item.get("summary", ""),
-                "score": int(item.get("score", 0)),
-                "rank_status": item.get("rank_status", "same")
-            }
-            for item in items[:5]
-        ]
-        preview = result[0].get('keyword', 'None') if result else 'None'
-        logger.info(f"[SEARCH:CHAINBASE] Response: {len(result)} items | Top: '{preview}'")
-        return result
-    except Exception as e:
-        logger.error(f"[SEARCH:CHAINBASE] Error: {e}")
-        return []
+async def post_reply(client: httpx.AsyncClient, bot_did: str, text: str, root_uri: str, root_cid: str, parent_uri: str, parent_cid: str):
+    if not parent_cid or not parent_uri:
+        logger.warning(f"[bsky] post_reply called with empty parent: uri={parent_uri}, cid={parent_cid}")
+    reply = {"root": {"uri": root_uri, "cid": root_cid}, "parent": {"uri": parent_uri, "cid": parent_cid}}
+    record = {"$type": "app.bsky.feed.post", "text": text, "createdAt": datetime.now(timezone.utc).isoformat(), "reply": reply}
+    body = {"repo": bot_did, "collection": "app.bsky.feed.post", "record": record}
+    r = await client.post("https://bsky.social/xrpc/com.atproto.repo.createRecord", json=body)
+    r.raise_for_status()
+    return r.json()
 
-async def fetch_chainbase(client: httpx.AsyncClient, keyword: str) -> str:
-    items = await fetch_chainbase_raw(client, keyword)
-    if not items:
-        return ""
-    lines = []
-    for item in items[:3]:
-        kw = item.get("keyword", "")
-        summary = item.get("summary", "")
-        score = item.get("score", 0)
-        rank = item.get("rank_status", "same")
-        emoji = config.TREND_EMOJIS.get(rank, "")
-        lines.append(f"{emoji} {kw} [{score}]: {summary[:150]}")
-    return " | ".join(lines)
+async def fetch_thread_chain(client: httpx.AsyncClient, uri: str):
+    r = await client.get("https://bsky.social/xrpc/app.bsky.feed.getPostThread", params={"uri": uri, "depth": 10, "parentHeight": 10})
+    r.raise_for_status()
+    data = r.json()
+    thread = data.get("thread", {})
+    root = _find_root(thread)
+    target_post = _find_target_post(thread, uri)
+    parent_info = _get_parent_info(thread, uri)
+    return {
+        "raw": data,
+        "root_uri": root.get("uri", ""),
+        "root_cid": root.get("cid", ""),
+        "root_text": root.get("record", {}).get("text", ""),
+        "target_uri": uri,
+        "target_cid": target_post.get("cid", "") if target_post else "",
+        "parent_uri": parent_info.get("uri", ""),
+        "parent_cid": parent_info.get("cid", ""),
+        "access_jwt": client.headers.get("Authorization", "").replace("Bearer ", "")
+    }
+
+def _find_root(node: dict) -> dict:
+    if not node or "post" not in node:
+        return {}
+    parent = node.get("parent", {})
+    if parent and "post" in parent:
+        return _find_root(parent)
+    return node.get("post", {})
+
+def _find_target_post(node: dict, target_uri: str) -> dict:
+    if not node or "post" not in node:
+        return {}
+    post = node.get("post", {})
+    if post.get("uri") == target_uri:
+        return post
+    for reply in node.get("replies", []):
+        if isinstance(reply, dict):
+            result = _find_target_post(reply, target_uri)
+            if result.get("uri"):
+                return result
+    return {}
+
+def _get_parent_info(node: dict, target_uri: str) -> dict:
+    if not node or "post" not in node:
+        return {}
+    post = node.get("post", {})
+    if post.get("uri") == target_uri:
+        parent = node.get("parent", {})
+        if parent and "post" in parent:
+            p = parent["post"]
+            return {"uri": p.get("uri", ""), "cid": p.get("cid", "")}
+        return {"uri": "", "cid": ""}
+    for reply in node.get("replies", []):
+        if isinstance(reply, dict):
+            result = _get_parent_info(reply, target_uri)
+            if result.get("uri"):
+                return result
+    return {}

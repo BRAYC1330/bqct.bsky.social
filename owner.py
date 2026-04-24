@@ -1,99 +1,42 @@
 import os
-import asyncio
 import logging
-import json
 import config
 import bsky
 import generator
-import search
 import memory
-import state
-import parsers
-import utils
 from logging_config import setup_logging
+
 setup_logging()
 logger = logging.getLogger(__name__)
 
 async def process(client, llm, task):
     uri = task["uri"]
     user_text = task["text"]
-    chain_raw = await bsky.fetch_thread_chain(client, uri)
-    if not chain_raw:
+    parent_uri = task.get("parent_uri", "")
+    if not parent_uri:
+        logger.warning(f"[owner] No parent_uri for {uri[:40]}, skipping")
         return
-
-    token = chain_raw.get("access_jwt", "")
-    allowed_handles = {config.BOT_HANDLE, "brayc1330.bsky.social"}
-    thread_content = await parsers.parse_thread_full(chain_raw["raw"], client, token, allowed_handles)
-    all_nodes = thread_content.get("nodes", [])
-    filtered_nodes = [n for n in all_nodes if n.get("handle") in allowed_handles]
-    recent_messages = [n["text"] for n in filtered_nodes[-4:] if n.get("text")]
-
-    root_node = next((n for n in filtered_nodes if n.get("is_root")), None)
-    root_embed_text = ""
-    if root_node:
-        root_record = chain_raw["raw"].get("thread", {}).get("post", {}).get("record", {})
-        embed = root_record.get("embed", {})
-        if embed:
-            embed_text, _ = parsers._extract_embed_full(embed)
-            if embed_text:
-                root_embed_text = f" {embed_text}"
-    root_thread = f"{root_node['text']}{root_embed_text}" if root_node else ""
-    middle_messages = [n["text"] for n in filtered_nodes[1:-4] if n.get("text")] if len(filtered_nodes) > 5 else []
-    link_texts = []
-    link_tasks = [utils.fetch_url_content(url) for url in thread_content["links"][:5]]
-    results = await asyncio.gather(*link_tasks)
-    link_texts = [r for r in results if r]
-
-    combined_raw = recent_messages + ([root_thread] if root_thread else []) + middle_messages + link_texts
-    compressed_root = memory.compress_thread_context(llm, combined_raw)
-
-    root_uri = chain_raw["root_uri"]
-    root_cid = chain_raw["root_cid"]
-    target_uri = chain_raw.get("target_uri", uri)
-    target_cid = chain_raw.get("target_cid", "")
-    active_digest = os.environ.get("ACTIVE_DIGEST_URI", "").strip()
-
-    if root_uri == active_digest:
-        mem = state.load_digest_context()
-    else:
-        mem = state.load_thread_context(root_uri)
-
-    search_data = ""
-    is_c = "!c" in user_text.lower()
-    is_t = "!t" in user_text.lower()
-
-    if is_c:
-        clean = user_text.replace("!c", "").strip()
-        keywords = generator.extract_chainbase_keywords_multi(llm, clean)
-        for kw in keywords:
-            raw_items = await search.fetch_chainbase_raw(client, kw)
-            if raw_items:
-                filtered = generator.filter_search_results_by_intent(llm, clean, raw_items)
-                if filtered:
-                    search_data = " | ".join([f"{config.TREND_EMOJIS.get(it.get('rank_status','same'),'')} {it['keyword']} [{it['score']}]: {it['summary'][:120]}" for it in filtered[:2]])
-                    break
-            await asyncio.sleep(0.3)
-    elif is_t:
-        clean = user_text.replace("!t", "").strip()
-        search_query, time_range = generator.extract_search_intent(llm, compressed_root, clean)
-        if search_query:
-            search_data = await search.fetch_tavily(client, search_query, time_range)
-
-    suffix = "\n\nQwen"
-    if (is_c or is_t) and search_data:
-        suffix = f"\n\nQwen | {'Chainbase' if is_c else 'Tavily'}"
-
-    budget = 300 - len(suffix)
-    final_ctx = memory.merge_contexts(mem, compressed_root, search_data, user_text, recent_messages)
-    reply = generator.get_answer(llm, final_ctx, user_text, search_data, max_chars=budget, temperature=0.7).strip() + suffix
-    if len(reply) > 298:
-        reply = generator.get_answer(llm, final_ctx, user_text, search_data, max_chars=budget - 10, temperature=0.7).strip() + suffix
-    if len(reply) > 298:
+    chain = await bsky.fetch_thread_chain(client, uri)
+    if not chain:
+        logger.error(f"[owner] Failed to fetch thread chain for {uri[:40]}")
         return
-
+    root_uri = chain["root_uri"]
+    root_cid = chain["root_cid"]
+    target_uri = chain.get("target_uri", uri)
+    target_cid = chain.get("target_cid", "")
+    parent_cid = chain.get("parent_cid", "")
+    if not target_cid:
+        logger.error(f"[owner] Missing target_cid for {uri[:40]}, skipping")
+        return
+    logger.info(f"[owner] Reply targeting: target={target_uri[:40]} | parent={parent_uri[:40]}")
+    root_thread = f"Root: {chain['root_text'][:200]}"
+    mem = memory.merge_contexts("", root_thread, "", user_text)
+    final_ctx = memory.merge_contexts(mem, root_thread, "", user_text)
+    reply = generator.get_answer(llm, final_ctx, user_text, "", max_chars=290, temperature=0.7).strip() + "\nQwen"
+    if len(reply) > 295:
+        reply = generator.get_answer(llm, final_ctx, user_text, "", max_chars=260, temperature=0.7).strip() + "\nQwen"
+    if len(reply) > 295:
+        logger.warning(f"[owner] Reply too long: {len(reply)} chars, skipping")
+        return
     await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, target_uri, target_cid)
-    if root_uri != active_digest:
-        search_summary = memory.format_search_summary(search_data)
-        new_mem = memory.update_and_truncate(mem, user_text, reply, search_summary)
-        await state.save_thread_context(root_uri, new_mem)
-    logger.info(f"[owner] Replied to {target_uri[:40]}")
+    logger.info(f"[owner] Reply sent successfully to {target_uri[:40]}")
