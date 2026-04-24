@@ -17,8 +17,11 @@ logger = logging.getLogger(__name__)
 async def process(client, llm, task):
     uri = task["uri"]
     user_text = task["text"]
+    logger.info(f"[owner] Task received: source_uri={uri[:40]} | User: '{user_text[:100]}'")
+    
     chain_raw = await bsky.fetch_thread_chain(client, uri)
     if not chain_raw:
+        logger.error(f"[owner] Failed to fetch thread chain for {uri[:40]}")
         return
 
     if config.RAW_DEBUG:
@@ -66,6 +69,9 @@ async def process(client, llm, task):
     target_cid = chain_raw.get("target_cid", "")
     parent_uri = chain_raw["parent_uri"]
     parent_cid = chain_raw["parent_cid"]
+    
+    logger.info(f"[owner] Reply targeting: target_uri={target_uri[:40]} target_cid={target_cid[:20]} | root_uri={root_uri[:40]}")
+    
     active_digest = os.environ.get("ACTIVE_DIGEST_URI", "").strip()
 
     if root_uri == active_digest:
@@ -90,6 +96,7 @@ async def process(client, llm, task):
                         f"{config.TREND_EMOJIS.get(it.get('rank_status','same'),'')} {it['keyword']} [{it['score']}]: {it['summary'][:120]}"
                         for it in filtered[:2]
                     ])
+                    logger.info(f"[CONTEXT:SEARCH_DATA] Chainbase -> {search_data}")
                     break
             await asyncio.sleep(0.3)
     elif is_t:
@@ -98,6 +105,8 @@ async def process(client, llm, task):
         search_query, time_range = generator.extract_search_intent(llm, compressed_root, clean)
         if search_query:
             search_data = await search.fetch_tavily(client, search_query, time_range)
+            if search_data:
+                logger.info(f"[CONTEXT:SEARCH_DATA] Tavily -> {search_data}")
 
     suffix = "\n\nQwen"
     if (is_c or is_t) and search_data:
@@ -112,17 +121,18 @@ async def process(client, llm, task):
     if len(reply) > 298:
         reply = generator.get_answer(llm, final_ctx, user_text, search_data, max_chars=budget - 10, temperature=0.7).strip() + suffix
     if len(reply) > 298:
+        logger.warning(f"[owner] Reply too long: {len(reply)} chars, skipping")
         return
 
     if config.RAW_DEBUG:
         logger.info(f"=== OWNER-REPLY ===\n{reply}\n=== END ===")
     
-    logger.info(f"[owner] Reply context: target_uri={target_uri[:40]} target_cid={target_cid[:20]} root_uri={root_uri[:40]}")
-    logger.info(f"[owner] Reply generated: {reply[:100]}...")
+    logger.info(f"[owner] Sending reply: source_cid={uri[:20]} | reply_to_cid={target_cid[:20]} | root_cid={root_cid[:20]}")
+    logger.info(f"[owner] Reply preview: {reply[:100]}...")
 
     await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, target_uri, target_cid)
     if root_uri != active_digest:
         search_summary = memory.format_search_summary(search_data)
         new_mem = memory.update_and_truncate(mem, user_text, reply, search_summary)
         await state.save_thread_context(root_uri, new_mem)
-    logger.info(f"[owner] Replied to {target_uri[:40]}...")
+    logger.info(f"[owner] Reply sent successfully to {target_uri[:40]}")

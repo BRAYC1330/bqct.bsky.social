@@ -51,7 +51,7 @@ async def fetch_tavily(client: httpx.AsyncClient, query: str, time_range: str = 
         r = await client.post("https://api.tavily.com/search", headers={"Authorization": f"Bearer {config.TAVILY_API_KEY}"}, json=payload)
         r.raise_for_status()
         result = clean_search_results(r.json().get("results", []))
-        logger.info(f"[SEARCH:TAVILY] Response: {len(result)} chars")
+        logger.info(f"[SEARCH:TAVILY] Response received: {len(result)} chars | Preview: '{result[:100]}...'")
         return result
     except Exception as e:
         logger.error(f"[SEARCH:TAVILY] Error: {e}")
@@ -79,7 +79,8 @@ async def fetch_chainbase_raw(client: httpx.AsyncClient, keyword: str) -> list:
             }
             for item in items[:5]
         ]
-        logger.info(f"[SEARCH:CHAINBASE] Response: {len(result)} items")
+        preview = result[0].get('keyword', 'None') if result else 'None'
+        logger.info(f"[SEARCH:CHAINBASE] Response received: {len(result)} items | Top keyword: '{preview}'")
         return result
     except Exception as e:
         logger.error(f"[SEARCH:CHAINBASE] Error: {e}")
