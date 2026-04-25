@@ -22,7 +22,7 @@ async def run(client, llm, task_type="digest_mini"):
         return False
 
     sig = f"Qwen | Chainbase TOPS {config.SIGNATURE_ICONS}"
-    stats_emoji = config.TREND_STATS_EMOJIS
+    stats_emoji = config.TREND_STATS_EMOJI
 
     posted = False
     try:
