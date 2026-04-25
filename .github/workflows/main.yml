@@ -52,18 +52,18 @@ jobs:
         uses: actions/cache@v4
         with:
           path: models
-          key: ${{ runner.os }}-qwen25-coder-14b-q4km-${{ hashFiles('models/**') }}
+          key: ${{ runner.os }}-qwen25-coder-14b-q5km-${{ hashFiles('models/**') }}
           restore-keys: |
-            ${{ runner.os }}-qwen25-coder-14b-q4km-
+            ${{ runner.os }}-qwen25-coder-14b-q5km-
       - name: Download model if not cached
         if: steps.checker.outputs.status == 'true'
         run: |
           set -e
           mkdir -p models
-          FILE="models/qwen2.5-coder-14b-instruct-q4_k_m.gguf"
+          FILE="models/qwen2.5-coder-14b-instruct-q5_k_m.gguf"
           EXPECTED_SHA256="${{ secrets.MODEL_SHA256 }}"
           if [ ! -f "$FILE" ] || [ $(stat -c%s "$FILE") -lt 1000000000 ]; then
-            curl -L --retry 3 --retry-delay 10 -o "$FILE" "https://huggingface.co/Qwen/Qwen2.5-Coder-14B-Instruct-GGUF/resolve/main/qwen2.5-coder-14b-instruct-q4_k_m.gguf?download=true"
+            curl -L --retry 3 --retry-delay 10 -o "$FILE" "https://huggingface.co/Qwen/Qwen2.5-Coder-14B-Instruct-GGUF/resolve/main/qwen2.5-coder-14b-instruct-q5_k_m.gguf?download=true"
             if [ -n "$EXPECTED_SHA256" ]; then
               echo "$EXPECTED_SHA256  $FILE" | sha256sum -c -
             fi
