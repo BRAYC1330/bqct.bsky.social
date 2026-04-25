@@ -3,6 +3,19 @@ on:
   schedule:
     - cron: '0 * * * *'
   workflow_dispatch:
+    inputs:
+      clear_mini:
+        description: 'Удалить LAST_MINI_DIGEST'
+        type: boolean
+        default: false
+      clear_full:
+        description: 'Удалить LAST_FULL_DIGEST'
+        type: boolean
+        default: false
+      clear_contexts:
+        description: 'Удалить секреты (имена через запятую или * для всех CONTEXT_0-9)'
+        type: string
+        default: ''
 permissions:
   contents: read
 jobs:
@@ -17,6 +30,42 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+      - name: Clear selected secrets
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          CLEAR_MINI: ${{ github.event.inputs.clear_mini }}
+          CLEAR_FULL: ${{ github.event.inputs.clear_full }}
+          CLEAR_CONTEXTS: ${{ github.event.inputs.clear_contexts }}
+          PAT: ${{ secrets.PAT }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          python3 << 'EOF'
+          import os, subprocess
+          clear_mini = os.environ.get("CLEAR_MINI", "false").lower() == "true"
+          clear_full = os.environ.get("CLEAR_FULL", "false").lower() == "true"
+          clear_ctx = os.environ.get("CLEAR_CONTEXTS", "").strip().upper()
+          targets = []
+          if clear_mini: targets.append("LAST_MINI_DIGEST")
+          if clear_full: targets.append("LAST_FULL_DIGEST")
+          if clear_ctx:
+              if clear_ctx == "*":
+                  targets.extend([f"CONTEXT_{i}" for i in range(10)])
+              else:
+                  targets.extend([t.strip() for t in clear_ctx.split(",") if t.strip()])
+          if not targets:
+              print("[INFO] No secrets to clear.")
+              exit(0)
+          repo = os.environ["GITHUB_REPOSITORY"]
+          pat = os.environ["PAT"]
+          env = {**os.environ, "GH_TOKEN": pat}
+          for secret in targets:
+              cmd = ["gh", "secret", "delete", secret, "--repo", repo]
+              try:
+                  subprocess.run(cmd, env=env, check=True, capture_output=True)
+                  print(f"[OK] Deleted {secret}")
+              except subprocess.CalledProcessError:
+                  print(f"[WARN] Failed to delete {secret} (may not exist)")
+          EOF
       - name: Cache pip dependencies
         id: cache-pip
         uses: actions/cache@v4
