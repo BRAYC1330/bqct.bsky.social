@@ -38,7 +38,8 @@ async def run(client, llm, task_type="digest_mini"):
                 lines.append(line)
                 current_len += len(line) + 1
             if not lines: return False
-            final_post = f"{header}\n\n{'\n'.join(lines)}\n\n{sig}"
+            joined_lines = "\n".join(lines)
+            final_post = f"{header}\n\n{joined_lines}\n\n{sig}"
             if len(final_post) > MAX_POST_CHARS: return False
             if config.RAW_DEBUG: logger.info(f"=== RAW-MINI-POST ===\n{final_post}\n=== END ===")
             resp = await bsky.post_root(client, config.BOT_DID, final_post)
