@@ -35,6 +35,8 @@ async def run():
     now_utc = datetime.now(timezone.utc).isoformat()
     owner_count = 0
     digest_comment_count = 0
+    clear_mini = os.getenv("CLEAR_MINI", "false").lower() == "true"
+    clear_full = os.getenv("CLEAR_FULL", "false").lower() == "true"
     client = httpx.AsyncClient(timeout=30)
     try:
         await bsky.login_with_cache(client, config.BOT_HANDLE, config.BOT_PASSWORD)
@@ -64,13 +66,19 @@ async def run():
     if _check_timer("LAST_MINI_DIGEST", 4 * 3600):
         tasks.append({"type": "digest_mini"})
         digest_task_type = "mini"
-        utils.update_github_secret("LAST_MINI_DIGEST", now_utc)
-        logger.debug("[TIMER] LAST_MINI_DIGEST reset")
+        if not clear_mini:
+            utils.update_github_secret("LAST_MINI_DIGEST", now_utc)
+            logger.debug("[TIMER] LAST_MINI_DIGEST reset")
+        else:
+            logger.debug("[TIMER] LAST_MINI_DIGEST update skipped (clear flag active)")
     elif _check_timer("LAST_FULL_DIGEST", 2 * 3600):
         tasks.append({"type": "digest_full"})
         digest_task_type = "full"
-        utils.update_github_secret("LAST_FULL_DIGEST", now_utc)
-        logger.debug("[TIMER] LAST_FULL_DIGEST reset")
+        if not clear_full:
+            utils.update_github_secret("LAST_FULL_DIGEST", now_utc)
+            logger.debug("[TIMER] LAST_FULL_DIGEST reset")
+        else:
+            logger.debug("[TIMER] LAST_FULL_DIGEST update skipped (clear flag active)")
     with open("work_data.json", "w") as f:
         json.dump({"tasks": tasks}, f)
     utils.update_github_secret("LAST_PROCESSED", now_utc)
