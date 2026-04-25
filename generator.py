@@ -69,7 +69,7 @@ def get_reply(llm, memory: str, root_thread: str, search_data: str, query: str) 
 
 def generate_digest(llm, keyword: str, summary: str, max_chars: int) -> str:
     prompt = _prompts["digest_refine"].format(keyword=keyword, summary=summary, max_desc_chars=max_chars)
-    logger.info(f"[generator] RAW_DIGEST_PROMPT:\n{prompt}")
+    logger.info(f"=== APPLIED_DIGEST_PROMPT ===\n{prompt}\n=== END_APPLIED_DIGEST_PROMPT ===")
     try:
         raw = llm(prompt, max_tokens=config.DIGEST_MAX_TOKENS, temperature=0.2)
         logger.info(f"[generator] RAW_DIGEST_OUTPUT: {raw}")
