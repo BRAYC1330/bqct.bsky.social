@@ -35,7 +35,7 @@ reply: |
 digest_refine: |
   Write a concise description of the trend "{keyword}".
   Rules:
-  - Compose the most informative text possible {max_desc_chars} characters.
+  - Compose the most informative text, hard maximum {max_desc_chars} characters.
   - No fluff.
   Context: {summary}
   Description:

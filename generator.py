@@ -71,7 +71,7 @@ def generate_digest(llm, keyword: str, summary: str, max_chars: int) -> str:
     prompt = _prompts["digest_refine"].format(keyword=keyword, summary=summary, max_desc_chars=max_chars)
     logger.info(f"[generator] RAW_DIGEST_PROMPT:\n{prompt}")
     try:
-        raw = llm(prompt, max_tokens=100, temperature=0.2)
+        raw = llm(prompt, max_tokens=54, temperature=0.2)
         logger.info(f"[generator] RAW_DIGEST_OUTPUT: {raw}")
         return raw["choices"][0]["text"].strip()
     except Exception as e:
