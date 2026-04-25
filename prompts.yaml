@@ -34,15 +34,11 @@ reply: |
 
 digest_refine: |
   Write a concise description of the trend "{keyword}".
-  Focus on price action, volume, catalysts, or outlook.
   Rules:
-  - Max {max_desc_chars} characters.
-  - Start directly with the fact.
+  - Compose the most informative text possible {max_desc_chars} characters.
   - No fluff.
   Context: {summary}
   Description:
-
-  Write a concise description of the trend "{keyword}".
 
 context_memory: |
   Extract key facts and core essence from the conversation thread to preserve context for future turns.

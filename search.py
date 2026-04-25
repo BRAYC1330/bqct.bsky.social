@@ -12,7 +12,7 @@ async def get_trending_topics_raw() -> list:
             r = await client.get("https://api.chainbase.com/tops/v1/tool/list-trending-topics?language=en", timeout=config.SEARCH_TIMEOUT)
             logger.info(f"[search] Chainbase RAW_RESPONSE_STATUS: {r.status_code}")
             if r.status_code != 200: return []
-            logger.info(f"[search] Chainbase RAW_RESPONSE_BODY: {json.dumps(r.json(), ensure_ascii=False)}")
+            logger.info(f"[search] Chainbase RAW_RESPONSE_BODY: {json.dumps(r.json(), indent=2, ensure_ascii=False)}")
             from parser_chainbase import parse_trending_items
             return parse_trending_items(r.json())
     except Exception as e:
@@ -30,7 +30,7 @@ async def fetch_tavily(query: str, time_range: str = "") -> str:
         async with httpx.AsyncClient(timeout=30) as client:
             r = await client.post(url, headers=headers, json=payload)
             logger.info(f"[search] Tavily RAW_RESPONSE_STATUS: {r.status_code}")
-            logger.info(f"[search] Tavily RAW_RESPONSE_BODY: {json.dumps(r.json(), ensure_ascii=False)}")
+            logger.info(f"[search] Tavily RAW_RESPONSE_BODY: {json.dumps(r.json(), indent=2, ensure_ascii=False)}")
             r.raise_for_status()
             from parser_tavily import clean_search_results
             return clean_search_results(r.json().get("results", []))
@@ -46,7 +46,7 @@ async def fetch_chainbase(query: str) -> str:
             r = await client.get(url, timeout=config.SEARCH_TIMEOUT)
             logger.info(f"[search] Chainbase Search RAW_RESPONSE_STATUS: {r.status_code}")
             if r.status_code != 200: return ""
-            logger.info(f"[search] Chainbase Search RAW_RESPONSE_BODY: {json.dumps(r.json(), ensure_ascii=False)}")
+            logger.info(f"[search] Chainbase Search RAW_RESPONSE_BODY: {json.dumps(r.json(), indent=2, ensure_ascii=False)}")
             from parser_chainbase import format_chainbase_results, parse_search_results
             items = parse_search_results(r.json())
             return format_chainbase_results(items)

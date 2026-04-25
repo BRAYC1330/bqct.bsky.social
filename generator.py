@@ -60,7 +60,7 @@ def get_reply(llm, memory: str, root_thread: str, search_data: str, query: str) 
     prompt = _prompts["reply"].format(memory=memory or "None", root_thread=root_thread or "None", search_data=search_data or "None", query=query)
     logger.info(f"[generator] RAW_REPLY_PROMPT:\n{prompt}")
     try:
-        raw = llm(prompt, max_tokens=75, temperature=0.7)
+        raw = llm(prompt, max_tokens=100, temperature=0.7)
         logger.info(f"[generator] RAW_REPLY_OUTPUT: {raw}")
         return raw["choices"][0]["text"].strip()
     except Exception as e:
@@ -71,12 +71,12 @@ def generate_digest(llm, keyword: str, summary: str, max_chars: int) -> str:
     prompt = _prompts["digest_refine"].format(keyword=keyword, summary=summary, max_desc_chars=max_chars)
     logger.info(f"[generator] RAW_DIGEST_PROMPT:\n{prompt}")
     try:
-        raw = llm(prompt, max_tokens=min(max_chars + 20, 120), temperature=0.2)
+        raw = llm(prompt, max_tokens=100, temperature=0.2)
         logger.info(f"[generator] RAW_DIGEST_OUTPUT: {raw}")
-        return raw["choices"][0]["text"].strip().split("\n")[0]
+        return raw["choices"][0]["text"].strip()
     except Exception as e:
         logger.error(f"[generator] generate_digest failed: {e}")
-        return summary[:max_chars]
+        return summary
 
 def update_context_memory(llm, history: str) -> str:
     prompt = _prompts["context_memory"].format(history=history)
@@ -87,4 +87,4 @@ def update_context_memory(llm, history: str) -> str:
         return raw["choices"][0]["text"].strip().replace("###", "").replace("---", "")
     except Exception as e:
         logger.error(f"[generator] update_context_memory failed: {e}")
-        return history[-200:]
+        return history

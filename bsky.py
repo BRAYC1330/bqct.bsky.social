@@ -83,12 +83,12 @@ async def fetch_thread_chain(client, uri):
     if raw_embed:
         if raw_embed.get("$type") == "app.bsky.embed.external#view":
             ext = raw_embed.get("external", {})
-            embeds["links"].append({"url": ext.get("uri"), "title": ext.get("title"), "desc": ext.get("description", "")[:150]})
+            embeds["links"].append({"url": ext.get("uri"), "title": ext.get("title"), "desc": ext.get("description", "")})
         elif raw_embed.get("$type") == "app.bsky.embed.record#view":
             rec = raw_embed.get("record", {})
             if rec.get("$type") == "app.bsky.embed.record#viewRecord":
                 val = rec.get("value", {})
-                embeds["reposts"].append({"author": rec.get("author", {}).get("handle"), "text": val.get("text", "")[:150], "uri": rec.get("uri")})
+                embeds["reposts"].append({"author": rec.get("author", {}).get("handle"), "text": val.get("text", ""), "uri": rec.get("uri")})
     return {
         "root_uri": root_uri, "root_cid": root_cid, "root_text": root_text,
         "parent_cid": parent_cid, "embeds": embeds,

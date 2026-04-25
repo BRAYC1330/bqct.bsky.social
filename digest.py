@@ -19,7 +19,7 @@ def _get_trend_emoji(rank_status: str) -> str:
 async def run(client, llm, task_type="digest_mini"):
     trends = await search.get_trending_topics_raw()
     logger.info(f"[digest] PARSED_TRENDS_COUNT: {len(trends)}")
-    logger.info(f"[digest] PARSED_TRENDS_FULL_DATA: {json.dumps(trends, ensure_ascii=False)}")
+    logger.info(f"[digest] PARSED_TRENDS_FULL_DATA: {json.dumps(trends, indent=2, ensure_ascii=False)}")
     if not trends:
         logger.warning("[digest] No trends fetched")
         return False
@@ -43,7 +43,9 @@ async def run(client, llm, task_type="digest_mini"):
             if not lines: return False
             joined_lines = "\n".join(lines)
             final_post = f"{header}\n\n{joined_lines}\n\n{sig}"
-            if len(final_post) > MAX_POST_CHARS: return False
+            if len(final_post) > MAX_POST_CHARS: 
+                logger.warning(f"[digest] SKIPPED: MINI OVERFLOW ({len(final_post)} > {MAX_POST_CHARS})")
+                return False
             if config.RAW_DEBUG: logger.info(f"=== RAW-MINI-POST ===\n{final_post}\n=== END ===")
             resp = await bsky.post_root(client, config.BOT_DID, final_post)
             if resp.get("uri"):
@@ -63,8 +65,12 @@ async def run(client, llm, task_type="digest_mini"):
             if max_desc < 20: return False
             desc = generator.generate_digest(llm, kw, summary, max_desc)
             if len(desc) > max_desc:
-                desc = desc[:max_desc].rsplit(' ', 1)[0] + "..."
+                logger.warning(f"[digest] SKIPPED: DESC OVERFLOW ({len(desc)} > {max_desc})")
+                return False
             final_post = f"{header}\n\n{title}{desc}\n\n{sig}"
+            if len(final_post) > MAX_POST_CHARS:
+                logger.warning(f"[digest] SKIPPED: FINAL OVERFLOW ({len(final_post)} > {MAX_POST_CHARS})")
+                return False
             if config.RAW_DEBUG: logger.info(f"=== RAW-FULL-POST ===\n{final_post}\n=== END ===")
             resp = await bsky.post_root(client, config.BOT_DID, final_post)
             if resp.get("uri"):
