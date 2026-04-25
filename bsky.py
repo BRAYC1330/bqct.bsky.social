@@ -2,8 +2,9 @@ import os
 import json
 import logging
 import httpx
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import config
+import utils
 from logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -28,6 +29,11 @@ async def login_with_cache(client, handle, password):
         try:
             with open(session_path) as f:
                 sess = json.load(f)
+            if sess.get("expiresAt"):
+                exp = datetime.fromisoformat(sess["expiresAt"].replace("Z", "+00:00"))
+                if exp < datetime.now(timezone.utc) - timedelta(minutes=5):
+                    os.remove(session_path)
+                    return await login_with_cache(client, handle, password)
             client.headers["Authorization"] = f"Bearer {sess['accessJwt']}"
             logger.debug("[bsky] Session loaded from cache")
             return
@@ -44,20 +50,18 @@ async def login_with_cache(client, handle, password):
 async def post_root(client, bot_did, text):
     record = {"$type": "app.bsky.feed.post", "text": text, "createdAt": datetime.now(timezone.utc).isoformat()}
     body = {"repo": bot_did, "collection": "app.bsky.feed.post", "record": record}
-    r = await client.post("https://bsky.social/xrpc/com.atproto.repo.createRecord", json=body)
-    r.raise_for_status()
+    r = await utils.request_with_retry(client, "POST", "https://bsky.social/xrpc/com.atproto.repo.createRecord", json=body)
     return r.json()
 
 async def post_reply(client, bot_did, text, root_uri, root_cid, parent_uri, parent_cid):
     reply = {"root": {"uri": root_uri, "cid": root_cid}, "parent": {"uri": parent_uri, "cid": parent_cid}}
     record = {"$type": "app.bsky.feed.post", "text": text, "createdAt": datetime.now(timezone.utc).isoformat(), "reply": reply}
     body = {"repo": bot_did, "collection": "app.bsky.feed.post", "record": record}
-    r = await client.post("https://bsky.social/xrpc/com.atproto.repo.createRecord", json=body)
-    r.raise_for_status()
+    r = await utils.request_with_retry(client, "POST", "https://bsky.social/xrpc/com.atproto.repo.createRecord", json=body)
     return r.json()
 
 async def fetch_thread_chain(client, uri):
-    r = await client.get("https://bsky.social/xrpc/app.bsky.feed.getPostThread", params={"uri": uri, "depth": 10})
+    r = await utils.request_with_retry(client, "GET", "https://bsky.social/xrpc/app.bsky.feed.getPostThread", params={"uri": uri, "depth": 10})
     if r.status_code != 200:
         logger.warning(f"[bsky] Thread fetch failed: {r.status_code}")
         return None
@@ -72,10 +76,8 @@ async def fetch_thread_chain(client, uri):
     root_cid = root_ref.get("cid") if root_ref.get("cid") else post.get("cid", "")
     root_text = record.get("text", "") if root_uri == uri else ""
     parent_cid = parent_ref.get("cid", "") if parent_ref else ""
-
     all_texts = _extract_texts(thread)
     full_thread_text = " ".join(all_texts)
-
     embeds = {"links": [], "reposts": []}
     raw_embed = post.get("embed", {})
     if raw_embed:
@@ -87,7 +89,6 @@ async def fetch_thread_chain(client, uri):
             if rec.get("$type") == "app.bsky.embed.record#viewRecord":
                 val = rec.get("value", {})
                 embeds["reposts"].append({"author": rec.get("author", {}).get("handle"), "text": val.get("text", "")[:150], "uri": rec.get("uri")})
-
     return {
         "root_uri": root_uri, "root_cid": root_cid, "root_text": root_text,
         "parent_cid": parent_cid, "embeds": embeds,
@@ -98,6 +99,5 @@ async def fetch_notifications(client, limit=100, seen_at=None):
     params = {"limit": limit}
     if seen_at and seen_at not in ("{}", "null", "none"):
         params["seen_at"] = seen_at
-    r = await client.get("https://bsky.social/xrpc/app.bsky.notification.listNotifications", params=params, timeout=15)
-    r.raise_for_status()
+    r = await utils.request_with_retry(client, "GET", "https://bsky.social/xrpc/app.bsky.notification.listNotifications", params=params, timeout=15)
     return r.json().get("notifications", [])

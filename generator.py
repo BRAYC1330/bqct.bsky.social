@@ -28,9 +28,9 @@ def get_model():
 
 def extract_tavily_intent(llm, query: str) -> tuple:
     prompt = _prompts["tavily_intent"].format(query=query)
-    if config.DEBUG_OWNER: logger.info(f"[DEBUG-OWNER] PROMPT_TAVILY_INTENT:\n{prompt}")
     try:
         raw = llm(prompt, max_tokens=60, temperature=0.1)
+        logger.info(f"[generator] RAW_TAVILY_INTENT: {raw}")
         if "| TIME:" in raw:
             q_part, t_part = raw.split("| TIME:", 1)
             query_out = q_part.replace("QUERY:", "").strip()
@@ -42,22 +42,23 @@ def extract_tavily_intent(llm, query: str) -> tuple:
 
 def extract_chainbase_keyword(llm, text: str) -> str:
     prompt = _prompts["chainbase_keyword"].format(text=text)
-    if config.DEBUG_OWNER: logger.info(f"[DEBUG-OWNER] PROMPT_CHAINBASE_KEYWORD:\n{prompt}")
     try:
         raw = llm(prompt, max_tokens=20, temperature=0.1)
+        logger.info(f"[generator] RAW_KEYWORD: {raw}")
         keyword = raw.strip().split("\n")[0].replace("KEYWORD:", "").strip().strip('"')
         keyword = re.sub(r'[^a-zA-Z0-9\s]', '', keyword).strip()
         words = keyword.split()
-        if len(words) > 3: return " ".join(words[:3])
-        if not keyword or len(keyword) > 50: return text[:30]
-        return keyword
+        if not words: return text[:30]
+        final_keyword = " ".join(words[:3])
+        if len(final_keyword) > 50: return " ".join(text.split()[:3])
+        return final_keyword
     except Exception: return text[:30]
 
-def get_reply(llm, memory: str, root_thread: str, search_data: str, query: str) -> str:
+def get_reply(llm, memory: str, root_thread: str, search_ str, query: str) -> str:
     prompt = _prompts["reply"].format(memory=memory or "None", root_thread=root_thread or "None", search_data=search_data or "None", query=query)
-    if config.DEBUG_OWNER: logger.info(f"[DEBUG-OWNER] PROMPT_REPLY:\n{prompt}")
     try:
         raw = llm(prompt, max_tokens=75, temperature=0.7)
+        logger.info(f"[generator] RAW_REPLY: {raw}")
         return raw["choices"][0]["text"].strip()
     except Exception as e:
         logger.error(f"[generator] get_reply failed: {e}")
@@ -65,17 +66,16 @@ def get_reply(llm, memory: str, root_thread: str, search_data: str, query: str) 
 
 def generate_digest(llm, keyword: str, summary: str, max_chars: int) -> str:
     prompt = _prompts["digest_refine"].format(keyword=keyword, summary=summary, max_desc_chars=max_chars)
-    if config.DEBUG_OWNER: logger.info(f"[DEBUG-OWNER] PROMPT_DIGEST_REFINE:\n{prompt}")
     try:
         raw = llm(prompt, max_tokens=min(max_chars + 20, 120), temperature=0.2)
+        logger.info(f"[generator] RAW_DIGEST: {raw}")
         return raw["choices"][0]["text"].strip().split("\n")[0]
     except Exception as e:
         logger.error(f"[generator] generate_digest failed: {e}")
         return summary[:max_chars]
 
 def update_context_memory(llm, history: str) -> str:
-    prompt = _prompts["context_memory"].format(history=history[:1500])
-    if config.DEBUG_OWNER: logger.info(f"[DEBUG-OWNER] PROMPT_CONTEXT_MEMORY:\n{prompt}")
+    prompt = _prompts["context_memory"].format(history=history)
     try:
         raw = llm(prompt, max_tokens=300, temperature=0.3)
         return raw["choices"][0]["text"].strip().replace("###", "").replace("---", "")

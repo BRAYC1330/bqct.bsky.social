@@ -1,29 +1,27 @@
 tavily_intent: |
-  Extract search query and time filter for web search.
+  Extraction of a search query and time filter for web search.
   Rules:
-  - If time is a search filter, use: day, week, month, year.
-  - If time is part of the question itself, use: none.
+  - For TIME: If time is a search filter, use: day, week, month, year.
+  - For TIME: If time is part of the question itself, use: none.
+  - For text: Extract only the essence that that will give the most accurate answer from the web search.
   - Return ONLY: QUERY: <text> | TIME: <day/week/month/year/none>
+
   User query: "{query}"
   Output:
 
 chainbase_keyword: |
-  Extract a single most relevant crypto/tech/finance keyword or topic from the text.
+  Extract from the text only one word or compound object name that constitute the essence of the query.
   Rules:
-  - Return ONLY the keyword, nothing else.
-  - If multiple topics, pick the most prominent one.
-  - Max 3 words.
+  - Cut out all small talk
+  - Maximum 2 words.
   Text: "{text}"
   Keyword:
 
 reply: |
-  You are an expert analyst. Answer the query concisely using the provided context.
+  You are an expert analyst. Answer the query concisely, using the provided context.
   Rules:
-  - If [SEARCH] exists, answer STRICTLY based on it.
-  - Keep the answer STRICTLY under 220 characters.
-  - Do not use ellipsis (...). Finish the sentence.
-  - No markdown, no handles, no links.
-  - If the input is spam/praise, reply with a short acknowledgment.
+  - The answer must not exceed 260 characters.
+
   Context:
   [MEMORY]
   {memory}
@@ -34,11 +32,8 @@ reply: |
   [SEARCH]
   {search_data}
 
-  Query: {query}
-  Reply:
-
 digest_refine: |
-  Write a concise description for the crypto trend "{keyword}".
+  Write a concise description of the trend "{keyword}".
   Focus on price action, volume, catalysts, or outlook.
   Rules:
   - Max {max_desc_chars} characters.
@@ -46,6 +41,8 @@ digest_refine: |
   - No fluff.
   Context: {summary}
   Description:
+
+  Write a concise description of the trend "{keyword}".
 
 context_memory: |
   Extract key facts and core essence from the conversation thread to preserve context for future turns.

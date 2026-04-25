@@ -5,8 +5,7 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 def is_english_text(text: str) -> bool:
-    if not text:
-        return False
+    if not text: return False
     return sum(1 for c in text if ord(c) < 128) / len(text) > 0.7
 
 def parse_trending_items(items: Any) -> List[Dict]:
@@ -17,11 +16,9 @@ def parse_trending_items(items: Any) -> List[Dict]:
     return eng[:10]
 
 def parse_search_results(data: Any) -> List[Dict]:
-    if not isinstance(data, dict):
-        return []
+    if not isinstance(data, dict): return []
     items = data.get("items", [])
-    if not isinstance(items, list):
-        return []
+    if not isinstance(items, list): return []
     eng = [i for i in items if is_english_text(i.get("keyword", "")) and is_english_text(i.get("summary", ""))]
     return sorted(eng, key=lambda x: x.get("score", 0), reverse=True)[:6]
 
@@ -32,7 +29,7 @@ def format_chainbase_results(items: List[Dict]) -> str:
         score = item.get("score", 0)
         rank = item.get("current_rank", "N/A")
         status = item.get("rank_status", "same")
-        summary = item.get("summary", "")[:200]
+        summary = item.get("summary", "")
         lines.append(f"{i}. {kw} (Score: {score:.1f} | Rank: {rank} | Trend: {status})\nSummary: {summary}")
     return "\n\n".join(lines)
 
