@@ -1,5 +1,6 @@
 import os
 import logging
+import json
 from datetime import datetime, timezone
 import config
 import search
@@ -17,6 +18,8 @@ def _get_trend_emoji(rank_status: str) -> str:
 
 async def run(client, llm, task_type="digest_mini"):
     trends = await search.get_trending_topics_raw()
+    logger.info(f"[digest] PARSED_TRENDS_COUNT: {len(trends)}")
+    logger.info(f"[digest] PARSED_TRENDS_FULL_DATA: {json.dumps(trends, ensure_ascii=False)}")
     if not trends:
         logger.warning("[digest] No trends fetched")
         return False
@@ -51,6 +54,8 @@ async def run(client, llm, task_type="digest_mini"):
         elif task_type == "digest_full":
             item = trends[0]
             kw, sc, st, summary = item.get("keyword", "?"), int(item.get("score", 0)), item.get("rank_status", "same"), item.get("summary", "")
+            logger.info(f"[digest] DIGEST_KEYWORD: {kw}")
+            logger.info(f"[digest] DIGEST_SUMMARY: {summary}")
             e = _get_trend_emoji(st)
             header = "TOP CRYPTO TREND:"
             title = f"{e + ' ' if e else ''}{kw} {stats_emoji}  {sc}: "
