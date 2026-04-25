@@ -89,6 +89,8 @@ jobs:
           ACTIVE_DIGEST_URI: ${{ secrets.ACTIVE_DIGEST_URI }}
           LAST_MINI_DIGEST: ${{ secrets.LAST_MINI_DIGEST }}
           LAST_FULL_DIGEST: ${{ secrets.LAST_FULL_DIGEST }}
+          CLEAR_MINI: ${{ github.event.inputs.clear_mini }}
+          CLEAR_FULL: ${{ github.event.inputs.clear_full }}
         run: python check.py
       - name: Install heavy deps
         if: steps.checker.outputs.status == 'true'
