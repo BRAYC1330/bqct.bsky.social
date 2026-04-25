@@ -54,7 +54,7 @@ def extract_chainbase_keyword(llm, text: str) -> str:
         return final_keyword
     except Exception: return text[:30]
 
-def get_reply(llm, memory: str, root_thread: str, search_ str, query: str) -> str:
+def get_reply(llm, memory: str, root_thread: str, search_data: str, query: str) -> str:
     prompt = _prompts["reply"].format(memory=memory or "None", root_thread=root_thread or "None", search_data=search_data or "None", query=query)
     try:
         raw = llm(prompt, max_tokens=75, temperature=0.7)
