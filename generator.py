@@ -105,7 +105,7 @@ def extract_chainbase_keyword(llm: Llama, text: str) -> str:
     try:
         raw: Any = llm(prompt, max_tokens=config.KEYWORD_MAX_TOKENS, temperature=0.1)
         logger.info(f"[generator] RAW_KEYWORD_OUTPUT: {raw}")
-        raw_str = str(raw)
+        raw_str = _extract_text(raw)
         keyword = raw_str.strip().split("\n")[0].replace("KEYWORD:", "").strip().strip('"')
         keyword = re.sub(r'[^a-zA-Z0-9\s]', '', keyword).strip()
         words = keyword.split()
