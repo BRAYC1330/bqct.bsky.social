@@ -5,6 +5,7 @@ import json
 import subprocess
 import config
 import utils
+
 logger = logging.getLogger(__name__)
 
 def update_github_secret(key: str, value: str) -> None:
