@@ -5,9 +5,6 @@ import json
 import subprocess
 import config
 import utils
-from logging_config import setup_logging
-
-setup_logging()
 logger = logging.getLogger(__name__)
 
 def update_github_secret(key: str, value: str) -> None:
@@ -33,7 +30,7 @@ def load_context(thread_id: str) -> tuple:
         return "", None
     try:
         data = json.loads(val)
-        if isinstance(data, dict) and "h" in data and "m" in 
+        if isinstance(data, dict) and "h" in data and "m" in data:
             return data["m"], data["h"]
     except Exception:
         pass

@@ -8,7 +8,7 @@ tavily_intent: |
 
 chainbase_keyword: |
   Extract the main keyword or entity from the text.
-  Output format: KEYWORD: [1-3 words]
+  Output format: KEYWORD: [1-2 words]
   Text: {text}
   Result:
 
@@ -19,7 +19,7 @@ reply: |
   Search: {search_data}
   User: {query}
   Rules:
-  - Hard limit: 2 short sentences maximum.
+  - Hard limit: 3 short sentences maximum.
   - Start directly with the answer. No intros.
   - Always end with a period.
   Answer:

@@ -53,8 +53,7 @@ async def main() -> None:
     try:
         await bsky.login_with_cache(client, config.BOT_HANDLE, config.BOT_PASSWORD)
 
-        llm_types = {"digest_mini", "digest_full", "digest_comment", "owner_command"}
-        needs_llm = any(t.get("type") in llm_types for t in tasks)
+        needs_llm = any(t.get("type") in ALLOWED_TASK_TYPES for t in tasks)
         if needs_llm:
             import generator
             model_start = time.monotonic()
@@ -100,9 +99,6 @@ async def main() -> None:
                 except (httpx.RequestError, RuntimeError, ValueError) as e:
                     logger.error(f"[main] Task {t_type} execution failed: {e}")
                     metrics["failed"] += 1
-            else:
-                logger.warning(f"[main] Unknown type: {t_type}")
-                metrics["failed"] += 1
         metrics["execution_time"] = round(time.monotonic() - exec_start, 2)
     except httpx.RequestError as e:
         logger.error(f"[main] Global network request failed: {e}")
