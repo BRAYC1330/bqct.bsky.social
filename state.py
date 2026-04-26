@@ -1,20 +1,17 @@
 import os
-import hashlib
 import logging
 import config
 import utils
 from logging_config import setup_logging
+
 setup_logging()
 logger = logging.getLogger(__name__)
 
 HASH_MARKER = "HASH:"
 MEM_MARKER = "|MEM:"
 
-def _get_slot(thread_id: str) -> int:
-    return int(hashlib.sha256(thread_id.encode()).hexdigest(), 16) % config.CONTEXT_SLOT_COUNT
-
 def load_context(thread_id: str) -> tuple:
-    slot = _get_slot(thread_id)
+    slot = utils.get_slot(thread_id)
     val = os.getenv(f"CONTEXT_{slot}", "").strip()
     if not val:
         return "", None
@@ -30,7 +27,7 @@ def load_context(thread_id: str) -> tuple:
     return val, None
 
 def save_context(thread_id: str, context: str, thread_hash: str):
-    slot = _get_slot(thread_id)
+    slot = utils.get_slot(thread_id)
     payload = f"{HASH_MARKER}{thread_hash}{MEM_MARKER}{context}"
     utils.update_github_secret(f"CONTEXT_{slot}", payload)
     logger.debug(f"[state] Context saved for {thread_id[-10:]}")

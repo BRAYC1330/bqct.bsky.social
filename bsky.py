@@ -6,22 +6,9 @@ from datetime import datetime, timezone, timedelta
 import config
 import utils
 from logging_config import setup_logging
+
 setup_logging()
 logger = logging.getLogger(__name__)
-
-def _extract_texts(node):
-    texts = []
-    if not node or not isinstance(node, dict): return texts
-    post = node.get("post", {})
-    if not post: return texts
-    record = post.get("record", {})
-    if record and record.get("text"):
-        texts.append(record["text"])
-    elif post.get("value", {}).get("text"):
-        texts.append(post["value"]["text"])
-    for r in node.get("replies", []):
-        texts.extend(_extract_texts(r))
-    return texts
 
 async def login_with_cache(client, handle, password):
     session_path = "session.json"
@@ -76,7 +63,8 @@ async def fetch_thread_chain(client, uri):
     root_cid = root_ref.get("cid") if root_ref.get("cid") else post.get("cid", "")
     root_text = record.get("text", "") if root_uri == uri else ""
     parent_cid = parent_ref.get("cid", "") if parent_ref else ""
-    all_texts = _extract_texts(thread)
+    all_posts = list(utils.iter_thread_posts(thread))
+    all_texts = [p.get("text", "") for p in all_posts]
     full_thread_text = " ".join(all_texts)
     embeds = {"links": [], "reposts": []}
     raw_embed = post.get("embed", {})
