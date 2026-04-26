@@ -1,4 +1,4 @@
-version: "2026-04-26-v5"
+version: "2026-04-26-v6"
 
 tavily_intent: |
   Extract the core search intent from the query.
@@ -20,25 +20,16 @@ reply: |
   User: {query}
   Rules:
   - Hard limit: 2 short sentences maximum.
-  - Start directly with the answer. No intros like "This could indicate...".
-  - Remove speculation, filler, and disclaimers.
+  - Start directly with the answer. No intros.
   - Always end with a period.
   Answer:
 
 digest_refine: |
-  Write a concise description for the crypto trend "{keyword}".
-  
-  HARD CONSTRAINT: Your output MUST be strictly under {max_desc_chars} characters.
-  
-  RULES:
-  1. DO NOT repeat "{keyword}" or variations. Start directly with the insight.
-  2. Focus on the core fact: price action, volume, catalyst, outlook.
-  3. Use short, factual sentences. Avoid connectors like "however", "furthermore".
-  4. End at a complete thought — do not cut mid-sentence.
-  5. Output ONLY the description text, no quotes, no markers.
-  
+  Write a description for "{keyword}" under {max_desc_chars} characters.
+  Focus on price, volume, catalyst, or outlook. Start directly with the fact.
+  Always end with a period.
+  Output only the description.
   Context: {summary}
-  Output:
 
 context_memory: |
   Compress the conversation history into a dense summary.

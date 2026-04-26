@@ -93,20 +93,29 @@ def get_reply(llm, memory: str, root_thread: str, search_data: str, query: str) 
         return "Error generating reply."
 
 def generate_digest(llm, keyword: str, summary: str, max_chars: int) -> str:
-    safety_margin = 15
-    target_chars = max(20, max_chars - safety_margin)
+    target_chars = max(20, max_chars - 10)
     prompt = _prompts["digest_refine"].format(keyword=keyword, summary=summary, max_desc_chars=target_chars)
     logger.info(f"[generator] DIGEST_PROMPT_VERSION: {_prompts.get('version', 'unknown')}")
     logger.info(f"=== DIGEST_PROMPT ===\n{prompt}\n=== END_DIGEST_PROMPT ===")
     try:
-        raw = llm(prompt, max_tokens=min(target_chars + 30, config.DIGEST_MAX_TOKENS), temperature=0.3)
+        raw = llm(prompt, max_tokens=min(target_chars + 50, config.DIGEST_MAX_TOKENS), temperature=0.3)
         logger.info(f"[generator] RAW_DIGEST_OUTPUT: {raw}")
         desc = clean_artifacts(_extract_text(raw).split('\n')[0].strip())
-        # Smart truncation: preserve complete thought
+
         if len(desc) > max_chars:
-            desc = desc[:max_chars]
-            cut_point = max(desc.rfind('.'), desc.rfind(' '), int(max_chars * 0.7))
-            desc = desc[:cut_point].rstrip('.,;: ')
+            truncated = desc[:max_chars]
+            last_period = truncated.rfind('.')
+            if last_period >= int(max_chars * 0.7):
+                desc = truncated[:last_period + 1]
+            else:
+                last_space = truncated.rfind(' ')
+                if last_space >= int(max_chars * 0.7):
+                    desc = truncated[:last_space].rstrip('.,;:') + '.'
+                else:
+                    desc = truncated[:int(max_chars * 0.7)].rstrip('.,;: ') + '.'
+        elif desc and not desc.endswith('.'):
+            desc = desc.rstrip('.,;: ') + '.'
+
         return desc
     except Exception as e:
         logger.error(f"[generator] generate_digest failed: {e}")
