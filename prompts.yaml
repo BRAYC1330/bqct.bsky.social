@@ -26,8 +26,8 @@ reply: |
 
 digest_refine: |
   Write exactly two sentences for "{keyword}".
-  Structure: [Core fact]. [Impact or metric].
-  Max 16 words total. Start directly with the fact. No intros, no filler.
+  Structure: Core fact. Impact or metric.
+  Max 26 words total. Start directly with the fact. No intros, no filler.
   Always end with a period.
   Context: {summary}
 

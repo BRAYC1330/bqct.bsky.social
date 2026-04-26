@@ -37,7 +37,7 @@ def get_model() -> Optional[Llama]:
         logger.error(f"[generator] Model not found: {model_path}")
         return None
     try:
-        llm = Llama(model_path=model_path, n_ctx=config.MODEL_N_CTX, n_gpu_layers=0, n_threads=config.MODEL_N_THREADS, n_batch=512, verbose=False)
+        llm = Llama(model_path=model_path, n_ctx=config.MODEL_N_CTX, n_gpu_layers=0, n_threads=config.MODEL_N_THREADS, n_batch=2048, verbose=False)
         logger.info(f"[generator] Model loaded: {os.path.basename(model_path)}")
         return llm
     except OSError as e:
