@@ -1,4 +1,4 @@
-version: "2026-04-26-v6"
+version: "2026-04-26-v7"
 
 tavily_intent: |
   Extract the core search intent from the query.
@@ -25,10 +25,10 @@ reply: |
   Answer:
 
 digest_refine: |
-  Write a description for "{keyword}" under {max_desc_chars} characters.
-  Focus on price, volume, catalyst, or outlook. Start directly with the fact.
+  Write exactly two sentences for "{keyword}".
+  Structure: [Core fact]. [Impact or metric].
+  Max 16 words total. Start directly with the fact. No intros, no filler.
   Always end with a period.
-  Output only the description.
   Context: {summary}
 
 context_memory: |
