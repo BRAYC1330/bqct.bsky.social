@@ -6,8 +6,10 @@ import logging
 import asyncio
 import random
 import httpx
+from typing import Any, Optional
 import config
 from logging_config import setup_logging
+
 setup_logging()
 logger = logging.getLogger(__name__)
 
@@ -21,6 +23,36 @@ def sanitize_input(text: str, max_len: int = 2000) -> str:
     text = re.sub(r'\s+', ' ', text).strip()
     if len(text) > max_len:
         text = text[:max_len]
+    return text
+
+def count_tokens(text: str, llm: Optional[Any] = None) -> int:
+    if not text:
+        return 0
+    if llm is not None:
+        try:
+            return len(llm.tokenize(text.encode("utf-8")))
+        except Exception:
+            pass
+    return max(1, int(len(text) * config.TOKEN_TO_CHAR_RATIO))
+
+def validate_and_fix_output(text: str) -> str:
+    if not text:
+        return "Invalid response."
+    text = text.strip()
+    prefixes_to_remove = ["Answer:", "Here is", "Sure,", "Of course", "Based on"]
+    for p in prefixes_to_remove:
+        if text.startswith(p):
+            text = text[len(p):].strip().lstrip(": ")
+    sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', text) if s.strip()]
+    if len(sentences) > 2:
+        text = " ".join(sentences[:2])
+        if not any(text.endswith(c) for c in ".!?"):
+            text += "."
+    elif not any(text.endswith(c) for c in ".!?"):
+        text += "."
+    if len(text) > 300:
+        last_dot = text[:299].rfind(".")
+        text = text[:last_dot+1] if last_dot != -1 else text[:297] + "..."
     return text
 
 def get_slot(value: str, slot_count: int = None) -> int:
@@ -108,9 +140,10 @@ async def process_reply(client, llm, task, max_chars=240, suffix="", temperature
     if link_content:
         combined_search = f"{combined_search}\n\n[EXTRACTED_LINKS]\n{sanitize_input(link_content)}" if combined_search else f"[EXTRACTED_LINKS]\n{sanitize_input(link_content)}"
     reply = generator.get_reply(llm, final_context, root_thread, combined_search, user_text)
-    reply = reply.strip()
-    max_body = 240 - len(suffix)
+    reply = validate_and_fix_output(reply)
+    max_body = max_chars - len(suffix)
+    if count_tokens(reply, llm) > int(max_body * config.TOKEN_TO_CHAR_RATIO):
+        reply = reply[:max_body].rsplit(" ", 1)[0] + "."
     if len(reply) > max_body:
-        logger.warning(f"[utils] Reply too long ({len(reply)} > {max_body}). Skipped to preserve format.")
-        return
+        reply = reply[:max_body].rsplit(".", 1)[0] + "." if "." in reply[:max_body] else reply[:max_body-3] + "..."
     await bsky.post_reply(client, config.BOT_DID, reply + suffix, root_uri, root_cid, uri, parent_cid)

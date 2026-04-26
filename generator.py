@@ -64,6 +64,20 @@ def _extract_text(response: Any) -> str:
             return choices[0].get("text", "").strip()
     return ""
 
+def _truncate_to_tokens(text: str, max_tokens: int, llm: Llama) -> str:
+    if utils.count_tokens(text, llm) <= max_tokens:
+        return text
+    words = text.split()
+    out = []
+    current_tokens = 0
+    for w in words:
+        t = utils.count_tokens(w + " ", llm)
+        if current_tokens + t > max_tokens:
+            break
+        out.append(w)
+        current_tokens += t
+    return " ".join(out)
+
 def extract_tavily_intent(llm: Llama, query: str) -> Tuple[str, str]:
     safe_q = utils.sanitize_input(query, max_len=500)
     prompt = _prompts["tavily_intent"].format(query=safe_q)
@@ -116,42 +130,36 @@ def get_reply(llm: Llama, memory: str, root_thread: str, search_data: str, query
     try:
         raw: Any = llm(prompt, max_tokens=config.REPLY_MAX_TOKENS, temperature=0.7)
         logger.info(f"[generator] RAW_REPLY_OUTPUT: {raw}")
-        return _extract_text(raw).strip()
+        return utils.validate_and_fix_output(_extract_text(raw))
     except (ValueError, TypeError, RuntimeError) as e:
         logger.error(f"[generator] get_reply failed: {e}")
         return "Error generating reply."
 
-def generate_digest(llm: Llama, keyword: str, summary: str, max_chars: int) -> str:
-    target_chars = max(20, max_chars - 10)
+def generate_digest(llm: Llama, keyword: str, summary: str, max_tokens_limit: int) -> str:
     safe_kw = utils.sanitize_input(keyword, max_len=100)
     safe_sum = utils.sanitize_input(summary, max_len=1000)
-    prompt = _prompts["digest_refine"].format(keyword=safe_kw, summary=safe_sum, max_desc_chars=target_chars)
+    prompt = _prompts["digest_refine"].format(keyword=safe_kw, summary=safe_sum, max_desc_chars=100)
     logger.info(f"[generator] DIGEST_PROMPT_VERSION: {_prompts.get('version', 'unknown')}")
     logger.info(f"=== DIGEST_PROMPT ===\n{prompt}\n=== END_DIGEST_PROMPT ===")
     try:
-        raw: Any = llm(prompt, max_tokens=min(target_chars + 50, config.DIGEST_MAX_TOKENS), temperature=0.3)
-        logger.info(f"[generator] RAW_DIGEST_OUTPUT: {raw}")
+        raw: Any = llm(prompt, max_tokens=min(max_tokens_limit + 20, config.DIGEST_MAX_TOKENS), temperature=0.3)
         desc = clean_artifacts(_extract_text(raw).split('\n')[0].strip())
-        if len(desc) > max_chars:
-            truncated = desc[:max_chars]
-            last_period = truncated.rfind('.')
-            if last_period >= int(max_chars * 0.7):
-                desc = truncated[:last_period + 1]
-            else:
-                last_space = truncated.rfind(' ')
-                if last_space >= int(max_chars * 0.7):
-                    desc = truncated[:last_space].rstrip('.,;:') + '.'
-                else:
-                    desc = truncated[:int(max_chars * 0.7)].rstrip('.,;: ') + '.'
-        elif desc and not desc.endswith('.'):
-            desc = desc.rstrip('.,;: ') + '.'
+        if utils.count_tokens(desc, llm) > max_tokens_limit:
+            desc = _truncate_to_tokens(desc, max_tokens_limit, llm)
+            if not desc.endswith(('.', '!', '?')):
+                desc += "."
+        elif desc and not desc.endswith(('.', '!', '?')):
+            desc += "."
         return desc
     except (ValueError, TypeError, RuntimeError) as e:
         logger.error(f"[generator] generate_digest failed: {e}")
-        return utils.sanitize_input(summary, max_len=max_chars)
+        return utils.sanitize_input(summary, max_len=100)
 
 def update_context_memory(llm: Llama, history: str) -> str:
     safe_h = utils.sanitize_input(history, max_len=4000)
+    token_limit = int(config.MEMORY_MAX_TOKENS * 0.8)
+    if utils.count_tokens(safe_h, llm) > token_limit:
+        safe_h = _truncate_to_tokens(safe_h, token_limit, llm)
     prompt = _prompts["context_memory"].format(history=safe_h)
     logger.info(f"=== MEMORY_PROMPT ===\n{prompt}\n=== END_MEMORY_PROMPT ===")
     try:
