@@ -75,7 +75,10 @@ async def fetch_chainbase(query: str) -> str:
             from parser_chainbase import format_chainbase_results, parse_search_results
             items = parse_search_results(raw_data)
             logger.info(f"[search] Chainbase Search results count: {len(items)}")
-            return format_chainbase_results(items)
+            search_text = format_chainbase_results(items)
+            if config.RAW_DEBUG:
+                logger.info(f"[search] Chainbase context passed to model:\n{search_text}")
+            return search_text
     except Exception as e:
         logger.error(f"[search] Chainbase error: {e}")
         return ""

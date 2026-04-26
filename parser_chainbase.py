@@ -16,19 +16,30 @@ def parse_trending_items(items: Any) -> List[Dict]:
     return eng[:10]
 
 def parse_search_results(data: Any) -> List[Dict]:
-    if not isinstance(data, dict): return []
-    items = data.get("items", [])
-    if not isinstance(items, list): return []
-    eng = [i for i in items if is_english_text(i.get("keyword", "")) and is_english_text(i.get("summary", ""))]
-    return sorted(eng, key=lambda x: x.get("score", 0), reverse=True)[:6]
+    if isinstance(data, list):
+        items = data
+    elif isinstance(data, dict):
+        raw = data.get("items")
+        items = raw if isinstance(raw, list) else [data]
+    else:
+        return []
+
+    valid = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        kw = item.get("keyword", "")
+        summary = item.get("summary", "")
+        if is_english_text(kw) and is_english_text(summary):
+            valid.append(item)
+            
+    valid.sort(key=lambda x: x.get("score", 0), reverse=True)
+    return valid[:6]
 
 def format_chainbase_results(items: List[Dict]) -> str:
     lines = []
-    for i, item in enumerate(items, 1):
+    for item in items:
         kw = item.get("keyword", "Unknown")
-        score = item.get("score", 0)
-        rank = item.get("current_rank", "N/A")
-        status = item.get("rank_status", "same")
         summary = item.get("summary", "")
-        lines.append(f"{i}. {kw} (Score: {score:.1f} | Rank: {rank} | Trend: {status})\nSummary: {summary}")
+        lines.append(f"{kw}: {summary}")
     return "\n\n".join(lines)
