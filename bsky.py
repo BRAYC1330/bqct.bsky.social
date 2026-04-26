@@ -111,10 +111,16 @@ async def fetch_thread_chain(client: httpx.AsyncClient, uri: str) -> Optional[Di
             if rec.get("$type") == "app.bsky.embed.record#viewRecord":
                 val = rec.get("value", {})
                 embeds["reposts"].append({"author": rec.get("author", {}).get("handle"), "text": val.get("text", ""), "uri": rec.get("uri")})
+    
     return {
-        "root_uri": root_uri, "root_cid": root_cid, "root_text": root_text,
-        "parent_cid": parent_cid, "embeds": embeds,
-        "all_texts": all_texts, "full_text": full_thread_text
+        "root_uri": root_uri, 
+        "root_cid": root_cid, 
+        "root_text": root_text,
+        "parent_cid": parent_cid, 
+        "cid": post.get("cid", ""), # <-- Добавлен CID самого уведомления
+        "embeds": embeds,
+        "all_texts": all_texts, 
+        "full_text": full_thread_text
     }
 
 async def fetch_notifications(client: httpx.AsyncClient, limit: int = 100, seen_at: Optional[str] = None) -> List[Dict[str, Any]]:
