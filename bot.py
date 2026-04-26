@@ -105,18 +105,7 @@ async def main() -> None:
         await client.aclose()
 
     total_time = round(time.monotonic() - start_time, 2)
-    summary_path = os.getenv("GITHUB_STEP_SUMMARY")
-    if summary_path:
-        with open(summary_path, "a", encoding="utf-8") as f:
-            f.write("### 🤖 Bluesky Bot Run Summary\n\n")
-            f.write("| Metric | Value |\n|---|---|\n")
-            f.write(f"| Total Tasks | {metrics['total_tasks']} |\n")
-            f.write(f"| Successful | {metrics['success']} |\n")
-            f.write(f"| Failed | {metrics['failed']} |\n")
-            f.write(f"| Model Load | {metrics['model_load_time']}s |\n")
-            f.write(f"| Task Execution | {metrics['execution_time']}s |\n")
-            f.write(f"| Total Run Time | {total_time}s |\n")
-            f.write(f"| Status | {'✅ Complete' if metrics['failed'] == 0 else '⚠️ Partial'} |\n")
+    logger.info(f"[main] Metrics: {metrics['success']} ok, {metrics['failed']} fail, {total_time}s total")
 
     out_path = os.getenv("GITHUB_OUTPUT")
     if out_path:
