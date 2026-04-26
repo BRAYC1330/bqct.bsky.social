@@ -6,6 +6,7 @@ import logging
 import re
 from llama_cpp import Llama
 import config
+import utils
 from logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -51,7 +52,8 @@ def _extract_text(response) -> str:
     return ""
 
 def extract_tavily_intent(llm, query: str) -> tuple:
-    prompt = _prompts["tavily_intent"].format(query=query)
+    safe_q = utils.sanitize_input(query, max_len=500)
+    prompt = _prompts["tavily_intent"].format(query=safe_q)
     logger.info(f"=== TAVILY_PROMPT ===\n{prompt}\n=== END_TAVILY_PROMPT ===")
     try:
         raw = llm(prompt, max_tokens=config.TAVILY_MAX_TOKENS, temperature=0.1)
@@ -66,7 +68,8 @@ def extract_tavily_intent(llm, query: str) -> tuple:
     except Exception: return query, ""
 
 def extract_chainbase_keyword(llm, text: str) -> str:
-    prompt = _prompts["chainbase_keyword"].format(text=text)
+    safe_t = utils.sanitize_input(text, max_len=500)
+    prompt = _prompts["chainbase_keyword"].format(text=safe_t)
     logger.info(f"=== KEYWORD_PROMPT ===\n{prompt}\n=== END_KEYWORD_PROMPT ===")
     try:
         raw = llm(prompt, max_tokens=config.KEYWORD_MAX_TOKENS, temperature=0.1)
@@ -81,7 +84,11 @@ def extract_chainbase_keyword(llm, text: str) -> str:
     except Exception: return text[:30]
 
 def get_reply(llm, memory: str, root_thread: str, search_data: str, query: str) -> str:
-    prompt = _prompts["reply"].format(memory=memory or "None", root_thread=root_thread or "None", search_data=search_data or "None", query=query)
+    safe_mem = utils.sanitize_input(memory, max_len=1000)
+    safe_root = utils.sanitize_input(root_thread, max_len=1000)
+    safe_search = utils.sanitize_input(search_data, max_len=2000)
+    safe_query = utils.sanitize_input(query, max_len=500)
+    prompt = _prompts["reply"].format(memory=safe_mem or "None", root_thread=safe_root or "None", search_data=safe_search or "None", query=safe_query)
     logger.info(f"[generator] REPLY_PROMPT_VERSION: {_prompts.get('version', 'unknown')}")
     logger.info(f"=== REPLY_PROMPT ===\n{prompt}\n=== END_REPLY_PROMPT ===")
     try:
@@ -94,14 +101,15 @@ def get_reply(llm, memory: str, root_thread: str, search_data: str, query: str) 
 
 def generate_digest(llm, keyword: str, summary: str, max_chars: int) -> str:
     target_chars = max(20, max_chars - 10)
-    prompt = _prompts["digest_refine"].format(keyword=keyword, summary=summary, max_desc_chars=target_chars)
+    safe_kw = utils.sanitize_input(keyword, max_len=100)
+    safe_sum = utils.sanitize_input(summary, max_len=1000)
+    prompt = _prompts["digest_refine"].format(keyword=safe_kw, summary=safe_sum, max_desc_chars=target_chars)
     logger.info(f"[generator] DIGEST_PROMPT_VERSION: {_prompts.get('version', 'unknown')}")
     logger.info(f"=== DIGEST_PROMPT ===\n{prompt}\n=== END_DIGEST_PROMPT ===")
     try:
         raw = llm(prompt, max_tokens=min(target_chars + 50, config.DIGEST_MAX_TOKENS), temperature=0.3)
         logger.info(f"[generator] RAW_DIGEST_OUTPUT: {raw}")
         desc = clean_artifacts(_extract_text(raw).split('\n')[0].strip())
-
         if len(desc) > max_chars:
             truncated = desc[:max_chars]
             last_period = truncated.rfind('.')
@@ -115,14 +123,14 @@ def generate_digest(llm, keyword: str, summary: str, max_chars: int) -> str:
                     desc = truncated[:int(max_chars * 0.7)].rstrip('.,;: ') + '.'
         elif desc and not desc.endswith('.'):
             desc = desc.rstrip('.,;: ') + '.'
-
         return desc
     except Exception as e:
         logger.error(f"[generator] generate_digest failed: {e}")
         return summary
 
 def update_context_memory(llm, history: str) -> str:
-    prompt = _prompts["context_memory"].format(history=history)
+    safe_h = utils.sanitize_input(history, max_len=4000)
+    prompt = _prompts["context_memory"].format(history=safe_h)
     logger.info(f"=== MEMORY_PROMPT ===\n{prompt}\n=== END_MEMORY_PROMPT ===")
     try:
         raw = llm(prompt, max_tokens=config.MEMORY_MAX_TOKENS, temperature=0.3)

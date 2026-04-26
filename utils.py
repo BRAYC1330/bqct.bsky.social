@@ -1,4 +1,5 @@
 import os
+import re
 import hashlib
 import subprocess
 import logging
@@ -7,12 +8,20 @@ import random
 import httpx
 import config
 from logging_config import setup_logging
-
 setup_logging()
 logger = logging.getLogger(__name__)
 
 def count_graphemes(text: str) -> int:
     return len(text) if text else 0
+
+def sanitize_input(text: str, max_len: int = 2000) -> str:
+    if not text:
+        return ""
+    text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', ' ', text)
+    text = re.sub(r'\s+', ' ', text).strip()
+    if len(text) > max_len:
+        text = text[:max_len]
+    return text
 
 def get_slot(value: str, slot_count: int = None) -> int:
     count = slot_count if slot_count is not None else config.CONTEXT_SLOT_COUNT
@@ -72,15 +81,15 @@ async def process_reply(client, llm, task, max_chars=240, suffix="", temperature
     import generator
     import bsky
     uri = task["uri"]
-    user_text = task["text"]
+    user_text = sanitize_input(task["text"])
     chain = await bsky.fetch_thread_chain(client, uri)
     if not chain:
         return
     root_uri = chain.get("root_uri", task.get("parent_uri", uri))
     root_cid = chain.get("root_cid", "")
     parent_cid = chain.get("parent_cid", "")
-    root_thread = chain.get("root_text", "")
-    full_thread_text = chain.get("full_text", "")
+    root_thread = sanitize_input(chain.get("root_text", ""))
+    full_thread_text = sanitize_input(chain.get("full_text", ""), max_len=4000)
     current_hash = hashlib.sha256(full_thread_text.encode()).hexdigest()
     cached_mem, stored_hash = state.load_context(root_uri)
     if config.DEBUG_OWNER:
@@ -95,23 +104,10 @@ async def process_reply(client, llm, task, max_chars=240, suffix="", temperature
         state.save_context(root_uri, final_context, current_hash)
         if config.DEBUG_OWNER:
             logger.info("[DEBUG-OWNER] CACHE_STATUS: MISS")
-    combined_search = search_data
+    combined_search = sanitize_input(search_data)
     if link_content:
-        combined_search = f"{search_data}\n\n[EXTRACTED_LINKS]\n{link_content}" if search_data else f"[EXTRACTED_LINKS]\n{link_content}"
-    if config.DEBUG_OWNER:
-        embeds = chain.get("embeds", {})
-        if embeds.get("links"):
-            for l in embeds["links"]:
-                logger.info(f"[DEBUG-OWNER] EMBED_LINK: URL='{l['url']}' | Title='{l['title']}' | Desc='{l['desc']}'")
-        if embeds.get("reposts"):
-            for r in embeds["reposts"]:
-                logger.info(f"[DEBUG-OWNER] EMBED_REPOST: Author='{r['author']}' | Text='{r['text']}' | URI='...{r['uri'][-15:]}'")
-        logger.info(f"[DEBUG-OWNER] RAW_THREAD: {full_thread_text}")
-        logger.info(f"[DEBUG-OWNER] CONTEXT: [MEMORY] {final_context} | [ROOT_THREAD] {root_thread} | [SEARCH] {combined_search}")
-        logger.info(f"[DEBUG-OWNER] PRIORITY: [SEARCH] > [ROOT_THREAD] > [MEMORY]")
+        combined_search = f"{combined_search}\n\n[EXTRACTED_LINKS]\n{sanitize_input(link_content)}" if combined_search else f"[EXTRACTED_LINKS]\n{sanitize_input(link_content)}"
     reply = generator.get_reply(llm, final_context, root_thread, combined_search, user_text)
-    if config.DEBUG_OWNER:
-        logger.info(f"[DEBUG-OWNER] MODEL_RAW: '{reply}' ({len(reply)} chars)")
     reply = reply.strip()
     max_body = 240 - len(suffix)
     if len(reply) > max_body:

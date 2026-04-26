@@ -6,18 +6,17 @@ import httpx
 import config
 import bsky
 from logging_config import setup_logging
-
 setup_logging()
 logger = logging.getLogger(__name__)
 
 async def main():
     logger.info("[main] === START ===")
-    if not os.path.exists("work_data.json"):
-        logger.error("[main] work_data.json NOT FOUND")
+    tasks_json = os.environ.get("TASKS_JSON", "[]")
+    try:
+        tasks = json.loads(tasks_json)
+    except json.JSONDecodeError:
+        logger.error("[main] Invalid TASKS_JSON")
         return
-    with open("work_data.json") as f:
-        data = json.load(f)
-    tasks = data.get("tasks", [])
     logger.info(f"[main] Loaded {len(tasks)} tasks")
     if not tasks:
         logger.warning("[main] Task list empty")

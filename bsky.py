@@ -1,38 +1,18 @@
-import os
-import json
 import logging
 import httpx
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 import config
 import utils
 from logging_config import setup_logging
-
 setup_logging()
 logger = logging.getLogger(__name__)
 
 async def login_with_cache(client, handle, password):
-    session_path = "session.json"
-    if os.path.exists(session_path):
-        try:
-            with open(session_path) as f:
-                sess = json.load(f)
-            if sess.get("expiresAt"):
-                exp = datetime.fromisoformat(sess["expiresAt"].replace("Z", "+00:00"))
-                if exp < datetime.now(timezone.utc) - timedelta(minutes=5):
-                    os.remove(session_path)
-                    return await login_with_cache(client, handle, password)
-            client.headers["Authorization"] = f"Bearer {sess['accessJwt']}"
-            logger.debug("[bsky] Session loaded from cache")
-            return
-        except Exception:
-            pass
     r = await client.post("https://bsky.social/xrpc/com.atproto.server.createSession", json={"identifier": handle, "password": password})
     r.raise_for_status()
     sess = r.json()
     client.headers["Authorization"] = f"Bearer {sess['accessJwt']}"
-    with open(session_path, "w") as f:
-        json.dump(sess, f)
-    logger.debug("[bsky] New session created")
+    logger.debug("[bsky] Session created and attached")
 
 async def post_root(client, bot_did, text):
     record = {"$type": "app.bsky.feed.post", "text": text, "createdAt": datetime.now(timezone.utc).isoformat()}

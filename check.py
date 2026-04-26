@@ -79,16 +79,16 @@ async def run():
             logger.debug("[TIMER] LAST_FULL_DIGEST reset")
         else:
             logger.debug("[TIMER] LAST_FULL_DIGEST update skipped (clear flag active)")
-    with open("work_data.json", "w") as f:
-        json.dump({"tasks": tasks}, f)
-    utils.update_github_secret("LAST_PROCESSED", now_utc)
-    logger.info(f"[checker] Tasks: {len(tasks)} (Owner: {owner_count}, Community: {digest_comment_count}, Digest: {digest_task_type})")
+    tasks_json = json.dumps(tasks, ensure_ascii=False)
     out_path = os.getenv("GITHUB_OUTPUT")
+    has_tasks = len(tasks) > 0
     if out_path:
         with open(out_path, "a") as f:
-            f.write(f"status={'true' if tasks else 'false'}\n")
+            f.write(f"status={'true' if has_tasks else 'false'}\n")
+            f.write(f"tasks={tasks_json}\n")
             f.write(f"last_processed={now_utc}\n")
-    if not tasks:
+    logger.info(f"[checker] Tasks: {len(tasks)} (Owner: {owner_count}, Community: {digest_comment_count}, Digest: {digest_task_type})")
+    if not has_tasks:
         sys.exit(0)
 
 if __name__ == "__main__":
