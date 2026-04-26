@@ -23,7 +23,7 @@ digest_refine: |
   Rules:
   - Hard limit: 17 words maximum.
   - Structure: [Core fact]. [Metric]: [Value].
-  - Start immediately with a date, event, or entity. NEVER start with "The trend refers to...", "This is about...", "It describes...".
+  - Start immediately with a event, or entity. NEVER start with "The trend refers to...", "This is about...", "It describes...".
   - Output ONLY the description. Do not repeat the keyword. Do not add prefixes or explanations.
   - UNDER NO CIRCUMSTANCES mention topics other than "{keyword}".
   - Always end with a period.
