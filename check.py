@@ -31,6 +31,9 @@ async def run():
     owner_count = 0
     digest_comment_count = 0
 
+    if not seen_at:
+        seen_at = now_utc_str
+
     client = httpx.AsyncClient(timeout=30)
     try:
         await bsky.login_with_cache(client, config.BOT_HANDLE, config.BOT_PASSWORD)
