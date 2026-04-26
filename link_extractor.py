@@ -32,7 +32,7 @@ class LinkExtractor:
         await self._client.aclose()
 
     async def extract(self, url: str) -> Optional[str]:
-        logger.debug(f"[LinkExtractor.extract] Fetching {url}")
+        logger.info(f"[link] GET {url}")
         async with self._lock:
             if url in self._cache:
                 content, timestamp = self._cache[url]

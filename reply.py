@@ -13,6 +13,8 @@ logger = logging.getLogger(__name__)
 async def process_reply(client, llm, task, max_chars=240, suffix="", temperature=0.7, search_data="", link_content=""):
     uri = task["uri"]
     user_text = utils.sanitize_input(task["text"])
+    user_text = user_text.replace("!c", "").replace("!t", "").strip()
+    
     chain = await bsky.fetch_thread_chain(client, uri)
     if not chain:
         return

@@ -21,9 +21,11 @@ def _clean_json_log(data):
     return data
 
 async def get_trending_topics_raw() -> list:
+    url = "https://api.chainbase.com/tops/v1/tool/list-trending-topics?language=en"
+    logger.info(f"[search] URL: {url}")
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(config.REQUEST_TIMEOUT, connect=config.CONNECT_TIMEOUT)) as client:
-            r = await client.get("https://api.chainbase.com/tops/v1/tool/list-trending-topics?language=en", timeout=config.SEARCH_TIMEOUT)
+            r = await client.get(url, timeout=config.SEARCH_TIMEOUT)
             logger.info(f"[search] Chainbase status: {r.status_code}")
             if r.status_code != 200:
                 return []
@@ -40,6 +42,7 @@ async def fetch_tavily(query: str, time_range: str = "") -> str:
     if not config.TAVILY_API_KEY:
         return ""
     url = "https://api.tavily.com/search"
+    logger.info(f"[search] URL: {url}")
     headers = {"Authorization": f"Bearer {config.TAVILY_API_KEY}", "Content-Type": "application/json"}
     payload = {"query": query, "search_depth": "basic", "max_results": 3, "include_raw_content": "text"}
     if time_range and time_range.lower() in ("day", "week", "month", "year"):
@@ -66,7 +69,7 @@ async def fetch_chainbase(query: str) -> str:
     try:
         async with httpx.AsyncClient(timeout=config.SEARCH_TIMEOUT) as client:
             url = f"https://api.chainbase.com/tops/v1/tool/search-narrative-candidates?keyword={query}"
-            logger.info(f"[search] CHAINBASE_URL: {url}")
+            logger.info(f"[search] URL: {url}")
             r = await client.get(url, timeout=config.SEARCH_TIMEOUT)
             logger.info(f"[search] Chainbase Search status: {r.status_code}")
             if r.status_code != 200:
