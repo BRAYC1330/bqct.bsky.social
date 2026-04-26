@@ -106,6 +106,9 @@ def get_slot(value: str, slot_count: int = None) -> int:
     return int(hashlib.sha256(value.encode()).hexdigest(), 16) % count
 
 def update_github_secret(key: str, value: str) -> None:
+    if not re.match(r'^[A-Z0-9_]+$', key):
+        logger.error(f"[utils] Invalid secret key format: {key}")
+        return
     if not value or not key:
         return
     repo = os.environ.get("GITHUB_REPOSITORY", "")

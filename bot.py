@@ -13,6 +13,8 @@ from logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
 
+ALLOWED_TASK_TYPES = {"digest_mini", "digest_full", "digest_comment", "owner_command"}
+
 class TaskDict(TypedDict, total=False):
     type: str
     uri: str
@@ -80,6 +82,10 @@ async def main() -> None:
         exec_start = time.monotonic()
         for idx, task in enumerate(tasks):
             t_type = task.get("type", "UNKNOWN")
+            if t_type not in ALLOWED_TASK_TYPES:
+                logger.warning(f"[main] Rejected unknown task type: {t_type}")
+                metrics["failed"] += 1
+                continue
             logger.debug(f"[main] Processing task #{idx}: {t_type}")
             handler = handlers.get(t_type)
             if handler:
