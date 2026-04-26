@@ -119,7 +119,7 @@ def extract_chainbase_keyword(llm: Llama, text: str) -> str:
         logger.warning(f"[generator] Chainbase keyword extraction failed: {e}")
         return utils.sanitize_input(text, max_len=30)
 
-def get_reply(llm: Llama, memory: str, root_thread: str, search_ str, query: str) -> str:
+def get_reply(llm: Llama, memory: str, root_thread: str, search_data: str, query: str) -> str:
     safe_mem = utils.sanitize_input(memory, max_len=1000)
     safe_root = utils.sanitize_input(root_thread, max_len=1000)
     safe_search = utils.sanitize_input(search_data, max_len=2000)
