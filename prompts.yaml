@@ -1,51 +1,40 @@
 tavily_intent: |
-  Extraction of a search query and time filter for web search.
-  Rules:
-  - For TIME: If time is a search filter, use: day, week, month, year.
-  - For TIME: If time is part of the question itself, use: none.
-  - For text: Extract only the essence that that will give the most accurate answer from the web search.
-  - Return ONLY: QUERY: <text> | TIME: <day/week/month/year/none>
-
-  User query: "{query}"
-  Output:
+  Extract the core search intent from the query.
+  Output format: QUERY: [cleaned query] | TIME: [day/week/month/year or omit]
+  Query: {query}
+  Result:
 
 chainbase_keyword: |
-  Extract from the text only one word or compound object name that constitute the essence of the query.
-  Rules:
-  - Cut out all small talk
-  - Maximum 2 words.
-  Text: "{text}"
-  Keyword:
+  Extract the main keyword or entity from the text.
+  Output format: KEYWORD: [1-3 words]
+  Text: {text}
+  Result:
 
 reply: |
-  You are an expert analyst. Answer the query concisely, using the provided context.
-  Rules:
-  - The answer must not exceed 260 characters.
-
-  Context:
-  [MEMORY]
-  {memory}
-
-  [ROOT_THREAD]
-  {root_thread}
-
-  [SEARCH]
-  {search_data}
+  You are a helpful assistant. Answer based on:
+  Memory: {memory}
+  Thread: {root_thread}
+  Search: {search_data}
+  User: {query}
+  Answer concisely, max 3 sentences.
 
 digest_refine: |
-  Write a concise description of the trend "{keyword}".
+  Write a concise description for the trend "{keyword}".
   Rules:
   - Hard limit: 17 words maximum.
-  - No fluff.
-  Context: {summary}
+  - Structure: [Core fact]. [Metric]: [Value].
+  - Start immediately with a date, event, or entity. NEVER start with "The trend refers to...", "This is about...", "It describes...".
+  - Output ONLY the description. Do not repeat the keyword. Do not add prefixes or explanations.
+  - UNDER NO CIRCUMSTANCES mention topics other than "{keyword}".
+  - Always end with a period.
+  Context:
+  ### START CONTEXT ###
+  {summary}
+  ### END CONTEXT ###
   Description:
 
 context_memory: |
-  Extract key facts and core essence from the conversation thread to preserve context for future turns.
-  Rules:
-  - Include critical data points, decisions, or unresolved questions.
-  - Remove filler words, greetings, and repeated info.
-  - Keep it concise and factual.
-  Input:
-  {history}
-  Context Memory:
+  Compress the conversation history into a dense summary.
+  Keep only: decisions, facts, open questions.
+  History: {history}
+  Summary:

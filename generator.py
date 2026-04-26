@@ -1,4 +1,5 @@
 import os
+import sys
 import pathlib
 import yaml
 import logging
@@ -10,8 +11,16 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 PROMPTS_PATH = pathlib.Path(__file__).parent / "prompts.yaml"
-with open(PROMPTS_PATH, "r", encoding="utf-8") as f:
-    _prompts = yaml.safe_load(f)
+try:
+    with open(PROMPTS_PATH, "r", encoding="utf-8") as f:
+        _prompts = yaml.safe_load(f)
+    if not isinstance(_prompts, dict) or "digest_refine" not in _prompts:
+        logger.error(f"[generator] Invalid prompts.yaml at {PROMPTS_PATH}")
+        sys.exit(1)
+    logger.info(f"[generator] Prompts loaded: {PROMPTS_PATH} | Version: {_prompts.get('version', 'unknown')}")
+except Exception as e:
+    logger.error(f"[generator] Failed to load prompts: {e}")
+    sys.exit(1)
 
 def get_model():
     model_path = config.MODEL_PATH
@@ -68,7 +77,8 @@ def get_reply(llm, memory: str, root_thread: str, search_data: str, query: str) 
         return "Error generating reply."
 
 def generate_digest(llm, keyword: str, summary: str, max_chars: int) -> str:
-    prompt = _prompts["digest_refine"].format(keyword=keyword, summary=summary, max_desc_chars=max_chars)
+    prompt = _prompts["digest_refine"].format(keyword=keyword, summary=summary)
+    logger.info(f"[generator] APPLIED_DIGEST_PROMPT_VERSION: {_prompts.get('version', 'unknown')}")
     logger.info(f"=== APPLIED_DIGEST_PROMPT ===\n{prompt}\n=== END_APPLIED_DIGEST_PROMPT ===")
     try:
         raw = llm(prompt, max_tokens=config.DIGEST_MAX_TOKENS, temperature=0.2)
