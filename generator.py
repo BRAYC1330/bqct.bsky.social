@@ -35,9 +35,24 @@ def get_model():
         logger.error(f"[generator] Model load failed: {e}")
         return None
 
+def clean_artifacts(text: str) -> str:
+    text = re.sub(r'\s*\[score:\s*\d+\]\s*:', ':', text)
+    text = re.sub(r'\s*\[\d+\s*characters?\]', '', text)
+    text = re.sub(r'\s{2,}', ' ', text)
+    text = re.sub(r'^\[ROOT\]\s*@[^\s]+:\s*', '', text)
+    text = re.sub(r'^\[[A-Z_]+\]\s*', '', text)
+    return text.strip()
+
+def _extract_text(response) -> str:
+    if isinstance(response, str): return response.strip()
+    if isinstance(response, dict):
+        choices = response.get("choices", [])
+        if choices and isinstance(choices[0], dict): return choices[0].get("text", "").strip()
+    return ""
+
 def extract_tavily_intent(llm, query: str) -> tuple:
     prompt = _prompts["tavily_intent"].format(query=query)
-    logger.info(f"[generator] RAW_TAVILY_INTENT_PROMPT:\n{prompt}")
+    logger.info(f"=== TAVILY_PROMPT ===\n{prompt}\n=== END_TAVILY_PROMPT ===")
     try:
         raw = llm(prompt, max_tokens=config.TAVILY_MAX_TOKENS, temperature=0.1)
         logger.info(f"[generator] RAW_TAVILY_INTENT_OUTPUT: {raw}")
@@ -52,7 +67,7 @@ def extract_tavily_intent(llm, query: str) -> tuple:
 
 def extract_chainbase_keyword(llm, text: str) -> str:
     prompt = _prompts["chainbase_keyword"].format(text=text)
-    logger.info(f"[generator] RAW_KEYWORD_PROMPT:\n{prompt}")
+    logger.info(f"=== KEYWORD_PROMPT ===\n{prompt}\n=== END_KEYWORD_PROMPT ===")
     try:
         raw = llm(prompt, max_tokens=config.KEYWORD_MAX_TOKENS, temperature=0.1)
         logger.info(f"[generator] RAW_KEYWORD_OUTPUT: {raw}")
@@ -67,34 +82,43 @@ def extract_chainbase_keyword(llm, text: str) -> str:
 
 def get_reply(llm, memory: str, root_thread: str, search_data: str, query: str) -> str:
     prompt = _prompts["reply"].format(memory=memory or "None", root_thread=root_thread or "None", search_data=search_data or "None", query=query)
-    logger.info(f"[generator] RAW_REPLY_PROMPT:\n{prompt}")
+    logger.info(f"[generator] REPLY_PROMPT_VERSION: {_prompts.get('version', 'unknown')}")
+    logger.info(f"=== REPLY_PROMPT ===\n{prompt}\n=== END_REPLY_PROMPT ===")
     try:
         raw = llm(prompt, max_tokens=config.REPLY_MAX_TOKENS, temperature=0.7)
         logger.info(f"[generator] RAW_REPLY_OUTPUT: {raw}")
-        return raw["choices"][0]["text"].strip()
+        return _extract_text(raw).strip()
     except Exception as e:
         logger.error(f"[generator] get_reply failed: {e}")
         return "Error generating reply."
 
 def generate_digest(llm, keyword: str, summary: str, max_chars: int) -> str:
-    prompt = _prompts["digest_refine"].format(keyword=keyword, summary=summary)
-    logger.info(f"[generator] APPLIED_DIGEST_PROMPT_VERSION: {_prompts.get('version', 'unknown')}")
-    logger.info(f"=== APPLIED_DIGEST_PROMPT ===\n{prompt}\n=== END_APPLIED_DIGEST_PROMPT ===")
+    safety_margin = 15
+    target_chars = max(20, max_chars - safety_margin)
+    prompt = _prompts["digest_refine"].format(keyword=keyword, summary=summary, max_desc_chars=target_chars)
+    logger.info(f"[generator] DIGEST_PROMPT_VERSION: {_prompts.get('version', 'unknown')}")
+    logger.info(f"=== DIGEST_PROMPT ===\n{prompt}\n=== END_DIGEST_PROMPT ===")
     try:
-        raw = llm(prompt, max_tokens=config.DIGEST_MAX_TOKENS, temperature=0.2)
+        raw = llm(prompt, max_tokens=min(target_chars + 30, config.DIGEST_MAX_TOKENS), temperature=0.3)
         logger.info(f"[generator] RAW_DIGEST_OUTPUT: {raw}")
-        return raw["choices"][0]["text"].strip()
+        desc = clean_artifacts(_extract_text(raw).split('\n')[0].strip())
+        # Smart truncation: preserve complete thought
+        if len(desc) > max_chars:
+            desc = desc[:max_chars]
+            cut_point = max(desc.rfind('.'), desc.rfind(' '), int(max_chars * 0.7))
+            desc = desc[:cut_point].rstrip('.,;: ')
+        return desc
     except Exception as e:
         logger.error(f"[generator] generate_digest failed: {e}")
         return summary
 
 def update_context_memory(llm, history: str) -> str:
     prompt = _prompts["context_memory"].format(history=history)
-    logger.info(f"[generator] RAW_MEMORY_PROMPT:\n{prompt}")
+    logger.info(f"=== MEMORY_PROMPT ===\n{prompt}\n=== END_MEMORY_PROMPT ===")
     try:
         raw = llm(prompt, max_tokens=config.MEMORY_MAX_TOKENS, temperature=0.3)
         logger.info(f"[generator] RAW_MEMORY_OUTPUT: {raw}")
-        return raw["choices"][0]["text"].strip().replace("###", "").replace("---", "")
+        return _extract_text(raw).strip().replace("###", "").replace("---", "")
     except Exception as e:
         logger.error(f"[generator] update_context_memory failed: {e}")
         return history
