@@ -37,19 +37,3 @@ def update_and_truncate(memory: str, user_query: str, reply: str, search_summary
         new_entry += f" | S: {search_summary[:50]}"
     combined = base + new_entry
     return combined[-max_len:]
-
-def compress_thread_context(llm, raw_parts: list, max_total_chars: int = 3500) -> str:
-    full_text = " ".join(raw_parts)
-    if len(full_text) <= max_total_chars:
-        return full_text.strip()
-    chunks = [full_text[i:i+2000] for i in range(0, len(full_text), 2000)]
-    summaries = []
-    for chunk in chunks:
-        prompt = f"Summarize this text in 100-150 characters. Keep only core facts and context.\nText: {chunk[:1500]}\nSummary:"
-        try:
-            res = llm(prompt, max_tokens=100, temperature=0.1)
-            summaries.append(res["choices"][0]["text"].strip())
-        except:
-            summaries.append(chunk[:150])
-    merged = " ".join(summaries)
-    return merged.strip()[:max_total_chars]

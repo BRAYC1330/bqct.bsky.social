@@ -2,35 +2,29 @@ import logging
 import config
 import generator
 import bsky
-
+from logging_config import setup_logging
+setup_logging()
 logger = logging.getLogger(__name__)
 
-async def process_digest_community(client, llm, digest_uri: str, digest_text: str):
+async def process(client, llm, task):
     try:
-        replies = await bsky.get_replies(client, digest_uri)
-        if not replies:
-            logger.info("[COMMUNITY] Digest: no replies. Skipping.")
+        uri = task.get("uri", "")
+        text = task.get("text", "")
+        if not uri or not text:
             return
-
-        external = [r for r in replies if r.get("author", {}).get("did") != config.BOT_DID]
-        if not external:
-            logger.info("[COMMUNITY] Digest: no external replies. Skipping.")
+        chain = await bsky.fetch_thread_chain(client, uri)
+        if not chain:
             return
-
-        target = external[0]
-        comment_text = target.get("record", {}).get("text", "") or target.get("text", "")
-        logger.info(f"[COMMUNITY] Digest replying to: {target.get('author', {}).get('handle')}")
-
-        reply = generator.get_reply(
-            llm=llm,
-            memory="",
-            root_thread="",
-            search_data="",
-            query=comment_text
-        )
-
-        await bsky.reply_to(client, digest_uri, target.get("uri"), reply)
-        logger.info("[COMMUNITY] Digest reply posted. Context and memory saving skipped.")
-
+        root_uri = chain.get("root_uri", uri)
+        root_cid = chain.get("root_cid", "")
+        parent_uri = uri
+        parent_cid = chain.get("parent_cid", "")
+        
+        reply = generator.get_reply(llm, "", "", "", text)
+        if not reply or reply == "Error generating reply.":
+            return
+            
+        await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, parent_uri, parent_cid)
+        logger.info("[COMMUNITY] Reply posted successfully.")
     except Exception as e:
-        logger.error(f"[COMMUNITY] process_digest_community failed: {e}")
+        logger.error(f"[COMMUNITY] process failed: {e}")

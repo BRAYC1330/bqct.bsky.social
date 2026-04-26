@@ -7,6 +7,7 @@ import asyncio
 import random
 import httpx
 import unicodedata
+import json
 from typing import Any, Optional
 import config
 from logging_config import setup_logging
@@ -30,11 +31,13 @@ def count_graphemes(text: str) -> int:
             in_combining = False
     return count
 
-def sanitize_input(text: str, max_len: int = 2000) -> str:
+def sanitize_input(text: str, max_len: int = 2000, for_prompt: bool = False) -> str:
     if not text:
         return ""
     text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', ' ', text)
     text = re.sub(r'\s+', ' ', text).strip()
+    if for_prompt:
+        text = re.sub(r'[\[\]{}<>|\\^`]', '', text)
     if len(text) > max_len:
         text = text[:max_len]
     return text
@@ -69,7 +72,20 @@ def validate_and_fix_output(text: str) -> str:
         text = text[:last_dot+1] if last_dot != -1 else text[:297] + "..."
     return text
 
-def validate_post_length(text: str, max_graphemes: int = 300) -> tuple[bool, str]:
+def validate_post_content(text: str, max_graphemes: int = 300, max_tokens: Optional[int] = None, llm: Optional[Any] = None) -> tuple[bool, str]:
+    if max_tokens and llm and count_tokens(text, llm) > max_tokens:
+        words = text.split()
+        out = []
+        current = 0
+        for w in words:
+            t = count_tokens(w + " ", llm)
+            if current + t > max_tokens:
+                break
+            out.append(w)
+            current += t
+        text = " ".join(out)
+        if not text.endswith(('.', '!', '?')):
+            text += "."
     grapheme_count = count_graphemes(text)
     if grapheme_count <= max_graphemes:
         return True, text
@@ -177,8 +193,8 @@ async def process_reply(client, llm, task, max_chars=240, suffix="", temperature
     if len(reply) > max_body:
         reply = reply[:max_body].rsplit(".", 1)[0] + "." if "." in reply[:max_body] else reply[:max_body-3] + "..."
     final_reply = reply + suffix
-    is_valid, trimmed = validate_post_length(final_reply, max_graphemes=280)
+    is_valid, trimmed = validate_post_content(final_reply, max_graphemes=280)
     if not is_valid:
-        logger.warning(f"[utils] Reply exceeded grapheme limit ({count_graphemes(final_reply)} > 280), trimmed")
+        logger.warning(f"[utils] Reply exceeded limit, trimmed")
         final_reply = trimmed
     await bsky.post_reply(client, config.BOT_DID, final_reply, root_uri, root_cid, uri, parent_cid)

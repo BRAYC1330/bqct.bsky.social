@@ -10,9 +10,11 @@ async def get_trending_topics_raw() -> list:
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(config.REQUEST_TIMEOUT, connect=config.CONNECT_TIMEOUT)) as client:
             r = await client.get("https://api.chainbase.com/tops/v1/tool/list-trending-topics?language=en", timeout=config.SEARCH_TIMEOUT)
-            logger.info(f"[search] Chainbase RAW_RESPONSE_STATUS: {r.status_code}")
-            if r.status_code != 200: return []
-            logger.info(f"[search] Chainbase RAW_RESPONSE_BODY: {json.dumps(r.json(), indent=2, ensure_ascii=False)}")
+            logger.info(f"[search] Chainbase status: {r.status_code}")
+            if r.status_code != 200:
+                return []
+            if config.RAW_DEBUG:
+                logger.debug(f"[search] Chainbase body: {json.dumps(r.json(), ensure_ascii=False)[:500]}...")
             from parser_chainbase import parse_trending_items
             return parse_trending_items(r.json())
     except Exception as e:
@@ -20,7 +22,8 @@ async def get_trending_topics_raw() -> list:
         return []
 
 async def fetch_tavily(query: str, time_range: str = "") -> str:
-    if not config.TAVILY_API_KEY: return ""
+    if not config.TAVILY_API_KEY:
+        return ""
     url = "https://api.tavily.com/search"
     headers = {"Authorization": f"Bearer {config.TAVILY_API_KEY}", "Content-Type": "application/json"}
     payload = {"query": query, "search_depth": "basic", "max_results": 3, "include_raw_content": "text"}
@@ -29,26 +32,33 @@ async def fetch_tavily(query: str, time_range: str = "") -> str:
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             r = await client.post(url, headers=headers, json=payload)
-            logger.info(f"[search] Tavily RAW_RESPONSE_STATUS: {r.status_code}")
-            logger.info(f"[search] Tavily RAW_RESPONSE_BODY: {json.dumps(r.json(), indent=2, ensure_ascii=False)}")
+            logger.info(f"[search] Tavily status: {r.status_code}")
+            if config.RAW_DEBUG:
+                logger.debug(f"[search] Tavily body: {json.dumps(r.json(), ensure_ascii=False)[:500]}...")
             r.raise_for_status()
             from parser_tavily import clean_search_results
-            return clean_search_results(r.json().get("results", []))
+            results = r.json().get("results", [])
+            logger.info(f"[search] Tavily results count: {len(results)}")
+            return clean_search_results(results)
     except Exception as e:
         logger.error(f"[search] Tavily error: {e}")
         return ""
 
 async def fetch_chainbase(query: str) -> str:
-    if not query: return ""
+    if not query:
+        return ""
     try:
         async with httpx.AsyncClient(timeout=config.SEARCH_TIMEOUT) as client:
             url = f"https://api.chainbase.com/tops/v1/tool/search-narrative-candidates?keyword={query}"
             r = await client.get(url, timeout=config.SEARCH_TIMEOUT)
-            logger.info(f"[search] Chainbase Search RAW_RESPONSE_STATUS: {r.status_code}")
-            if r.status_code != 200: return ""
-            logger.info(f"[search] Chainbase Search RAW_RESPONSE_BODY: {json.dumps(r.json(), indent=2, ensure_ascii=False)}")
+            logger.info(f"[search] Chainbase Search status: {r.status_code}")
+            if r.status_code != 200:
+                return ""
+            if config.RAW_DEBUG:
+                logger.debug(f"[search] Chainbase Search body: {json.dumps(r.json(), ensure_ascii=False)[:500]}...")
             from parser_chainbase import format_chainbase_results, parse_search_results
             items = parse_search_results(r.json())
+            logger.info(f"[search] Chainbase Search results count: {len(items)}")
             return format_chainbase_results(items)
     except Exception as e:
         logger.error(f"[search] Chainbase error: {e}")
