@@ -117,7 +117,7 @@ async def fetch_thread_chain(client: httpx.AsyncClient, uri: str) -> Optional[Di
         "root_cid": root_cid, 
         "root_text": root_text,
         "parent_cid": parent_cid, 
-        "cid": post.get("cid", ""), # <-- Добавлен CID самого уведомления
+        "cid": post.get("cid", ""),
         "embeds": embeds,
         "all_texts": all_texts, 
         "full_text": full_thread_text

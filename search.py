@@ -3,8 +3,22 @@ import httpx
 import json
 import config
 from logging_config import setup_logging
+from copy import deepcopy
+
 setup_logging()
 logger = logging.getLogger(__name__)
+
+NOISE_FIELDS = {
+    "id", "tweet_urls", "authors", "analysis_time", 
+    "snapshot_time", "first_tweet_time", "is_manual", "is_new"
+}
+
+def _clean_json_log(data):
+    if isinstance(data, dict):
+        return {k: _clean_json_log(v) for k, v in data.items() if k not in NOISE_FIELDS}
+    elif isinstance(data, list):
+        return [_clean_json_log(item) for item in data]
+    return data
 
 async def get_trending_topics_raw() -> list:
     try:
@@ -13,10 +27,11 @@ async def get_trending_topics_raw() -> list:
             logger.info(f"[search] Chainbase status: {r.status_code}")
             if r.status_code != 200:
                 return []
+            raw_data = r.json()
             if config.RAW_DEBUG:
-                logger.debug(f"[search] Chainbase body: {json.dumps(r.json(), ensure_ascii=False)[:500]}...")
+                logger.debug(f"[search] Chainbase body: {json.dumps(_clean_json_log(raw_data), ensure_ascii=False)}")
             from parser_chainbase import parse_trending_items
-            return parse_trending_items(r.json())
+            return parse_trending_items(raw_data)
     except Exception as e:
         logger.error(f"[search] Trend fetch failed: {e}")
         return []
@@ -34,7 +49,7 @@ async def fetch_tavily(query: str, time_range: str = "") -> str:
             r = await client.post(url, headers=headers, json=payload)
             logger.info(f"[search] Tavily status: {r.status_code}")
             if config.RAW_DEBUG:
-                logger.debug(f"[search] Tavily body: {json.dumps(r.json(), ensure_ascii=False)[:500]}...")
+                logger.debug(f"[search] Tavily body: {json.dumps(r.json(), ensure_ascii=False)}")
             r.raise_for_status()
             from parser_tavily import clean_search_results
             results = r.json().get("results", [])
@@ -54,10 +69,11 @@ async def fetch_chainbase(query: str) -> str:
             logger.info(f"[search] Chainbase Search status: {r.status_code}")
             if r.status_code != 200:
                 return ""
+            raw_data = r.json()
             if config.RAW_DEBUG:
-                logger.debug(f"[search] Chainbase Search body: {json.dumps(r.json(), ensure_ascii=False)[:500]}...")
+                logger.debug(f"[search] Chainbase Search body: {json.dumps(_clean_json_log(raw_data), ensure_ascii=False)}")
             from parser_chainbase import format_chainbase_results, parse_search_results
-            items = parse_search_results(r.json())
+            items = parse_search_results(raw_data)
             logger.info(f"[search] Chainbase Search results count: {len(items)}")
             return format_chainbase_results(items)
     except Exception as e:
