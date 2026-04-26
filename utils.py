@@ -6,6 +6,7 @@ import logging
 import asyncio
 import random
 import httpx
+import unicodedata
 from typing import Any, Optional
 import config
 from logging_config import setup_logging
@@ -14,7 +15,20 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 def count_graphemes(text: str) -> int:
-    return len(text) if text else 0
+    if not text:
+        return 0
+    normalized = unicodedata.normalize("NFC", text)
+    count = 0
+    in_combining = False
+    for char in normalized:
+        if unicodedata.combining(char):
+            if not in_combining:
+                count += 1
+                in_combining = True
+        else:
+            count += 1
+            in_combining = False
+    return count
 
 def sanitize_input(text: str, max_len: int = 2000) -> str:
     if not text:
@@ -54,6 +68,22 @@ def validate_and_fix_output(text: str) -> str:
         last_dot = text[:299].rfind(".")
         text = text[:last_dot+1] if last_dot != -1 else text[:297] + "..."
     return text
+
+def validate_post_length(text: str, max_graphemes: int = 300) -> tuple[bool, str]:
+    grapheme_count = count_graphemes(text)
+    if grapheme_count <= max_graphemes:
+        return True, text
+    truncated = text[:max_graphemes]
+    last_period = truncated.rfind('.')
+    if last_period >= int(max_graphemes * 0.7):
+        truncated = truncated[:last_period + 1]
+    else:
+        last_space = truncated.rfind(' ')
+        if last_space >= int(max_graphemes * 0.7):
+            truncated = truncated[:last_space].rstrip('.,;:') + '.'
+        else:
+            truncated = truncated[:int(max_graphemes * 0.7)].rstrip('.,;: ') + '.'
+    return count_graphemes(truncated) <= max_graphemes, truncated
 
 def get_slot(value: str, slot_count: int = None) -> int:
     count = slot_count if slot_count is not None else config.CONTEXT_SLOT_COUNT
@@ -146,4 +176,9 @@ async def process_reply(client, llm, task, max_chars=240, suffix="", temperature
         reply = reply[:max_body].rsplit(" ", 1)[0] + "."
     if len(reply) > max_body:
         reply = reply[:max_body].rsplit(".", 1)[0] + "." if "." in reply[:max_body] else reply[:max_body-3] + "..."
-    await bsky.post_reply(client, config.BOT_DID, reply + suffix, root_uri, root_cid, uri, parent_cid)
+    final_reply = reply + suffix
+    is_valid, trimmed = validate_post_length(final_reply, max_graphemes=280)
+    if not is_valid:
+        logger.warning(f"[utils] Reply exceeded grapheme limit ({count_graphemes(final_reply)} > 280), trimmed")
+        final_reply = trimmed
+    await bsky.post_reply(client, config.BOT_DID, final_reply, root_uri, root_cid, uri, parent_cid)
