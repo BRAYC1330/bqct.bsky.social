@@ -5,15 +5,15 @@ on:
   workflow_dispatch:
     inputs:
       clear_mini:
-        description: 'Удалить LAST_MINI_DIGEST'
+        description: 'LAST_MINI_DIGEST'
         type: boolean
         default: false
       clear_full:
-        description: 'Удалить LAST_FULL_DIGEST'
+        description: 'LAST_FULL_DIGEST'
         type: boolean
         default: false
       clear_contexts:
-        description: 'Удалить секреты (имена через запятую или * для всех CONTEXT_0-9)'
+        description: 'CONTEXT_0-9'
         type: string
         default: ''
 permissions:
