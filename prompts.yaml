@@ -8,7 +8,7 @@ tavily_intent: |
 
 chainbase_keyword: |
   Extract the main keyword or entity from the text.
-  Output format: KEYWORD: [1-2 words]
+  Output format: KEYWORD: [1 word]
   Text: {text}
   Result:
 
