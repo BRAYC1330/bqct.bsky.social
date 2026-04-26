@@ -124,6 +124,7 @@ jobs:
         if: steps.checker.outputs.status == 'true'
         env:
           PYTHONUNBUFFERED: "1"
+          TASKS_JSON: ${{ steps.checker.outputs.tasks }}
           ACTIVE_DIGEST_URI: ${{ secrets.ACTIVE_DIGEST_URI }}
           BOT_HANDLE: ${{ secrets.BOT_HANDLE }}
           BOT_PASSWORD: ${{ secrets.BOT_PASSWORD }}
