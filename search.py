@@ -61,20 +61,27 @@ async def fetch_tavily(query: str, time_range: str = "") -> str:
 
 async def fetch_chainbase(query: str) -> str:
     if not query:
+        logger.info(f"[search] Chainbase skipped: empty keyword")
         return ""
     try:
         async with httpx.AsyncClient(timeout=config.SEARCH_TIMEOUT) as client:
             url = f"https://api.chainbase.com/tops/v1/tool/search-narrative-candidates?keyword={query}"
+            logger.info(f"[search] CHAINBASE_URL: {url}")
             r = await client.get(url, timeout=config.SEARCH_TIMEOUT)
             logger.info(f"[search] Chainbase Search status: {r.status_code}")
             if r.status_code != 200:
+                logger.info(f"[search] CHAINBASE_RAW_RESPONSE: {r.text}")
                 return ""
             raw_data = r.json()
+            logger.info(f"[search] CHAINBASE_RAW_RESPONSE: {json.dumps(raw_data, ensure_ascii=False)}")
             if config.RAW_DEBUG:
-                logger.debug(f"[search] Chainbase Search body: {json.dumps(_clean_json_log(raw_data), ensure_ascii=False)}")
+                logger.debug(f"[search] Chainbase Search body (cleaned): {json.dumps(_clean_json_log(raw_data), ensure_ascii=False)}")
             from parser_chainbase import format_chainbase_results, parse_search_results
             items = parse_search_results(raw_data)
             logger.info(f"[search] Chainbase Search results count: {len(items)}")
+            if items:
+                preview = " | ".join([f"{i.get('keyword')}: {i.get('summary', '')[:50]}..." for i in items[:2]])
+                logger.info(f"[search] CHAINBASE_PARSED_PREVIEW: {preview}")
             search_text = format_chainbase_results(items)
             if config.RAW_DEBUG:
                 logger.info(f"[search] Chainbase context passed to model:\n{search_text}")
