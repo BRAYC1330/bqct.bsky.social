@@ -13,11 +13,6 @@ from logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
 
-def _parse_iso(dt_str: str) -> datetime:
-    if not dt_str:
-        return datetime.min.replace(tzinfo=timezone.utc)
-    return datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
-
 async def run():
     last_processed_raw = os.getenv("LAST_PROCESSED", "{}").strip()
     try:
@@ -32,6 +27,7 @@ async def run():
 
     tasks = []
     now_utc = datetime.now(timezone.utc)
+    now_utc_str = now_utc.isoformat().replace("+00:00", "Z")
     owner_count = 0
     digest_comment_count = 0
 
@@ -39,10 +35,9 @@ async def run():
     try:
         await bsky.login_with_cache(client, config.BOT_HANDLE, config.BOT_PASSWORD)
         notifs = await bsky.fetch_notifications(client, limit=100, seen_at=seen_at)
-        seen_dt = _parse_iso(seen_at)
         for n in notifs:
-            notif_dt = _parse_iso(n.get("indexedAt", ""))
-            if notif_dt <= seen_dt:
+            idx = n.get("indexedAt", "")
+            if idx <= seen_at:
                 continue
             reason = n.get("reason", "")
             if reason not in ("reply", "mention"):
@@ -64,7 +59,9 @@ async def run():
     scheduled_type = None
     if last_digest_time_str:
         try:
-            last_dt = _parse_iso(last_digest_time_str)
+            last_dt = datetime.fromisoformat(last_digest_time_str.replace("Z", "+00:00"))
+            if last_dt.tzinfo is None:
+                last_dt = last_dt.replace(tzinfo=timezone.utc)
             if (now_utc - last_dt).total_seconds() >= 2 * 3600:
                 scheduled_type = "full" if last_digest_type == "mini" else "mini"
         except Exception:
@@ -75,10 +72,10 @@ async def run():
     if scheduled_type:
         tasks.append({"type": f"digest_{scheduled_type}"})
         state["digest_type"] = scheduled_type
-        state["digest_time"] = now_utc.isoformat()
+        state["digest_time"] = now_utc_str
         logger.info(f"[TIMER] Digest scheduled: {scheduled_type}")
 
-    state["seen_at"] = now_utc.isoformat()
+    state["seen_at"] = now_utc_str
     tasks_json = json.dumps(tasks, ensure_ascii=False)
     out_path = os.getenv("GITHUB_OUTPUT")
     has_tasks = len(tasks) > 0
