@@ -41,6 +41,7 @@ async def main() -> None:
         "model_load_time": 0.0,
         "execution_time": 0.0
     }
+    new_digest_uri = ""
 
     limits = httpx.Limits(max_connections=20, max_keepalive_connections=5)
     timeout = httpx.Timeout(connect=10.0, read=30.0, write=30.0, pool=10.0)
@@ -69,7 +70,7 @@ async def main() -> None:
         import community
         import owner
 
-        handlers: Dict[str, Callable[[TaskDict], Awaitable[None]]] = {
+        handlers: Dict[str, Callable[[TaskDict], Awaitable[Any]]] = {
             "digest_mini": lambda t: digest.run(client, llm_cache, "digest_mini"),
             "digest_full": lambda t: digest.run(client, llm_cache, "digest_full"),
             "digest_comment": lambda t: community.process(client, llm_cache, t),
@@ -83,7 +84,9 @@ async def main() -> None:
             handler = handlers.get(t_type)
             if handler:
                 try:
-                    await handler(task)
+                    result = await handler(task)
+                    if t_type.startswith("digest_") and result:
+                        new_digest_uri = result
                     metrics["success"] += 1
                 except httpx.HTTPStatusError as e:
                     logger.error(f"[main] HTTP error for task {t_type}: {e.response.status_code}")
@@ -114,6 +117,11 @@ async def main() -> None:
             f.write(f"| Task Execution | {metrics['execution_time']}s |\n")
             f.write(f"| Total Run Time | {total_time}s |\n")
             f.write(f"| Status | {'✅ Complete' if metrics['failed'] == 0 else '⚠️ Partial'} |\n")
+
+    out_path = os.getenv("GITHUB_OUTPUT")
+    if out_path:
+        with open(out_path, "a", encoding="utf-8") as f:
+            f.write(f"new_digest_uri={new_digest_uri}\n")
 
     logger.info("[main] === DONE ===")
 
