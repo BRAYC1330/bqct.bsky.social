@@ -3,6 +3,7 @@ import re
 import generator
 import search
 import utils
+import reply
 from logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -34,4 +35,4 @@ async def process(client, llm, task):
         contents = [f"[LINK:{u}]\n{c}" for u in urls[:2] if (c := await ext.extract(u))]
         link_content = "\n\n".join(contents)
 
-    await utils.process_reply(client, llm, task, max_chars=240, suffix=suffix, temperature=0.7, search_data=search_data, link_content=link_content)
+    await reply.process_reply(client, llm, task, max_chars=240, suffix=suffix, temperature=0.7, search_data=search_data, link_content=link_content)
