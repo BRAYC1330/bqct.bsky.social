@@ -5,6 +5,7 @@ import unicodedata
 from typing import Any, Optional
 import config
 from logging_config import setup_logging
+import regex
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -12,18 +13,7 @@ logger = logging.getLogger(__name__)
 def count_graphemes(text: str) -> int:
     if not text:
         return 0
-    normalized = unicodedata.normalize("NFC", text)
-    count = 0
-    in_combining = False
-    for char in normalized:
-        if unicodedata.combining(char):
-            if not in_combining:
-                count += 1
-                in_combining = True
-        else:
-            count += 1
-            in_combining = False
-    return count
+    return len(regex.findall(r'\X', text))
 
 def sanitize_input(text: str, max_len: int = 2000, for_prompt: bool = False) -> str:
     if not text:
