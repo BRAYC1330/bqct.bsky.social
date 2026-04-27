@@ -29,10 +29,10 @@ async def process(client, llm, task):
         if search_query:
             if "!c" in user_text.lower():
                 search_data = await search.fetch_chainbase(search_query)
-                suffix = "\nQwen | Chainbase"
+                suffix = "\n\nQwen | Chainbase"
             else:
                 search_data = await search.fetch_tavily(search_query, time_range)
-                suffix = "\nQwen | Tavily"
+                suffix = "\n\nQwen | Tavily"
             logger.info(f"Search triggered | query={search_query} | results_len={len(search_data)}")
 
     chain = await bsky.fetch_thread_chain(client, uri)
@@ -44,11 +44,20 @@ async def process(client, llm, task):
     parent_cid = chain.get("parent_cid", "")
 
     memory = state.load_context(root_uri)
-    root_thread = f"Root: {chain.get('root_text', '')[:200]}"
+    root_thread = chain.get("root_text", "")
 
-    final_ctx = state.merge_contexts(memory, root_thread, search_data, user_text)
+    ctx_parts = []
+    if memory:
+        ctx_parts.append(f"[MEMORY]\n{memory}")
+    if root_thread:
+        ctx_parts.append(f"[ROOT_THREAD]\n{root_thread}")
+    if search_data:
+        ctx_parts.append(f"[SEARCH]\n{search_data}")
+    ctx_parts.append(f"[USER]\n{user_text}")
+    final_ctx = "\n\n".join(ctx_parts)
+
     if config.RAW_DEBUG:
-        logger.info(f"Final context:\n{final_ctx}")
+        logger.info(f"=== FINAL CONTEXT ===\n{final_ctx}\n=== END ===")
 
     reply = generator.get_answer(llm, final_ctx, user_text, search_data, max_chars=280, temperature=0.7)
     if utils.count_graphemes(reply) > 293:

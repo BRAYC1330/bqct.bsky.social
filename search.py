@@ -68,20 +68,17 @@ async def fetch_chainbase(query: str) -> str:
             raw_data = r.json()
             if config.RAW_DEBUG:
                 logger.info(f"CHAINBASE_RAW_RESPONSE:\n{json.dumps(raw_data, ensure_ascii=False, indent=2)}")
-            
             items = raw_data.get("items", [])
             eng_items = [i for i in items if is_english_text(i.get("keyword", "")) and is_english_text(i.get("summary", ""))]
             eng_items.sort(key=lambda x: x.get("score", 0), reverse=True)
-            
             if not eng_items:
                 logger.warning("No English results from Chainbase")
                 return ""
-                
             lines = []
             for item in eng_items[:5]:
                 kw = item.get("keyword", "")
                 score = item.get("score", 0)
-                summary = item.get("summary", "")[:300]
+                summary = item.get("summary", "")
                 lines.append(f"{kw} [Score: {int(score)}]: {summary}")
             result = "\n\n".join(lines)
             logger.info(f"Chainbase results length: {len(result)}")
