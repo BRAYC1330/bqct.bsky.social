@@ -17,7 +17,7 @@ PROMPTS_PATH = pathlib.Path(__file__).parent / "prompts.yaml"
 try:
     with open(PROMPTS_PATH, "r", encoding="utf-8") as f:
         loaded = yaml.safe_load(f)
-    if isinstance(loaded, dict) and "digest_refine" in loaded:
+    if isinstance(loaded, dict) and "rules" in loaded:
         _prompts = loaded
         logger.info(f"[LLM] Prompts loaded: {PROMPTS_PATH}")
     else:
@@ -124,14 +124,28 @@ def get_reply(llm: Llama, memory: str, root_thread: str, search_data: str, query
     safe_root = utils.sanitize_input(root_thread, max_len=1000)
     safe_search = utils.sanitize_input(search_data, max_len=2000)
     safe_query = utils.sanitize_input(query, max_len=500)
-    prompt_template = _prompts.get("reply", "Answer: {query}")
-    prompt = prompt_template.format(memory=safe_mem or "None", root_thread=safe_root or "None", search_data=safe_search or "None", query=safe_query)
+
+    ctx_parts = []
+    if safe_mem:
+        ctx_parts.append(f"Memory: {safe_mem}")
+    if safe_root:
+        ctx_parts.append(f"Thread: {safe_root}")
+    if safe_search:
+        ctx_parts.append(f"Search: {safe_search}")
+    ctx_parts.append(f"User: {safe_query}")
+
+    rules = _prompts.get("rules", "Rules:\n- Hard limit: 3 short sentences maximum.\n- Start directly with the answer. No intros.\n- Always end with a period.")
+    prompt = f"You are a helpful assistant. Answer based on:\n" + "\n".join(ctx_parts) + f"\n{rules}\nAnswer:"
+
     logger.info(f"[LLM] REPLY_PROMPT_VERSION: {_prompts.get('version', 'unknown')}")
     logger.info(f"[LLM] REPLY_PROMPT:\n{prompt}")
     try:
-        raw: Any = llm(prompt, max_tokens=config.REPLY_MAX_TOKENS, temperature=0.7)
-        logger.info(f"[LLM] RAW_REPLY_OUTPUT: {raw}")
-        return utils.validate_and_fix_output(_extract_text(raw))
+        raw: Any = llm(prompt, max_tokens=config.MAX_TOKENS, temperature=0.7)
+        raw_text = _extract_text(raw)
+        logger.info(f"[LLM] RAW_REPLY_OUTPUT: {raw_text}")
+        if not raw_text:
+            return "Error generating reply."
+        return utils.validate_and_fix_output(raw_text)
     except (ValueError, TypeError, RuntimeError) as e:
         logger.error(f"[LLM] get_reply failed: {e}")
         return "Error generating reply."
