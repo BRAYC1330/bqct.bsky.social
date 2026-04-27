@@ -6,7 +6,6 @@ import bsky
 import utils
 import state
 import generator
-from link_extractor import LinkExtractor
 from logging_config import setup_logging
 
 setup_logging()
@@ -25,28 +24,21 @@ async def process_reply(client, llm, task, max_chars=240, suffix="", temperature
     
     root_uri = chain.get("root_uri", task.get("parent_uri", uri))
     root_cid = chain.get("root_cid", "")
-    parent_cid = chain.get("cid", "")
+    parent_cid = chain.get("cid", "") 
     
-    root_thread = utils.sanitize_input(chain.get("root_text", ""))
-    full_thread_text = utils.sanitize_input(chain.get("full_text", ""), max_len=4000)
+    root_thread = chain.get("root_text", "")
+    full_thread_text = chain.get("full_text", "")
     
-    ext = LinkExtractor()
-    full_link_content = []
-    
-    if link_content:
-        full_link_content.append(link_content)
-        
+    thread_context_parts = []
     for post in chain.get("chain", []):
-        post_text = post.get("record", {}).get("text", "")
-        urls = URL_PATTERN.findall(post_text)
-        for url in urls:
-            content = await ext.extract(url)
-            if content:
-                full_link_content.append(f"[Linked content from {url}]: {content}")
-                
-    await ext.close()
-
-    combined_link_content = "\n\n".join(full_link_content) if full_link_content else ""
+        p_text = post.get("text", "")
+        if post.get("link_hints"):
+            p_text += "\n" + "\n".join(post["link_hints"])
+        if post.get("alts"):
+            p_text += "\n" + "\n".join(post["alts"])
+        thread_context_parts.append(f"@{post.get('handle')}: {p_text}")
+        
+    full_thread_context = "\n\n".join(thread_context_parts)
     
     current_hash = hashlib.sha256(full_thread_text.encode()).hexdigest()
     cached_mem, stored_hash = state.load_context(root_uri)
@@ -63,10 +55,9 @@ async def process_reply(client, llm, task, max_chars=240, suffix="", temperature
         logger.info("CACHE_STATUS: MISS")
             
     combined_search = utils.sanitize_input(search_data)
-    if combined_link_content:
-        combined_search = f"{combined_search}\n\n[EXTRACTED_LINKS]\n{utils.sanitize_input(combined_link_content)}" if combined_search else f"[EXTRACTED_LINKS]\n{utils.sanitize_input(combined_link_content)}"
-        
-    logger.info(f"Full search \n{combined_search}")
+    final_context_str = f"[THREAD]\n{full_thread_context}\n\n[SEARCH]\n{combined_search}\n\n[USER]\n{user_text}"
+    logger.info(f"FULL_CONTEXT:\n{final_context_str}")
+    
     reply = generator.get_reply(llm, final_context, root_thread, combined_search, user_text)
     reply = utils.validate_and_fix_output(reply)
     

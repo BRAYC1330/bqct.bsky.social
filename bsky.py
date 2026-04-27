@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from typing import List, Dict, Optional
 import config
 from logging_config import setup_logging
+from trafilatura import extract as trafilatura_extract
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -64,16 +65,15 @@ async def post_reply(client: httpx.AsyncClient, bot_did: str, text: str, root_ur
     return r.json()
 
 async def _extract_clean_url_content(url: str) -> Optional[str]:
+    logger.info(f"Fetching URL content: {url}")
     try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=20) as c:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=30) as c:
             r = await c.get(url, headers={"User-Agent": "Mozilla/5.0"})
             if r.status_code == 200:
-                from trafilatura import extract as trafilatura_extract
                 content = trafilatura_extract(r.text, include_tables=False, include_comments=False, output_format="txt")
-                if content:
-                    return content[:400].strip()
-    except Exception:
-        pass
+                return content if content else None
+    except Exception as e:
+        logger.warning(f"Failed to fetch URL {url}: {e}")
     return None
 
 def _extract_embed_full(embed: Optional[Dict]) -> tuple:
@@ -97,14 +97,14 @@ def _extract_embed_full(embed: Optional[Dict]) -> tuple:
         if title:
             parts.append(f"[Link: {title}]")
         if desc:
-            parts.append(f"[Desc: {desc[:150]}]")
+            parts.append(f"[Desc: {desc}]")
         if uri and not uri.startswith("https://bsky.app"):
             parts.append(f"[URL: {uri}]")
     elif embed_type == "app.bsky.embed.record":
         rec = embed.get("record", {})
         if rec.get("$type") == "app.bsky.feed.post":
             val = rec.get("value", {})
-            quote_text = val.get("text", "")[:150]
+            quote_text = val.get("text", "")
             quote_author = rec.get("author", {}).get("handle", "")
             if quote_text:
                 parts.append(f"[Quote @{quote_author}: {quote_text}]")
@@ -119,7 +119,7 @@ async def _parse_thread_nodes(node, parent_uri=None, client=None, token=None, li
     record = post.get("record", {})
     if not record:
         return
-    node_uri = post.get("uri")
+    node_uri = post.get("uri", "")
     author = post.get("author", {})
     did = author.get("did", "")
     handle = author.get("handle", did.split(":")[-1] if ":" in did else "unknown")
@@ -133,13 +133,20 @@ async def _parse_thread_nodes(node, parent_uri=None, client=None, token=None, li
             link_hints.append(f"[Embed: {embed_text}]")
         if embed_alts:
             alts.extend(embed_alts)
+        if embed.get("$type") == "app.bsky.embed.external":
+            ext_uri = embed.get("external", {}).get("uri", "").strip()
+            if ext_uri and ext_uri not in link_cache:
+                clean = await _extract_clean_url_content(ext_uri)
+                link_cache[ext_uri] = clean
+                if clean:
+                    link_hints.append(f"[Page content from {ext_uri}]: {clean}")
     urls = URL_PATTERN.findall(txt)
     for url in urls:
         if url not in link_cache:
             clean = await _extract_clean_url_content(url)
             link_cache[url] = clean
-        if link_cache[url]:
-            link_hints.append(f"[Linked content from {url}]: {link_cache[url]}")
+            if clean:
+                link_hints.append(f"[Linked content from {url}]: {clean}")
     all_nodes.append({
         "uri": node_uri,
         "parent_uri": parent_uri,
@@ -193,12 +200,12 @@ async def fetch_thread_chain(client: httpx.AsyncClient, uri: str):
             for alt in p["alts"]:
                 logger.info(f"ALT: {alt}")
     return {
-        "root_uri": root_uri,
-        "root_cid": root_cid,
+        "root_uri": root_uri, 
+        "root_cid": root_cid, 
         "root_text": root_text,
-        "parent_cid": parent_cid,
+        "parent_cid": parent_cid, 
         "cid": post.get("cid", ""),
-        "all_texts": all_texts,
+        "all_texts": all_texts, 
         "full_text": full_thread_text,
         "chain": all_nodes
     }
