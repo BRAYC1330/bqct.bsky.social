@@ -2,10 +2,9 @@ import httpx
 import logging
 import re
 from datetime import datetime, timezone
-from typing import List, Dict, Optional
+from typing import Dict, Optional
 import config
 from logging_config import setup_logging
-from trafilatura import extract as trafilatura_extract
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -67,6 +66,7 @@ async def post_reply(client: httpx.AsyncClient, bot_did: str, text: str, root_ur
 async def _extract_clean_url_content(url: str) -> Optional[str]:
     logger.info(f"Fetching URL content: {url}")
     try:
+        from trafilatura import extract as trafilatura_extract
         async with httpx.AsyncClient(follow_redirects=True, timeout=30) as c:
             r = await c.get(url, headers={"User-Agent": "Mozilla/5.0"})
             if r.status_code == 200:
