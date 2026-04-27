@@ -24,19 +24,28 @@ async def process_reply(client, llm, task, max_chars=240, suffix="", temperature
     
     root_uri = chain.get("root_uri", task.get("parent_uri", uri))
     root_cid = chain.get("root_cid", "")
-    parent_cid = chain.get("cid", "") 
+    parent_cid = chain.get("cid", "")
     
     root_thread = chain.get("root_text", "")
-    full_thread_text = chain.get("full_text", "")
+    full_thread_text = " ".join([p.get("record", {}).get("text", "") for p in chain.get("chain", [])])
     
     thread_context_parts = []
     for post in chain.get("chain", []):
-        p_text = post.get("text", "")
-        if post.get("link_hints"):
-            p_text += "\n" + "\n".join(post["link_hints"])
-        if post.get("alts"):
-            p_text += "\n" + "\n".join(post["alts"])
-        thread_context_parts.append(f"@{post.get('handle')}: {p_text}")
+        rec = post.get("record", {})
+        author = post.get("author", {})
+        p_text = rec.get("text", "")
+        embed = rec.get("embed")
+        embed_text, alts = bsky._extract_embed_full(embed) if embed else ("", [])
+        if embed_text:
+            p_text += f" {embed_text}"
+        if alts:
+            p_text += " " + " ".join(alts)
+        urls = URL_PATTERN.findall(p_text)
+        for url in urls:
+            clean = await bsky._extract_clean_url_content(url)
+            if clean:
+                p_text += f" [Linked: {clean}]"
+        thread_context_parts.append(f"@{author.get('handle')}: {p_text}")
         
     full_thread_context = "\n\n".join(thread_context_parts)
     

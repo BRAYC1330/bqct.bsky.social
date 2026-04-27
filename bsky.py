@@ -2,7 +2,7 @@ import httpx
 import logging
 import re
 from datetime import datetime, timezone
-from typing import List, Dict, Optional
+from typing import Dict, Optional
 import config
 from logging_config import setup_logging
 
@@ -110,62 +110,11 @@ def _extract_embed_full(embed: Optional[Dict]) -> tuple:
                 parts.append(f"[Quote @{quote_author}: {quote_text}]")
     return " ".join(p for p in parts if p), alts
 
-async def _parse_thread_nodes(node, parent_uri=None, client=None, token=None, link_cache=None, all_nodes=None):
-    if not node or not isinstance(node, dict):
-        return
-    if node.get("$type") in ["app.bsky.feed.defs#notFoundPost", "app.bsky.feed.defs#blockedPost"]:
-        return
-    post = node.get("post", {})
-    record = post.get("record", {})
-    if not record:
-        return
-    node_uri = post.get("uri", "")
-    author = post.get("author", {})
-    did = author.get("did", "")
-    handle = author.get("handle", did.split(":")[-1] if ":" in did else "unknown")
-    txt = record.get("text", "")
-    embed = record.get("embed")
-    alts = []
-    link_hints = []
-    if embed and isinstance(embed, dict):
-        embed_text, embed_alts = _extract_embed_full(embed)
-        if embed_text:
-            link_hints.append(f"[Embed: {embed_text}]")
-        if embed_alts:
-            alts.extend(embed_alts)
-        if embed.get("$type") == "app.bsky.embed.external":
-            ext_uri = embed.get("external", {}).get("uri", "").strip()
-            if ext_uri and ext_uri not in link_cache:
-                clean = await _extract_clean_url_content(ext_uri)
-                link_cache[ext_uri] = clean
-                if clean:
-                    link_hints.append(f"[Page content from {ext_uri}]: {clean}")
-    urls = URL_PATTERN.findall(txt)
-    for url in urls:
-        if url not in link_cache:
-            clean = await _extract_clean_url_content(url)
-            link_cache[url] = clean
-            if clean:
-                link_hints.append(f"[Linked content from {url}]: {clean}")
-    all_nodes.append({
-        "uri": node_uri,
-        "parent_uri": parent_uri,
-        "did": did,
-        "handle": handle,
-        "text": txt,
-        "alts": alts,
-        "link_hints": link_hints,
-        "is_root": (parent_uri is None)
-    })
-    for reply_node in node.get("replies", []):
-        if isinstance(reply_node, dict):
-            await _parse_thread_nodes(reply_node, node_uri, client, token, link_cache, all_nodes)
-
 async def fetch_thread_chain(client: httpx.AsyncClient, uri: str):
     url = "https://bsky.social/xrpc/app.bsky.feed.getPostThread"
     logger.info(f"GET {url} (uri={uri})")
     try:
-        r = await request_with_retry(client, "GET", url, params={"uri": uri, "depth": 100, "parentHeight": 100})
+        r = await request_with_retry(client, "GET", url, params={"uri": uri, "depth": 0, "parentHeight": 100})
     except (httpx.HTTPStatusError, httpx.RequestError) as e:
         logger.warning(f"Thread fetch failed: {e}")
         return None
@@ -174,40 +123,54 @@ async def fetch_thread_chain(client: httpx.AsyncClient, uri: str):
     except ValueError as e:
         logger.warning(f"Invalid JSON in thread response: {e}")
         return None
-    thread = data.get("thread", {})
-    post = thread.get("post", {})
-    record = post.get("record", {})
-    reply_ref = record.get("reply", {})
-    root_ref = reply_ref.get("root", {}) if reply_ref else {}
-    parent_ref = reply_ref.get("parent", {}) if reply_ref else {}
-    root_uri = root_ref.get("uri") if root_ref.get("uri") else uri
-    root_cid = root_ref.get("cid") if root_ref.get("cid") else post.get("cid", "")
-    root_text = record.get("text", "") if root_uri == uri else ""
-    parent_cid = parent_ref.get("cid", "") if parent_ref else ""
-    all_nodes = []
-    link_cache = {}
-    token = client.headers.get("Authorization", "").replace("Bearer ", "")
-    await _parse_thread_nodes(thread, None, client, token, link_cache, all_nodes)
-    all_texts = [p.get("text", "") for p in all_nodes]
-    full_thread_text = " ".join(all_texts)
-    logger.info(f"THREAD_CHAIN: root_uri={root_uri} | posts_count={len(all_nodes)}")
-    for p in all_nodes:
-        logger.info(f"THREAD_POST: handle={p.get('handle')} | text={p.get('text')} | uri={p.get('uri')}")
-        if p.get("link_hints"):
-            for hint in p["link_hints"]:
-                logger.info(f"LINK_HINT: {hint}")
-        if p.get("alts"):
-            for alt in p["alts"]:
+    
+    chain = []
+    current = data.get("thread", {})
+    while current and isinstance(current, dict):
+        post = current.get("post")
+        if post:
+            chain.append(post)
+        current = current.get("parent")
+    
+    chain = list(reversed(chain))
+    
+    if not chain:
+        return None
+    
+    root = chain[0]
+    target = chain[-1]
+    
+    root_uri = root.get("uri")
+    root_cid = root.get("cid")
+    root_text = root.get("record", {}).get("text", "")
+    parent_cid = target.get("cid")
+    
+    logger.info(f"THREAD_CHAIN: root_uri={root_uri} | posts_count={len(chain)}")
+    for p in chain:
+        rec = p.get("record", {})
+        author = p.get("author", {})
+        text = rec.get("text", "")
+        embed = rec.get("embed")
+        embed_text, alts = _extract_embed_full(embed) if embed else ("", "")
+        urls = URL_PATTERN.findall(text)
+        logger.info(f"THREAD_POST: handle={author.get('handle')} | text={text} | uri={p.get('uri')}")
+        if embed_text:
+            logger.info(f"EMBED: {embed_text}")
+        if alts:
+            for alt in alts:
                 logger.info(f"ALT: {alt}")
+        for url in urls:
+            logger.info(f"URL_FOUND: {url}")
+            clean = await _extract_clean_url_content(url)
+            if clean:
+                logger.info(f"LINK_CONTENT from {url}:\n{clean}")
+    
     return {
-        "root_uri": root_uri, 
-        "root_cid": root_cid, 
+        "root_uri": root_uri,
+        "root_cid": root_cid,
         "root_text": root_text,
-        "parent_cid": parent_cid, 
-        "cid": post.get("cid", ""),
-        "all_texts": all_texts, 
-        "full_text": full_thread_text,
-        "chain": all_nodes
+        "parent_cid": parent_cid,
+        "chain": chain
     }
 
 async def fetch_notifications(client: httpx.AsyncClient, limit: int = 100, seen_at: str = None):
