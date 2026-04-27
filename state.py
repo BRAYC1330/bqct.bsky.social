@@ -37,7 +37,7 @@ def merge_contexts(memory: str, root_thread: str, search_data: str, user_query: 
         parts.append(f"[SEARCH]\n{search_data}")
     if user_query:
         parts.append(f"[QUERY]\n{user_query}")
-    final = "\n\n".join(parts)
+    final = "\n".join(parts)
     if config.RAW_DEBUG:
         logger.info(f"=== RAW-FINAL-CONTEXT ===\n{final}\n=== END ===")
     return final
