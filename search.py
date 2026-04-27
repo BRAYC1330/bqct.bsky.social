@@ -27,7 +27,7 @@ async def get_trending_topics_raw() -> list:
                 logger.info(f"=== RAW-TRENDS ===\n{json.dumps(eng[:10], ensure_ascii=False, indent=2)}\n=== END ===")
             return eng[:10]
     except Exception as e:
-        logger.error(f"Trend fetch failed: {e}")
+        logger.error(f"[SEARCH] Trend fetch failed: {e}")
         return []
 
 def clean_search_results(raw) -> str:
@@ -51,7 +51,7 @@ async def fetch_tavily(query: str, time_range: str = "") -> str:
             r.raise_for_status()
             return clean_search_results(r.json().get("results", []))
     except Exception as e:
-        logger.error(f"Tavily error: {e}")
+        logger.error(f"[tavily] Error: {e}")
         return ""
 
 async def fetch_chainbase(query: str) -> str:
