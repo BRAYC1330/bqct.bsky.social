@@ -25,7 +25,7 @@ async def process_reply(client, llm, task, max_chars=240, suffix="", temperature
     
     root_uri = chain.get("root_uri", task.get("parent_uri", uri))
     root_cid = chain.get("root_cid", "")
-    parent_cid = chain.get("cid", "") 
+    parent_cid = chain.get("cid", "")
     
     root_thread = utils.sanitize_input(chain.get("root_text", ""))
     full_thread_text = utils.sanitize_input(chain.get("full_text", ""), max_len=4000)

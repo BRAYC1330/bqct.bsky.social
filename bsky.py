@@ -1,11 +1,15 @@
 import httpx
 import logging
+import re
 from datetime import datetime, timezone
+from typing import List, Dict, Optional
 import config
 from logging_config import setup_logging
 
 setup_logging()
 logger = logging.getLogger(__name__)
+
+URL_PATTERN = re.compile(r'https?://[^\s<>"{}|\\^`\[\]]+')
 
 async def request_with_retry(client, method, url, max_retries=3, **kwargs):
     for attempt in range(max_retries):
@@ -59,24 +63,96 @@ async def post_reply(client: httpx.AsyncClient, bot_did: str, text: str, root_ur
     r = await request_with_retry(client, "POST", url, json=body)
     return r.json()
 
-def iter_thread_posts(node):
+async def _extract_clean_url_content(url: str) -> Optional[str]:
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=20) as c:
+            r = await c.get(url, headers={"User-Agent": "Mozilla/5.0"})
+            if r.status_code == 200:
+                from trafilatura import extract as trafilatura_extract
+                content = trafilatura_extract(r.text, include_tables=False, include_comments=False, output_format="txt")
+                if content:
+                    return content[:400].strip()
+    except Exception:
+        pass
+    return None
+
+def _extract_embed_full(embed: Optional[Dict]) -> tuple:
+    parts, alts = [], []
+    if not embed:
+        return "", []
+    embed_type = embed.get("$type", "")
+    if embed_type == "app.bsky.embed.images":
+        for i, img in enumerate(embed.get("images", []), 1):
+            alt = img.get("alt", "").strip()
+            if alt:
+                parts.append(f"[Image {i}: {alt}]")
+                alts.append(f"Image {i}: {alt}")
+            else:
+                parts.append(f"[Image {i}]")
+    elif embed_type == "app.bsky.embed.external":
+        ext = embed.get("external", {})
+        title = ext.get("title", "").strip()
+        desc = ext.get("description", "").strip()
+        uri = ext.get("uri", "").strip()
+        if title:
+            parts.append(f"[Link: {title}]")
+        if desc:
+            parts.append(f"[Desc: {desc[:150]}]")
+        if uri and not uri.startswith("https://bsky.app"):
+            parts.append(f"[URL: {uri}]")
+    elif embed_type == "app.bsky.embed.record":
+        rec = embed.get("record", {})
+        if rec.get("$type") == "app.bsky.feed.post":
+            val = rec.get("value", {})
+            quote_text = val.get("text", "")[:150]
+            quote_author = rec.get("author", {}).get("handle", "")
+            if quote_text:
+                parts.append(f"[Quote @{quote_author}: {quote_text}]")
+    return " ".join(p for p in parts if p), alts
+
+async def _parse_thread_nodes(node, parent_uri=None, client=None, token=None, link_cache=None, all_nodes=None):
     if not node or not isinstance(node, dict):
         return
     if node.get("$type") in ["app.bsky.feed.defs#notFoundPost", "app.bsky.feed.defs#blockedPost"]:
         return
     post = node.get("post", {})
     record = post.get("record", {})
-    text = record.get("text") if record else post.get("value", {}).get("text")
-    if text:
-        yield {
-            "uri": post.get("uri", ""),
-            "cid": post.get("cid", ""),
-            "handle": post.get("author", {}).get("handle", ""),
-            "text": text,
-            "is_root": False
-        }
+    if not record:
+        return
+    node_uri = post.get("uri")
+    author = post.get("author", {})
+    did = author.get("did", "")
+    handle = author.get("handle", did.split(":")[-1] if ":" in did else "unknown")
+    txt = record.get("text", "")
+    embed = record.get("embed")
+    alts = []
+    link_hints = []
+    if embed and isinstance(embed, dict):
+        embed_text, embed_alts = _extract_embed_full(embed)
+        if embed_text:
+            link_hints.append(f"[Embed: {embed_text}]")
+        if embed_alts:
+            alts.extend(embed_alts)
+    urls = URL_PATTERN.findall(txt)
+    for url in urls:
+        if url not in link_cache:
+            clean = await _extract_clean_url_content(url)
+            link_cache[url] = clean
+        if link_cache[url]:
+            link_hints.append(f"[Linked content from {url}]: {link_cache[url]}")
+    all_nodes.append({
+        "uri": node_uri,
+        "parent_uri": parent_uri,
+        "did": did,
+        "handle": handle,
+        "text": txt,
+        "alts": alts,
+        "link_hints": link_hints,
+        "is_root": (parent_uri is None)
+    })
     for reply_node in node.get("replies", []):
-        yield from iter_thread_posts(reply_node)
+        if isinstance(reply_node, dict):
+            await _parse_thread_nodes(reply_node, node_uri, client, token, link_cache, all_nodes)
 
 async def fetch_thread_chain(client: httpx.AsyncClient, uri: str):
     url = "https://bsky.social/xrpc/app.bsky.feed.getPostThread"
@@ -91,7 +167,6 @@ async def fetch_thread_chain(client: httpx.AsyncClient, uri: str):
     except ValueError as e:
         logger.warning(f"Invalid JSON in thread response: {e}")
         return None
-
     thread = data.get("thread", {})
     post = thread.get("post", {})
     record = post.get("record", {})
@@ -102,37 +177,30 @@ async def fetch_thread_chain(client: httpx.AsyncClient, uri: str):
     root_cid = root_ref.get("cid") if root_ref.get("cid") else post.get("cid", "")
     root_text = record.get("text", "") if root_uri == uri else ""
     parent_cid = parent_ref.get("cid", "") if parent_ref else ""
-
-    all_posts = list(iter_thread_posts(thread))
-    all_texts = [p.get("text", "") for p in all_posts]
+    all_nodes = []
+    link_cache = {}
+    token = client.headers.get("Authorization", "").replace("Bearer ", "")
+    await _parse_thread_nodes(thread, None, client, token, link_cache, all_nodes)
+    all_texts = [p.get("text", "") for p in all_nodes]
     full_thread_text = " ".join(all_texts)
-
-    embeds = {"links": [], "reposts": []}
-    raw_embed = post.get("embed", {})
-    if raw_embed:
-        if raw_embed.get("$type") == "app.bsky.embed.external#view":
-            ext = raw_embed.get("external", {})
-            embeds["links"].append({"url": ext.get("uri"), "title": ext.get("title"), "desc": ext.get("description", "")})
-        elif raw_embed.get("$type") == "app.bsky.embed.record#view":
-            rec = raw_embed.get("record", {})
-            if rec.get("$type") == "app.bsky.embed.record#viewRecord":
-                val = rec.get("value", {})
-                embeds["reposts"].append({"author": rec.get("author", {}).get("handle"), "text": val.get("text", ""), "uri": rec.get("uri")})
-    
-    logger.info(f"THREAD_CHAIN: root_uri={root_uri} | posts_count={len(all_posts)} | full_text={full_thread_text}")
-    for p in all_posts:
+    logger.info(f"THREAD_CHAIN: root_uri={root_uri} | posts_count={len(all_nodes)}")
+    for p in all_nodes:
         logger.info(f"THREAD_POST: handle={p.get('handle')} | text={p.get('text')} | uri={p.get('uri')}")
-    
+        if p.get("link_hints"):
+            for hint in p["link_hints"]:
+                logger.info(f"LINK_HINT: {hint}")
+        if p.get("alts"):
+            for alt in p["alts"]:
+                logger.info(f"ALT: {alt}")
     return {
-        "root_uri": root_uri, 
-        "root_cid": root_cid, 
+        "root_uri": root_uri,
+        "root_cid": root_cid,
         "root_text": root_text,
-        "parent_cid": parent_cid, 
+        "parent_cid": parent_cid,
         "cid": post.get("cid", ""),
-        "embeds": embeds,
-        "all_texts": all_texts, 
+        "all_texts": all_texts,
         "full_text": full_thread_text,
-        "chain": all_posts
+        "chain": all_nodes
     }
 
 async def fetch_notifications(client: httpx.AsyncClient, limit: int = 100, seen_at: str = None):
