@@ -32,8 +32,3 @@ def setup_logging():
     logging.getLogger('httpx').setLevel(logging.WARNING)
     logging.getLogger('httpcore').setLevel(logging.WARNING)
     logging.getLogger('urllib3').setLevel(logging.WARNING)
-
-def log_section(title: str, content: str):
-    magenta = '\033[95m'
-    reset = '\033[0m'
-    logging.info(f"{magenta}=== {title} ==={reset}\n{content}")
