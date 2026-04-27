@@ -3,11 +3,6 @@ on:
   schedule:
     - cron: '0 * * * *'
   workflow_dispatch:
-    inputs:
-      clear_contexts:
-        description: 'CONTEXT_0-9'
-        type: string
-        default: ''
 permissions:
   contents: read
 jobs:
@@ -21,42 +16,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-      - name: Clear selected contexts
-        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.clear_contexts != '' }}
-        env:
-          CLEAR_CONTEXTS: ${{ github.event.inputs.clear_contexts }}
-          PAT: ${{ secrets.PAT }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-        run: |
-          python3 << 'EOF'
-          import os, subprocess
-          clear_ctx = os.environ.get("CLEAR_CONTEXTS", "").strip().upper()
-          targets = []
-          if clear_ctx == "*":
-              targets.extend([f"CONTEXT_{i}" for i in range(10)])
-          else:
-              targets.extend([t.strip() for t in clear_ctx.split(",") if t.strip()])
-          if not targets:
-              exit(0)
-          repo = os.environ["GITHUB_REPOSITORY"]
-          pat = os.environ["PAT"]
-          env = {**os.environ, "GH_TOKEN": pat}
-          for secret in targets:
-              cmd = ["gh", "secret", "delete", secret, "--repo", repo]
-              try:
-                  subprocess.run(cmd, env=env, check=True, capture_output=True)
-                  print(f"[OK] Deleted {secret}")
-              except subprocess.CalledProcessError:
-                  print(f"[WARN] Failed to delete {secret}")
-          EOF
-      - name: Cache pip dependencies
-        id: cache-pip
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
       - name: Install checker deps
         run: pip install httpx pyyaml
       - name: Check
@@ -110,20 +69,9 @@ jobs:
           PAT: ${{ secrets.PAT }}
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          CONTEXT_SLOT_COUNT: 10
-          CONTEXT_0: ${{ secrets.CONTEXT_0 }}
-          CONTEXT_1: ${{ secrets.CONTEXT_1 }}
-          CONTEXT_2: ${{ secrets.CONTEXT_2 }}
-          CONTEXT_3: ${{ secrets.CONTEXT_3 }}
-          CONTEXT_4: ${{ secrets.CONTEXT_4 }}
-          CONTEXT_5: ${{ secrets.CONTEXT_5 }}
-          CONTEXT_6: ${{ secrets.CONTEXT_6 }}
-          CONTEXT_7: ${{ secrets.CONTEXT_7 }}
-          CONTEXT_8: ${{ secrets.CONTEXT_8 }}
-          CONTEXT_9: ${{ secrets.CONTEXT_9 }}
           LINK_CACHE_TTL: 300
           ALLOWED_LINK_DOMAINS: "bsky.app,atproto.com,chainbase.com,tavily.com"
-          MAX_LINK_CONTENT_SIZE: 400
+          MAX_LINK_CONTENT_SIZE: 600
           LLAMA_NO_ACCELERATE: 1
           DEBUG_OWNER: "true"
         run: python bot.py
