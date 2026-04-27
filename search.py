@@ -31,7 +31,7 @@ async def get_trending_topics_raw() -> list:
                 return []
             raw_data = r.json()
             if config.RAW_DEBUG:
-                logger.debug(f"Chainbase body: {json.dumps(_clean_json_log(raw_data), ensure_ascii=False)}")
+                logger.info(f"Chainbase full response:\n{json.dumps(_clean_json_log(raw_data), ensure_ascii=False)}")
             from parser_chainbase import parse_trending_items
             return parse_trending_items(raw_data)
     except Exception as e:
@@ -52,7 +52,7 @@ async def fetch_tavily(query: str, time_range: str = "") -> str:
             r = await client.post(url, headers=headers, json=payload)
             logger.info(f"Tavily status: {r.status_code}")
             if config.RAW_DEBUG:
-                logger.debug(f"Tavily body: {json.dumps(r.json(), ensure_ascii=False)}")
+                logger.info(f"Tavily full response:\n{json.dumps(r.json(), ensure_ascii=False)}")
             r.raise_for_status()
             from parser_tavily import clean_search_results
             results = r.json().get("results", [])
@@ -76,18 +76,14 @@ async def fetch_chainbase(query: str) -> str:
                 logger.info(f"CHAINBASE_RAW_RESPONSE: {r.text}")
                 return ""
             raw_data = r.json()
-            logger.info(f"CHAINBASE_RAW_RESPONSE: {json.dumps(raw_data, ensure_ascii=False)}")
+            logger.info(f"CHAINBASE_RAW_RESPONSE:\n{json.dumps(raw_data, ensure_ascii=False)}")
             if config.RAW_DEBUG:
-                logger.debug(f"Chainbase Search body (cleaned): {json.dumps(_clean_json_log(raw_data), ensure_ascii=False)}")
+                logger.info(f"Chainbase cleaned response:\n{json.dumps(_clean_json_log(raw_data), ensure_ascii=False)}")
             from parser_chainbase import format_chainbase_results, parse_search_results
             items = parse_search_results(raw_data)
             logger.info(f"Chainbase Search results count: {len(items)}")
-            if items:
-                preview = " | ".join([f"{i.get('keyword')}: {i.get('summary', '')[:50]}..." for i in items[:2]])
-                logger.info(f"CHAINBASE_PARSED_PREVIEW: {preview}")
             search_text = format_chainbase_results(items)
-            if config.RAW_DEBUG:
-                logger.info(f"Chainbase context passed to model:\n{search_text}")
+            logger.info(f"Chainbase context passed to model:\n{search_text}")
             return search_text
     except Exception as e:
         logger.error(f"Chainbase error: {e}")

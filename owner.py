@@ -4,11 +4,16 @@ import generator
 import search
 import utils
 import reply
+import link_extractor
+from logging_config import setup_logging
+
+setup_logging()
 logger = logging.getLogger(__name__)
 URL_PATTERN = re.compile(r'https?://[^\s<>"{}|\\^`\[\]]+')
 
 async def process(client, llm, task):
     user_text = task["text"]
+    logger.info(f"START | user_text={user_text}")
     do_search = "!t" in user_text.lower() or "!c" in user_text.lower()
     search_data, link_content = "", ""
     suffix = ""
@@ -29,7 +34,6 @@ async def process(client, llm, task):
 
     urls = URL_PATTERN.findall(user_text)
     if urls:
-        import link_extractor
         ext = link_extractor.LinkExtractor()
         try:
             contents = [f"[LINK:{u}]\n{c}" for u in urls[:2] if (c := await ext.extract(u))]

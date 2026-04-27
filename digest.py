@@ -19,9 +19,9 @@ def _get_trend_emoji(rank_status: str) -> str:
 
 async def run(client, llm, task_type="digest_mini") -> str | None:
     trends = await search.get_trending_topics_raw()
-    logger.info(f"[digest] PARSED_TRENDS_COUNT: {len(trends)}")
+    logger.info(f"[DIGEST] PARSED_TRENDS_COUNT: {len(trends)}")
     if not trends:
-        logger.warning("[digest] No trends fetched")
+        logger.warning("[DIGEST] No trends fetched")
         return None
 
     sig = f"Qwen | Chainbase TOPS {config.SIGNATURE_ICONS}"
@@ -46,10 +46,10 @@ async def run(client, llm, task_type="digest_mini") -> str | None:
             joined_lines = "\n".join(lines)
             final_post = f"{header}\n\n{joined_lines}\n\n{sig}"
             if utils.count_graphemes(final_post) > 300:
-                logger.warning(f"[digest] SKIPPED: MINI GRAPHEME OVERFLOW")
+                logger.warning(f"[DIGEST] SKIPPED: MINI GRAPHEME OVERFLOW")
                 return None
             if config.RAW_DEBUG:
-                logger.info(f"=== RAW-MINI-POST ===\n{final_post}\n=== END ===")
+                logger.info(f"[DIGEST] RAW-MINI-POST:\n{final_post}")
             resp = await bsky.post_root(client, config.BOT_DID, final_post)
             return resp.get("uri")
         elif task_type == "digest_full":
@@ -67,12 +67,12 @@ async def run(client, llm, task_type="digest_mini") -> str | None:
             desc = generator.generate_digest(llm, kw, summary, max_desc_tokens)
             final_post = f"{header}\n\n{title}{desc}\n\n{sig}"
             if utils.count_graphemes(final_post) > 300:
-                logger.warning(f"[digest] SKIPPED: FULL GRAPHEME OVERFLOW")
+                logger.warning(f"[DIGEST] SKIPPED: FULL GRAPHEME OVERFLOW")
                 return None
             if config.RAW_DEBUG:
-                logger.info(f"=== RAW-FULL-POST ===\n{final_post}\n=== END ===")
+                logger.info(f"[DIGEST] RAW-FULL-POST:\n{final_post}")
             resp = await bsky.post_root(client, config.BOT_DID, final_post)
             return resp.get("uri")
     except Exception as e:
-        logger.error(f"[digest] Post failed: {e}")
+        logger.error(f"[DIGEST] Post failed: {e}")
     return None

@@ -1,7 +1,6 @@
 import re
 import hashlib
 import logging
-import unicodedata
 from typing import Any, Optional
 import config
 from logging_config import setup_logging
@@ -18,7 +17,7 @@ def sanitize_input(text: str, max_len: int = 2000, for_prompt: bool = False) -> 
     if not text:
         return ""
     text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', ' ', text)
-    text = re.sub(r'\s+', ' ', text).strip()
+    text = re.sub(r'\s+', ' ', text)
     if for_prompt:
         text = re.sub(r'[\[\]{}<>|\\^`]', '', text)
     if len(text) > max_len:
@@ -38,11 +37,6 @@ def count_tokens(text: str, llm: Optional[Any] = None) -> int:
 def validate_and_fix_output(text: str) -> str:
     if not text:
         return "Invalid response."
-    text = text.strip()
-    prefixes_to_remove = ["Answer:", "Here is", "Sure,", "Of course", "Based on"]
-    for p in prefixes_to_remove:
-        if text.startswith(p):
-            text = text[len(p):].strip().lstrip(": ")
     sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', text) if s.strip()]
     if len(sentences) > 2:
         text = " ".join(sentences[:2])

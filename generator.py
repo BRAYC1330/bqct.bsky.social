@@ -19,30 +19,30 @@ try:
         loaded = yaml.safe_load(f)
     if isinstance(loaded, dict) and "digest_refine" in loaded:
         _prompts = loaded
-        logger.info(f"[generator] Prompts loaded: {PROMPTS_PATH}")
+        logger.info(f"[LLM] Prompts loaded: {PROMPTS_PATH}")
     else:
-        logger.error(f"[generator] Invalid prompts.yaml structure at {PROMPTS_PATH}")
+        logger.error(f"[LLM] Invalid prompts.yaml structure at {PROMPTS_PATH}")
 except FileNotFoundError:
-    logger.error(f"[generator] prompts.yaml not found at {PROMPTS_PATH}")
+    logger.error(f"[LLM] prompts.yaml not found at {PROMPTS_PATH}")
 except yaml.YAMLError as e:
-    logger.error(f"[generator] Failed to parse prompts.yaml: {e}")
+    logger.error(f"[LLM] Failed to parse prompts.yaml: {e}")
 except Exception as e:
-    logger.error(f"[generator] Unexpected error loading prompts: {e}")
+    logger.error(f"[LLM] Unexpected error loading prompts: {e}")
 
 def get_model() -> Optional[Llama]:
     model_path = config.MODEL_PATH
     if not os.path.exists(model_path):
-        logger.error(f"[generator] Model not found: {model_path}")
+        logger.error(f"[LLM] Model not found: {model_path}")
         return None
     try:
         llm = Llama(model_path=model_path, n_ctx=config.MODEL_N_CTX, n_gpu_layers=0, n_threads=config.MODEL_N_THREADS, n_batch=2048, verbose=False)
-        logger.info(f"[generator] Model loaded: {os.path.basename(model_path)}")
+        logger.info(f"[LLM] Model loaded: {os.path.basename(model_path)}")
         return llm
     except OSError as e:
-        logger.error(f"[generator] Model load failed: {e}")
+        logger.error(f"[LLM] Model load failed: {e}")
         return None
     except RuntimeError as e:
-        logger.error(f"[generator] Model initialization error: {e}")
+        logger.error(f"[LLM] Model initialization error: {e}")
         return None
 
 def clean_artifacts(text: str) -> str:
@@ -80,10 +80,10 @@ def extract_tavily_intent(llm: Llama, query: str) -> Tuple[str, str]:
     safe_q = utils.sanitize_input(query, max_len=500)
     prompt_template = _prompts.get("tavily_intent", "QUERY: {query} | TIME: ")
     prompt = prompt_template.format(query=safe_q)
-    logger.info(f"=== TAVILY_PROMPT ===\n{prompt}\n=== END_TAVILY_PROMPT ===")
+    logger.info(f"[LLM] TAVILY_PROMPT:\n{prompt}")
     try:
         raw: Any = llm(prompt, max_tokens=config.TAVILY_MAX_TOKENS, temperature=0.1)
-        logger.info(f"[generator] RAW_TAVILY_INTENT_OUTPUT: {raw}")
+        logger.info(f"[LLM] RAW_TAVILY_INTENT_OUTPUT: {raw}")
         if "| TIME:" in str(raw):
             raw_str = str(raw)
             q_part, t_part = raw_str.split("| TIME:", 1)
@@ -94,17 +94,17 @@ def extract_tavily_intent(llm: Llama, query: str) -> Tuple[str, str]:
             return query_out, time_range
         return query, ""
     except (ValueError, TypeError, RuntimeError) as e:
-        logger.warning(f"[generator] Tavily intent extraction failed: {e}")
+        logger.warning(f"[LLM] Tavily intent extraction failed: {e}")
         return query, ""
 
 def extract_chainbase_keyword(llm: Llama, text: str) -> str:
     safe_t = utils.sanitize_input(text, max_len=500)
     prompt_template = _prompts.get("chainbase_keyword", "KEYWORD: {text}")
     prompt = prompt_template.format(text=safe_t)
-    logger.info(f"=== KEYWORD_PROMPT ===\n{prompt}\n=== END_KEYWORD_PROMPT ===")
+    logger.info(f"[LLM] KEYWORD_PROMPT:\n{prompt}")
     try:
         raw: Any = llm(prompt, max_tokens=config.KEYWORD_MAX_TOKENS, temperature=0.1)
-        logger.info(f"[generator] RAW_KEYWORD_OUTPUT: {raw}")
+        logger.info(f"[LLM] RAW_KEYWORD_OUTPUT: {raw}")
         raw_str = _extract_text(raw)
         keyword = raw_str.strip().split("\n")[0].replace("KEYWORD:", "").strip().strip('"')
         keyword = re.sub(r'[^a-zA-Z0-9\s]', '', keyword).strip()
@@ -116,7 +116,7 @@ def extract_chainbase_keyword(llm: Llama, text: str) -> str:
             return utils.sanitize_input(text, max_len=30)
         return final_keyword
     except (ValueError, TypeError, RuntimeError) as e:
-        logger.warning(f"[generator] Chainbase keyword extraction failed: {e}")
+        logger.warning(f"[LLM] Chainbase keyword extraction failed: {e}")
         return utils.sanitize_input(text, max_len=30)
 
 def get_reply(llm: Llama, memory: str, root_thread: str, search_data: str, query: str) -> str:
@@ -126,14 +126,14 @@ def get_reply(llm: Llama, memory: str, root_thread: str, search_data: str, query
     safe_query = utils.sanitize_input(query, max_len=500)
     prompt_template = _prompts.get("reply", "Answer: {query}")
     prompt = prompt_template.format(memory=safe_mem or "None", root_thread=safe_root or "None", search_data=safe_search or "None", query=safe_query)
-    logger.info(f"[generator] REPLY_PROMPT_VERSION: {_prompts.get('version', 'unknown')}")
-    logger.info(f"=== REPLY_PROMPT ===\n{prompt}\n=== END_REPLY_PROMPT ===")
+    logger.info(f"[LLM] REPLY_PROMPT_VERSION: {_prompts.get('version', 'unknown')}")
+    logger.info(f"[LLM] REPLY_PROMPT:\n{prompt}")
     try:
         raw: Any = llm(prompt, max_tokens=config.REPLY_MAX_TOKENS, temperature=0.7)
-        logger.info(f"[generator] RAW_REPLY_OUTPUT: {raw}")
+        logger.info(f"[LLM] RAW_REPLY_OUTPUT: {raw}")
         return utils.validate_and_fix_output(_extract_text(raw))
     except (ValueError, TypeError, RuntimeError) as e:
-        logger.error(f"[generator] get_reply failed: {e}")
+        logger.error(f"[LLM] get_reply failed: {e}")
         return "Error generating reply."
 
 def generate_digest(llm: Llama, keyword: str, summary: str, max_tokens_limit: int) -> str:
@@ -141,8 +141,8 @@ def generate_digest(llm: Llama, keyword: str, summary: str, max_tokens_limit: in
     safe_sum = utils.sanitize_input(summary, max_len=1000)
     prompt_template = _prompts.get("digest_refine", "{keyword}: {summary}")
     prompt = prompt_template.format(keyword=safe_kw, summary=safe_sum, max_desc_chars=100)
-    logger.info(f"[generator] DIGEST_PROMPT_VERSION: {_prompts.get('version', 'unknown')}")
-    logger.info(f"=== DIGEST_PROMPT ===\n{prompt}\n=== END_DIGEST_PROMPT ===")
+    logger.info(f"[LLM] DIGEST_PROMPT_VERSION: {_prompts.get('version', 'unknown')}")
+    logger.info(f"[LLM] DIGEST_PROMPT:\n{prompt}")
     try:
         raw: Any = llm(prompt, max_tokens=min(max_tokens_limit + 20, config.DIGEST_MAX_TOKENS), temperature=0.3)
         desc = clean_artifacts(_extract_text(raw).split('\n')[0].strip())
@@ -154,7 +154,7 @@ def generate_digest(llm: Llama, keyword: str, summary: str, max_tokens_limit: in
             desc += "."
         return desc
     except (ValueError, TypeError, RuntimeError) as e:
-        logger.error(f"[generator] generate_digest failed: {e}")
+        logger.error(f"[LLM] generate_digest failed: {e}")
         return utils.sanitize_input(summary, max_len=100)
 
 def update_context_memory(llm: Llama, history: str) -> str:
@@ -164,11 +164,11 @@ def update_context_memory(llm: Llama, history: str) -> str:
         safe_h = _truncate_to_tokens(safe_h, token_limit, llm)
     prompt_template = _prompts.get("context_memory", "Summary: {history}")
     prompt = prompt_template.format(history=safe_h)
-    logger.info(f"=== MEMORY_PROMPT ===\n{prompt}\n=== END_MEMORY_PROMPT ===")
+    logger.info(f"[LLM] MEMORY_PROMPT:\n{prompt}")
     try:
         raw: Any = llm(prompt, max_tokens=config.MEMORY_MAX_TOKENS, temperature=0.3)
-        logger.info(f"[generator] RAW_MEMORY_OUTPUT: {raw}")
+        logger.info(f"[LLM] RAW_MEMORY_OUTPUT: {raw}")
         return _extract_text(raw).strip().replace("###", "").replace("---", "")
     except (ValueError, TypeError, RuntimeError) as e:
-        logger.error(f"[generator] update_context_memory failed: {e}")
+        logger.error(f"[LLM] update_context_memory failed: {e}")
         return utils.sanitize_input(history, max_len=4000)

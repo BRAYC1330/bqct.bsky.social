@@ -24,16 +24,16 @@ class TaskDict(TypedDict, total=False):
 
 async def main() -> None:
     start_time = time.monotonic()
-    logger.info("[main] === START ===")
+    logger.info("[MAIN] === START ===")
     tasks_json = os.environ.get("TASKS_JSON", "[]")
     try:
         tasks: List[TaskDict] = json.loads(tasks_json)
     except json.JSONDecodeError as e:
-        logger.error(f"[main] Invalid TASKS_JSON: {e}")
+        logger.error(f"[MAIN] Invalid TASKS_JSON: {e}")
         return
-    logger.info(f"[main] Loaded {len(tasks)} tasks")
+    logger.info(f"[MAIN] Loaded {len(tasks)} tasks")
     if not tasks:
-        logger.warning("[main] Task list empty")
+        logger.warning("[MAIN] Task list empty")
         return
 
     metrics = {
@@ -60,11 +60,11 @@ async def main() -> None:
             try:
                 llm_cache = generator.get_model()
             except OSError as e:
-                logger.error(f"[main] Model load failed: {e}")
+                logger.error(f"[MAIN] Model load failed: {e}")
                 return
             metrics["model_load_time"] = round(time.monotonic() - model_start, 2)
             if not llm_cache:
-                logger.error("[main] Model load failed, skipping remaining tasks")
+                logger.error("[MAIN] Model load failed, skipping remaining tasks")
                 return
 
         import digest
@@ -82,10 +82,10 @@ async def main() -> None:
         for idx, task in enumerate(tasks):
             t_type = task.get("type", "UNKNOWN")
             if t_type not in ALLOWED_TASK_TYPES:
-                logger.warning(f"[main] Rejected unknown task type: {t_type}")
+                logger.warning(f"[MAIN] Rejected unknown task type: {t_type}")
                 metrics["failed"] += 1
                 continue
-            logger.debug(f"[main] Processing task #{idx}: {t_type}")
+            logger.debug(f"[MAIN] Processing task #{idx}: {t_type}")
             handler = handlers.get(t_type)
             if handler:
                 try:
@@ -94,27 +94,27 @@ async def main() -> None:
                         new_digest_uri = result
                     metrics["success"] += 1
                 except httpx.HTTPStatusError as e:
-                    logger.error(f"[main] HTTP error for task {t_type}: {e.response.status_code}")
+                    logger.error(f"[MAIN] HTTP error for task {t_type}: {e.response.status_code}")
                     metrics["failed"] += 1
                 except (httpx.RequestError, RuntimeError, ValueError) as e:
-                    logger.error(f"[main] Task {t_type} execution failed: {e}")
+                    logger.error(f"[MAIN] Task {t_type} execution failed: {e}")
                     metrics["failed"] += 1
         metrics["execution_time"] = round(time.monotonic() - exec_start, 2)
     except httpx.RequestError as e:
-        logger.error(f"[main] Global network request failed: {e}")
+        logger.error(f"[MAIN] Global network request failed: {e}")
         metrics["failed"] = metrics["total_tasks"]
     finally:
         await client.aclose()
 
     total_time = round(time.monotonic() - start_time, 2)
-    logger.info(f"[main] Metrics: {metrics['success']} ok, {metrics['failed']} fail, {total_time}s total")
+    logger.info(f"[MAIN] Metrics: {metrics['success']} ok, {metrics['failed']} fail, {total_time}s total")
 
     out_path = os.getenv("GITHUB_OUTPUT")
     if out_path:
         with open(out_path, "a", encoding="utf-8") as f:
             f.write(f"new_digest_uri={new_digest_uri}\n")
 
-    logger.info("[main] === DONE ===")
+    logger.info("[MAIN] === DONE ===")
 
 if __name__ == "__main__":
     asyncio.run(main())
