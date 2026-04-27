@@ -5,7 +5,6 @@ import unicodedata
 from typing import Any, Optional
 import config
 from logging_config import setup_logging
-import regex
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -13,7 +12,7 @@ logger = logging.getLogger(__name__)
 def count_graphemes(text: str) -> int:
     if not text:
         return 0
-    return len(regex.findall(r'\X', text))
+    return len(text)
 
 def sanitize_input(text: str, max_len: int = 2000, for_prompt: bool = False) -> str:
     if not text:
