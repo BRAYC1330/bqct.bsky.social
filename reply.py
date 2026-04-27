@@ -6,29 +6,23 @@ import bsky
 import utils
 import state
 import generator
-from logging_config import setup_logging
-
+from logging_config import setup_logging, log_section
 setup_logging()
 logger = logging.getLogger(__name__)
 URL_PATTERN = re.compile(r'https?://[^\s<>"{}|\\^`\[\]]+')
-
 async def process_reply(client, llm, task, max_chars=240, suffix="", temperature=0.7, search_data="", link_content=""):
     uri = task["uri"]
     user_text = utils.sanitize_input(task["text"])
     user_text = user_text.replace("!c", "").replace("!t", "").strip()
     logger.info(f"START | uri={uri} | user_text={user_text}")
-    
     chain = await bsky.fetch_thread_chain(client, uri)
     if not chain:
         return
-    
     root_uri = chain.get("root_uri", task.get("parent_uri", uri))
     root_cid = chain.get("root_cid", "")
-    parent_cid = chain.get("cid", "")
-    
+    parent_cid = chain.get("parent_cid", "")
     root_thread = chain.get("root_text", "")
     full_thread_text = " ".join([p.get("record", {}).get("text", "") for p in chain.get("chain", [])])
-    
     thread_context_parts = []
     for post in chain.get("chain", []):
         rec = post.get("record", {})
@@ -46,15 +40,14 @@ async def process_reply(client, llm, task, max_chars=240, suffix="", temperature
             if clean:
                 p_text += f" [Linked: {clean}]"
         thread_context_parts.append(f"@{author.get('handle')}: {p_text}")
-        
-    full_thread_context = "\n\n".join(thread_context_parts)
-    
+    full_thread_context = "\n".join(thread_context_parts)
     current_hash = hashlib.sha256(full_thread_text.encode()).hexdigest()
     cached_mem, stored_hash = state.load_context(root_uri)
-    
     logger.info(f"THREAD_HASH_CURRENT: {current_hash}")
     logger.info(f"THREAD_HASH_STORED: {stored_hash or 'NONE'}")
-        
+    raw_preview = [{"handle": p.get("author", {}).get("handle"), "text": p.get("record", {}).get("text", "")[:120]} for p in chain.get("chain", [])]
+    log_section("RAW-THREAD-OUTPUT", str(raw_preview))
+    log_section("PARSED-FOR-MODEL", full_thread_context)
     if stored_hash == current_hash and cached_mem:
         final_context = cached_mem
         logger.info("CACHE_STATUS: HIT")
@@ -62,26 +55,21 @@ async def process_reply(client, llm, task, max_chars=240, suffix="", temperature
         final_context = generator.update_context_memory(llm, full_thread_text)
         state.save_context(root_uri, final_context, current_hash)
         logger.info("CACHE_STATUS: MISS")
-            
+    log_section("MODEL-GENERATED-CONTEXT", final_context)
     combined_search = utils.sanitize_input(search_data)
-    final_context_str = f"[THREAD]\n{full_thread_context}\n\n[SEARCH]\n{combined_search}\n\n[USER]\n{user_text}"
-    logger.info(f"FULL_CONTEXT:\n{final_context_str}")
-    
+    final_context_str = f"[THREAD]\n{full_thread_context}\n[SEARCH]\n{combined_search}\n[USER]\n{user_text}"
     reply = generator.get_reply(llm, final_context, root_thread, combined_search, user_text)
     reply = utils.validate_and_fix_output(reply)
-    
     max_body = max_chars - len(suffix)
     if utils.count_tokens(reply, llm) > int(max_body * config.TOKEN_TO_CHAR_RATIO):
         reply = reply[:max_body].rsplit(" ", 1)[0] + "."
     if len(reply) > max_body:
         reply = reply[:max_body].rsplit(".", 1)[0] + "." if "." in reply[:max_body] else reply[:max_body-3] + "..."
-        
     final_reply = reply + suffix
     is_valid, trimmed = utils.validate_post_content(final_reply, max_graphemes=280)
     if not is_valid:
         logger.warning("Reply exceeded limit, trimmed")
         final_reply = trimmed
-        
     logger.info(f"Final reply ({len(final_reply)} chars):\n{final_reply}")
     logger.info(f"Sending reply | root_uri={root_uri} | parent_uri={uri}")
     await bsky.post_reply(client, config.BOT_DID, final_reply, root_uri, root_cid, uri, parent_cid)

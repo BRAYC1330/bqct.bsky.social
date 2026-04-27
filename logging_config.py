@@ -2,7 +2,6 @@ import logging
 import os
 import sys
 import re
-from datetime import datetime, timezone
 
 class SecretFilter(logging.Filter):
     PATTERNS = [
@@ -22,9 +21,8 @@ def setup_logging():
     level_str = os.getenv('LOG_LEVEL', 'INFO').upper()
     level = getattr(logging, level_str, logging.INFO)
     fmt = '%(message)s'
-    datefmt = '%Y-%m-%dT%H:%M:%S'
     handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(logging.Formatter(fmt, datefmt=datefmt))
+    handler.setFormatter(logging.Formatter(fmt))
     handler.addFilter(SecretFilter())
     root = logging.getLogger()
     root.setLevel(level)
@@ -32,3 +30,8 @@ def setup_logging():
     logging.getLogger('httpx').setLevel(logging.WARNING)
     logging.getLogger('httpcore').setLevel(logging.WARNING)
     logging.getLogger('urllib3').setLevel(logging.WARNING)
+
+def log_section(title: str, content: str):
+    magenta = '\033[95m'
+    reset = '\033[0m'
+    logging.info(f"{magenta}=== {title} ==={reset}\n{content}")
