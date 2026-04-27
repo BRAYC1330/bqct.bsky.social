@@ -1,9 +1,6 @@
 import logging
-import asyncio
-import random
 import httpx
 from datetime import datetime, timezone
-from typing import Dict, Any, Optional, List
 import config
 from logging_config import setup_logging
 
@@ -16,6 +13,7 @@ async def request_with_retry(client, method, url, max_retries=3, **kwargs):
             r = await client.request(method, url, **kwargs)
             if r.status_code == 429:
                 retry_after = int(r.headers.get("retry-after", 2 ** attempt))
+                import asyncio, random
                 delay = retry_after + random.uniform(0, 1)
                 await asyncio.sleep(delay)
                 continue
@@ -24,6 +22,7 @@ async def request_with_retry(client, method, url, max_retries=3, **kwargs):
         except Exception as e:
             if attempt == max_retries - 1:
                 raise
+            import asyncio, random
             await asyncio.sleep(2 ** attempt + random.uniform(0, 1))
             continue
 
@@ -43,7 +42,7 @@ async def login_with_cache(client: httpx.AsyncClient, handle: str, password: str
         logger.error(f"Login request failed: {e}")
         raise
 
-async def post_root(client: httpx.AsyncClient, bot_did: str, text: str) -> Dict[str, Any]:
+async def post_root(client: httpx.AsyncClient, bot_did: str, text: str):
     url = "https://bsky.social/xrpc/com.atproto.repo.createRecord"
     logger.info(f"POST {url}")
     record = {"$type": "app.bsky.feed.post", "text": text, "createdAt": datetime.now(timezone.utc).isoformat()}
@@ -51,7 +50,7 @@ async def post_root(client: httpx.AsyncClient, bot_did: str, text: str) -> Dict[
     r = await request_with_retry(client, "POST", url, json=body)
     return r.json()
 
-async def post_reply(client: httpx.AsyncClient, bot_did: str, text: str, root_uri: str, root_cid: str, parent_uri: str, parent_cid: str) -> Dict[str, Any]:
+async def post_reply(client: httpx.AsyncClient, bot_did: str, text: str, root_uri: str, root_cid: str, parent_uri: str, parent_cid: str):
     url = "https://bsky.social/xrpc/com.atproto.repo.createRecord"
     logger.info(f"POST {url}")
     reply = {"root": {"uri": root_uri, "cid": root_cid}, "parent": {"uri": parent_uri, "cid": parent_cid}}
@@ -79,7 +78,7 @@ def iter_thread_posts(node):
     for reply_node in node.get("replies", []):
         yield from iter_thread_posts(reply_node)
 
-async def fetch_thread_chain(client: httpx.AsyncClient, uri: str) -> Optional[Dict[str, Any]]:
+async def fetch_thread_chain(client: httpx.AsyncClient, uri: str):
     url = "https://bsky.social/xrpc/app.bsky.feed.getPostThread"
     logger.info(f"GET {url} (uri={uri})")
     try:
@@ -108,7 +107,7 @@ async def fetch_thread_chain(client: httpx.AsyncClient, uri: str) -> Optional[Di
     all_texts = [p.get("text", "") for p in all_posts]
     full_thread_text = " ".join(all_texts)
 
-    embeds: Dict[str, List[Dict[str, Any]]] = {"links": [], "reposts": []}
+    embeds = {"links": [], "reposts": []}
     raw_embed = post.get("embed", {})
     if raw_embed:
         if raw_embed.get("$type") == "app.bsky.embed.external#view":
@@ -120,6 +119,10 @@ async def fetch_thread_chain(client: httpx.AsyncClient, uri: str) -> Optional[Di
                 val = rec.get("value", {})
                 embeds["reposts"].append({"author": rec.get("author", {}).get("handle"), "text": val.get("text", ""), "uri": rec.get("uri")})
     
+    logger.info(f"THREAD_CHAIN: root_uri={root_uri} | posts_count={len(all_posts)} | full_text={full_thread_text}")
+    for p in all_posts:
+        logger.info(f"THREAD_POST: handle={p.get('handle')} | text={p.get('text')} | uri={p.get('uri')}")
+    
     return {
         "root_uri": root_uri, 
         "root_cid": root_cid, 
@@ -128,13 +131,14 @@ async def fetch_thread_chain(client: httpx.AsyncClient, uri: str) -> Optional[Di
         "cid": post.get("cid", ""),
         "embeds": embeds,
         "all_texts": all_texts, 
-        "full_text": full_thread_text
+        "full_text": full_thread_text,
+        "chain": all_posts
     }
 
-async def fetch_notifications(client: httpx.AsyncClient, limit: int = 100, seen_at: Optional[str] = None) -> List[Dict[str, Any]]:
+async def fetch_notifications(client: httpx.AsyncClient, limit: int = 100, seen_at: str = None):
     url = "https://bsky.social/xrpc/app.bsky.notification.listNotifications"
     logger.info(f"GET {url}")
-    params: Dict[str, Any] = {"limit": limit}
+    params = {"limit": limit}
     if seen_at and seen_at not in ("{}", "null", "none"):
         params["seen_at"] = seen_at
     try:

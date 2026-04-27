@@ -49,7 +49,7 @@ def validate_and_fix_output(text: str) -> str:
         text = text[:last_dot+1] if last_dot != -1 else text[:297] + "..."
     return text
 
-def validate_post_content(text: str, max_graphemes: int = 300, max_tokens: Optional[int] = None, llm: Optional[Any] = None) -> tuple[bool, str]:
+def validate_post_content(text: str, max_graphemes: int = 300, max_tokens: Optional[int] = None, llm: Optional[Any] = None) -> tuple:
     if max_tokens and llm and count_tokens(text, llm) > max_tokens:
         words = text.split()
         out = []

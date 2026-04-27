@@ -66,7 +66,7 @@ async def process_reply(client, llm, task, max_chars=240, suffix="", temperature
     if combined_link_content:
         combined_search = f"{combined_search}\n\n[EXTRACTED_LINKS]\n{utils.sanitize_input(combined_link_content)}" if combined_search else f"[EXTRACTED_LINKS]\n{utils.sanitize_input(combined_link_content)}"
         
-    logger.info(f"Full search data:\n{combined_search}")
+    logger.info(f"Full search \n{combined_search}")
     reply = generator.get_reply(llm, final_context, root_thread, combined_search, user_text)
     reply = utils.validate_and_fix_output(reply)
     
