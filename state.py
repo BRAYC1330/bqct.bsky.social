@@ -37,11 +37,17 @@ def load_context(thread_id: str) -> tuple:
         pass
     return val, None
 
-def save_context(thread_id: str, context: str, thread_hash: str):
-    slot = utils.get_slot(thread_id)
-    payload = json.dumps({"h": thread_hash, "m": context}, ensure_ascii=False)
-    update_github_secret(f"CONTEXT_{slot}", payload)
-    logger.debug(f"[state] Context saved for {thread_id[-10:]}")
+def save_context(thread_id: str, memory: str):
+    slot = _slot(thread_id)
+    repo = os.environ.get("GITHUB_REPOSITORY", "")
+    pat = os.environ.get("PAT", "")
+    if not repo or not pat or not memory:
+        return
+    cmd = ["gh", "secret", "set", f"CONTEXT_{slot}", "--body", memory[:250], "--repo", repo]
+    try:
+        subprocess.run(cmd, env={**os.environ, "GH_TOKEN": pat}, check=True, capture_output=True)
+    except Exception as e:
+        logger.error(f"[CTX] Save failed: {e}")
 
 def merge_contexts(memory: str, root_thread: str, search_data: str, user_query: str) -> str:
     parts = []
