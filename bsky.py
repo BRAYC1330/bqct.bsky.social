@@ -2,7 +2,7 @@ import httpx
 import logging
 import re
 from datetime import datetime, timezone
-from typing import Dict, Optional
+from typing import List, Dict, Optional
 import config
 from logging_config import setup_logging
 
