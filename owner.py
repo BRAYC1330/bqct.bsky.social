@@ -22,7 +22,7 @@ async def process(client, llm, task):
             suffix = "\n\nQwen"
         elif "!c" in user_text.lower():
             kw = generator.extract_chainbase_keyword(llm, clean)
-            logger.info(f"[owner] KEYWORD_EXTRACTED: {kw}")
+            logger.info(f"KEYWORD_EXTRACTED: {kw}")
             if kw:
                 search_data = await search.fetch_chainbase(kw)
             suffix = "\n\nQwen | Chainbase" if search_data else "\n\nQwen"

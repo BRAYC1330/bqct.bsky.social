@@ -30,18 +30,18 @@ async def process_reply(client, llm, task, max_chars=240, suffix="", temperature
     cached_mem, stored_hash = state.load_context(root_uri)
     
     if config.DEBUG_OWNER:
-        logger.info(f"[DEBUG-OWNER] THREAD_HASH_CURRENT: {current_hash}")
-        logger.info(f"[DEBUG-OWNER] THREAD_HASH_STORED: {stored_hash or 'NONE'}")
+        logger.info(f"THREAD_HASH_CURRENT: {current_hash}")
+        logger.info(f"THREAD_HASH_STORED: {stored_hash or 'NONE'}")
         
     if stored_hash == current_hash and cached_mem:
         final_context = cached_mem
         if config.DEBUG_OWNER:
-            logger.info("[DEBUG-OWNER] CACHE_STATUS: HIT")
+            logger.info("CACHE_STATUS: HIT")
     else:
         final_context = generator.update_context_memory(llm, full_thread_text)
         state.save_context(root_uri, final_context, current_hash)
         if config.DEBUG_OWNER:
-            logger.info("[DEBUG-OWNER] CACHE_STATUS: MISS")
+            logger.info("CACHE_STATUS: MISS")
             
     combined_search = utils.sanitize_input(search_data)
     if link_content:
@@ -59,7 +59,7 @@ async def process_reply(client, llm, task, max_chars=240, suffix="", temperature
     final_reply = reply + suffix
     is_valid, trimmed = utils.validate_post_content(final_reply, max_graphemes=280)
     if not is_valid:
-        logger.warning(f"[reply] Reply exceeded limit, trimmed")
+        logger.warning("Reply exceeded limit, trimmed")
         final_reply = trimmed
         
     await bsky.post_reply(client, config.BOT_DID, final_reply, root_uri, root_cid, uri, parent_cid)

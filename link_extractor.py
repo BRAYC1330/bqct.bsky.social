@@ -22,7 +22,7 @@ class LinkExtractor:
         self._max_content = config.MAX_LINK_CONTENT_SIZE
         self._lock = asyncio.Lock()
         self._client = httpx.AsyncClient(follow_redirects=True, timeout=httpx.Timeout(config.REQUEST_TIMEOUT, connect=config.CONNECT_TIMEOUT), limits=httpx.Limits(max_connections=10))
-        logger.debug("[LinkExtractor] Initialized")
+        logger.debug("Initialized")
 
     def _evict_if_needed(self):
         while len(self._cache) > self._max_cache_size:
@@ -32,19 +32,19 @@ class LinkExtractor:
         await self._client.aclose()
 
     async def extract(self, url: str) -> Optional[str]:
-        logger.info(f"[link] GET {url}")
+        logger.info(f"GET {url}")
         async with self._lock:
             if url in self._cache:
                 content, timestamp = self._cache[url]
                 if time.time() - timestamp < self._ttl:
                     self._cache.move_to_end(url)
-                    logger.debug(f"[LinkExtractor.extract] Cache hit")
+                    logger.debug("Cache hit")
                     return content
         
         try:
             parsed = urlparse(url)
             if parsed.netloc and parsed.netloc not in self._allowed_domains:
-                logger.debug(f"[LinkExtractor.extract] Domain not allowed: {parsed.netloc}")
+                logger.debug(f"Domain not allowed: {parsed.netloc}")
                 async with self._lock:
                     self._cache[url] = (None, time.time())
                     self._evict_if_needed()
@@ -58,15 +58,15 @@ class LinkExtractor:
                     self._cache[url] = (result, time.time())
                     self._cache.move_to_end(url)
                     self._evict_if_needed()
-                logger.debug(f"[LinkExtractor.extract] Extracted {len(result) if result else 0} chars")
+                logger.debug(f"Extracted {len(result) if result else 0} chars")
                 return result
             async with self._lock:
                 self._cache[url] = (None, time.time())
                 self._evict_if_needed()
-            logger.warning(f"[LinkExtractor.extract] HTTP {r.status_code}")
+            logger.warning(f"HTTP {r.status_code}")
             return None
         except Exception as e:
-            logger.warning(f"[LinkExtractor.extract] Failed: {e}")
+            logger.warning(f"Failed: {e}")
             async with self._lock:
                 self._cache[url] = (None, time.time())
                 self._evict_if_needed()
@@ -74,4 +74,4 @@ class LinkExtractor:
 
     def clear(self):
         self._cache.clear()
-        logger.debug("[LinkExtractor.clear] Cache cleared")
+        logger.debug("Cache cleared")
