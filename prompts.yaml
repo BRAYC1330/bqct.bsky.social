@@ -1,5 +1,3 @@
-version: "2026-04-26-v7"
-
 tavily_intent: |
   Extract the core search intent from the query.
   Output format: QUERY: [cleaned query] | TIME: [day/week/month/year or omit]
