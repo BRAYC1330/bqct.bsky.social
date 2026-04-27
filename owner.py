@@ -27,7 +27,7 @@ async def process(client, llm, task):
     root_uri = chain.get("root_uri", uri)
     root_cid = chain.get("root_cid", "")
     parent_cid = chain.get("parent_cid", "")
-    memory = state.load_context(root_uri)
+    memory, _ = state.load_context(root_uri)
     search_data = ""
     if do_search and search_query:
         if "!c" in user_text.lower():
