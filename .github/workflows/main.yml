@@ -75,7 +75,7 @@ jobs:
         run: |
           pip install --upgrade pip setuptools wheel
           CMAKE_ARGS="-DGGML_BLAS=OFF -DGGML_CUDA=OFF" pip install --prefer-binary llama-cpp-python==0.3.20
-          pip install pyyaml PyNaCl trafilatura
+          pip install pyyaml PyNaCl trafilatura regex
       - name: Cache model
         if: steps.checker.outputs.status == 'true'
         uses: actions/cache@v4
@@ -126,6 +126,7 @@ jobs:
           MAX_LINK_CONTENT_SIZE: 400
           LLAMA_NO_ACCELERATE: 1
           DEBUG_OWNER: "true"
+          LOG_LEVEL: "DEBUG"
         run: python bot.py
       - name: Update Last Processed State
         if: steps.checker.outputs.status == 'true'
