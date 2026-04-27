@@ -24,6 +24,9 @@ def update_github_secret(key: str, value: str) -> None:
     except Exception as e:
         logger.error(f"[state] Secret update failed: {e}")
 
+def _slot(tid: str) -> int:
+    return int(hashlib.sha256(tid.encode()).hexdigest(), 16) % config.CONTEXT_SLOT_COUNT
+
 def load_context(thread_id: str) -> tuple:
     slot = utils.get_slot(thread_id)
     val = os.getenv(f"CONTEXT_{slot}", "").strip()
