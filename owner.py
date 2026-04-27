@@ -1,51 +1,44 @@
-import os
 import logging
-import config
-import bsky
+import re
 import generator
 import search
-import state
 import utils
+import reply
+import link_extractor
 from logging_config import setup_logging
 
 setup_logging()
 logger = logging.getLogger(__name__)
+URL_PATTERN = re.compile(r'https?://[^\s<>"{}|\\^`\[\]]+')
 
 async def process(client, llm, task):
-    uri = task["uri"]
     user_text = task["text"]
+    logger.info(f"START | user_text={user_text}")
     do_search = "!t" in user_text.lower() or "!c" in user_text.lower()
-    search_query, time_range = "", ""
+    search_data, link_content = "", ""
+    suffix = ""
+
     if do_search:
-        clean_text = user_text.replace("!t", "").replace("!c", "").strip()
-        search_query, time_range = generator.extract_search_intent(llm, "", clean_text)
+        clean = user_text.replace("!t", "").replace("!c", "").strip()
+        if "!t" in user_text.lower():
+            q, t = generator.extract_tavily_intent(llm, clean)
+            if q:
+                search_data = await search.fetch_tavily(q, t)
+            suffix = "\n\nQwen"
+        elif "!c" in user_text.lower():
+            kw = generator.extract_chainbase_keyword(llm, clean)
+            logger.info(f"KEYWORD_EXTRACTED: {kw}")
+            if kw:
+                search_data = await search.fetch_chainbase(kw)
+            suffix = "\n\nQwen | Chainbase" if search_data else "\n\nQwen"
 
-    chain = await bsky.fetch_thread_chain(client, uri)
-    if not chain:
-        return
+    urls = URL_PATTERN.findall(user_text)
+    if urls:
+        ext = link_extractor.LinkExtractor()
+        try:
+            contents = [f"[LINK:{u}]\n{c}" for u in urls[:2] if (c := await ext.extract(u))]
+            link_content = "\n\n".join(contents)
+        finally:
+            await ext.close()
 
-    root_uri = chain.get("root_uri", uri)
-    root_cid = chain.get("root_cid", "")
-    parent_cid = chain.get("parent_cid", "")
-    memory = state.load_context(root_uri)
-    search_data = ""
-    if do_search and search_query:
-        if "!c" in user_text.lower():
-            search_data = await search.fetch_chainbase(search_query)
-        else:
-            search_data = await search.fetch_tavily(search_query, time_range)
-
-    root_thread = f"Root: {chain.get('root_text', '')[:200]}"
-    final_ctx = state.merge_contexts(memory, root_thread, search_data, user_text)
-    reply = generator.get_answer(llm, final_ctx, user_text, search_data, max_chars=280, temperature=0.7)
-    if utils.count_graphemes(reply) > 300:
-        logger.warning(f"[owner] Reply too long ({utils.count_graphemes(reply)}), regenerating...")
-        reply = generator.get_answer(llm, final_ctx, user_text, search_data, max_chars=240, temperature=0.7)
-    if utils.count_graphemes(reply) > 300:
-        logger.error(f"[owner] Reply still too long, skipping post")
-        return
-
-    await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, uri, parent_cid)
-    if root_uri != os.environ.get("ACTIVE_DIGEST_URI", "").strip():
-        state.save_context(root_uri, generator.update_summary(llm, memory, user_text, reply))
-    logger.info(f"[owner] Replied to {uri[:40]}...")
+    await reply.process_reply(client, llm, task, max_chars=240, suffix=suffix, temperature=0.7, search_data=search_data, link_content=link_content)
