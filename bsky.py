@@ -5,10 +5,14 @@ import httpx
 from datetime import datetime, timezone
 import config
 from logging_config import setup_logging
+from trafilatura import extract as trafilatura_extract
+
 setup_logging()
 logger = logging.getLogger(__name__)
+
 async def get_client():
     return httpx.AsyncClient(timeout=30)
+
 async def login_with_cache(client, handle, password):
     session_path = "session.json"
     if os.path.exists(session_path):
@@ -27,12 +31,14 @@ async def login_with_cache(client, handle, password):
     with open(session_path, "w") as f:
         json.dump(sess, f)
     logger.info("[bsky] New session created and cached")
+
 async def post_root(client, bot_did, text):
     record = {"$type": "app.bsky.feed.post", "text": text, "createdAt": datetime.now(timezone.utc).isoformat()}
     body = {"repo": bot_did, "collection": "app.bsky.feed.post", "record": record}
     r = await client.post("https://bsky.social/xrpc/com.atproto.repo.createRecord", json=body)
     r.raise_for_status()
     return r.json()
+
 async def post_reply(client, bot_did, text, root_uri, root_cid, parent_uri, parent_cid):
     reply = {"root": {"uri": root_uri, "cid": root_cid}, "parent": {"uri": parent_uri, "cid": parent_cid}}
     record = {"$type": "app.bsky.feed.post", "text": text, "createdAt": datetime.now(timezone.utc).isoformat(), "reply": reply}
@@ -40,53 +46,7 @@ async def post_reply(client, bot_did, text, root_uri, root_cid, parent_uri, pare
     r = await client.post("https://bsky.social/xrpc/com.atproto.repo.createRecord", json=body)
     r.raise_for_status()
     return r.json()
-def _extract_embed_full(embed):
-    texts = []
-    alts = []
-    if not embed:
-        return "", []
-    embed_type = embed.get("$type", "")
-    if embed_type == "app.bsky.embed.images":
-        for img in embed.get("images", []):
-            if img.get("alt"):
-                alts.append(img["alt"])
-    elif embed_type == "app.bsky.embed.external":
-        ext = embed.get("external", {})
-        if ext.get("title"):
-            texts.append(ext["title"])
-        if ext.get("description"):
-            texts.append(ext["description"])
-    elif embed_type == "app.bsky.embed.record":
-        rec = embed.get("record", {})
-        if isinstance(rec, dict):
-            val = rec.get("value", {})
-            if val.get("text"):
-                texts.append(val["text"])
-    elif embed_type == "app.bsky.embed.recordWithMedia":
-        media = embed.get("media", {})
-        rec = embed.get("record", {})
-        if isinstance(rec, dict):
-            val = rec.get("value", {})
-            if val.get("text"):
-                texts.append(val["text"])
-        if media.get("$type") == "app.bsky.embed.images":
-            for img in media.get("images", []):
-                if img.get("alt"):
-                    alts.append(img["alt"])
-    return " ".join(texts), alts
-async def _extract_clean_url_content(url: str) -> str:
-    try:
-        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as c:
-            r = await c.get(url, headers={"User-Agent": "Mozilla/5.0"})
-            if r.status_code != 200:
-                return ""
-            from trafilatura import extract
-            text = extract(r.text, include_tables=False, include_comments=False, output_format="txt")
-            if text:
-                return text[:config.MAX_LINK_CONTENT_SIZE]
-    except Exception as e:
-        logger.debug(f"[bsky] Link extract failed: {e}")
-    return ""
+
 async def fetch_thread_chain(client, uri):
     r = await client.get("https://bsky.social/xrpc/app.bsky.feed.getPostThread", params={"uri": uri, "depth": 0, "parentHeight": 100})
     if r.status_code != 200:
@@ -123,6 +83,7 @@ async def fetch_thread_chain(client, uri):
         "parent_cid": target_cid,
         "chain": chain
     }
+
 async def fetch_notifications(client, limit=100, seen_at=None):
     params = {"limit": limit}
     if seen_at and seen_at not in ("{}", "null", "none"):
@@ -134,3 +95,38 @@ async def fetch_notifications(client, limit=100, seen_at=None):
     except Exception as e:
         logger.warning(f"[bsky] Notifications fetch failed: {e}")
         return []
+
+def _extract_embed_text(embed):
+    texts = []
+    if not embed: return ""
+    et = embed.get("$type", "")
+    if et == "app.bsky.embed.images":
+        for img in embed.get("images", []):
+            if img.get("alt"): texts.append(img["alt"])
+    elif et == "app.bsky.embed.external":
+        ext = embed.get("external", {})
+        if ext.get("title"): texts.append(ext["title"])
+        if ext.get("description"): texts.append(ext["description"])
+    elif et == "app.bsky.embed.record":
+        val = embed.get("record", {}).get("value", {})
+        if val.get("text"): texts.append(val["text"])
+    elif et == "app.bsky.embed.recordWithMedia":
+        val = embed.get("record", {}).get("value", {})
+        if val.get("text"): texts.append(val["text"])
+        med = embed.get("media", {})
+        if med.get("$type") == "app.bsky.embed.images":
+            for img in med.get("images", []):
+                if img.get("alt"): texts.append(img["alt"])
+    return " ".join(texts)
+
+async def _fetch_url_content(client, url):
+    try:
+        parsed = httpx.URL(url)
+        if parsed.netloc not in config.ALLOWED_LINK_DOMAINS: return ""
+        r = await client.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=config.REQUEST_TIMEOUT)
+        if r.status_code == 200:
+            txt = trafilatura_extract(r.text, include_tables=False, include_comments=False, output_format="txt")
+            if txt: return txt[:config.MAX_LINK_CONTENT_SIZE]
+    except Exception:
+        pass
+    return ""

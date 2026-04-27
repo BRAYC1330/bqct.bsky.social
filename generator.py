@@ -8,9 +8,11 @@ import config
 from logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
+
 PROMPTS_PATH = pathlib.Path(__file__).parent / "prompts.yaml"
 with open(PROMPTS_PATH, "r", encoding="utf-8") as f:
     _prompts = yaml.safe_load(f)
+
 def get_model():
     model_path = config.MODEL_PATH
     if not os.path.exists(model_path):
@@ -30,13 +32,18 @@ def get_model():
     except Exception as e:
         logger.error(f"[generator] Model load failed: {e}")
         return None
+
 def extract_search_intent(llm, context: str, user_query: str) -> tuple:
-    prompt_tpl = _prompts.get("tavily_intent", "Extract search query and time filter.\nReturn ONLY: QUERY: <text> | TIME: <day/week/month/year/none>\nQuery: {query}\nResult:")
-    prompt = prompt_tpl.format(query=user_query)
+    prompt = f"""Extract search query and time filter.
+Rules:
+- If time is a search filter, use: day, week, month, year.
+- If time is part of the question itself, use: none.
+- Return ONLY: QUERY: <text> | TIME: <day/week/month/year/none>
+Context: {context}
+User: "{user_query}"
+Output:"""
     try:
         raw = llm(prompt, max_tokens=60, temperature=0.1)
-        if isinstance(raw, dict):
-            raw = raw.get("choices", [{}])[0].get("text", "")
         if "| TIME:" in raw:
             q_part, t_part = raw.split("| TIME:", 1)
             query = q_part.replace("QUERY:", "").strip()
@@ -47,6 +54,7 @@ def extract_search_intent(llm, context: str, user_query: str) -> tuple:
         return user_query, ""
     except:
         return user_query, ""
+
 def extract_chainbase_keyword(llm, text: str) -> str:
     prompt_tpl = _prompts.get("chainbase_keyword", "Extract the main keyword or entity from the text.\nOutput format: KEYWORD: [1 word]\nText: {text}\nResult:")
     prompt = prompt_tpl.format(text=text)
@@ -60,26 +68,24 @@ def extract_chainbase_keyword(llm, text: str) -> str:
         return re.sub(r'[^\w\s]', '', raw).split()[0] if raw else ""
     except:
         return ""
-def get_answer(llm, context: str, user_query: str, search_data: str = "", max_chars: int = 280, temperature: float = 0.7) -> str:
+
+def get_answer(llm, context: str, user_query: str, search_data: str = "", max_chars: int = 280, temperature: float = 0.3) -> str:
     ctx_lines = []
     if context:
-        ctx_lines.append(f"Context:\n{context}")
+        ctx_lines.append(context)
     if search_data:
-        ctx_lines.append(f"Search:\n{search_data}")
-    ctx_block = "\n".join(ctx_lines)
-    prompt = f"""You are a concise crypto/tech analyst. Reply in 1-2 short sentences.
-{ctx_block}
+        ctx_lines.append(f"[SEARCH]\n{search_data}")
+    ctx_block = "\n\n".join(ctx_lines)
+    prompt = f"""{ctx_block}
+
 Query: {user_query}
+
 Rules:
 - Max {max_chars} characters including spaces and emojis.
 - No hashtags, no links, no markdown.
 - Be helpful and direct.
 Reply:"""
     output = llm(prompt, max_tokens=150, temperature=temperature)
-    raw_text = output["choices"][0]["text"]
+    raw_text = output.get("choices", [{}])[0].get("text", "")
     logger.info(f"[LLM] RAW_REPLY_OUTPUT: {raw_text}")
     return raw_text.strip()
-def update_summary(llm, memory: str, user_query: str, reply: str) -> str:
-    if not memory:
-        return f"Q: {user_query[:100]} -> A: {reply[:100]}"
-    return memory[-200:] + f" | Q: {user_query[:50]} -> A: {reply[:50]}"
