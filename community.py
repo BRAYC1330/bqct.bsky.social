@@ -25,7 +25,7 @@ async def process(client, llm, task):
     root_uri = chain.get("root_uri", parent_uri)
     root_cid = chain.get("root_cid", "")
     parent_cid = chain.get("parent_cid", "")
-    memory = state.load_context(root_uri)
+    memory, _ = state.load_context(root_uri)
     root_thread = f"Root: {chain.get('root_text', '')[:200]}"
 
     final_ctx = state.merge_contexts(memory, root_thread, "", user_text)
