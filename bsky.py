@@ -82,7 +82,7 @@ async def fetch_thread_chain(client: httpx.AsyncClient, uri: str):
     url = "https://bsky.social/xrpc/app.bsky.feed.getPostThread"
     logger.info(f"GET {url} (uri={uri})")
     try:
-        r = await request_with_retry(client, "GET", url, params={"uri": uri, "depth": 10})
+        r = await request_with_retry(client, "GET", url, params={"uri": uri, "depth": 100})
     except (httpx.HTTPStatusError, httpx.RequestError) as e:
         logger.warning(f"Thread fetch failed: {e}")
         return None

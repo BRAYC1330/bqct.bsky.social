@@ -21,7 +21,7 @@ class SecretFilter(logging.Filter):
 def setup_logging():
     level_str = os.getenv('LOG_LEVEL', 'INFO').upper()
     level = getattr(logging, level_str, logging.INFO)
-    fmt = '%(asctime)s [%(levelname)s] %(message)s'
+    fmt = '%(message)s'
     datefmt = '%Y-%m-%dT%H:%M:%S'
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(logging.Formatter(fmt, datefmt=datefmt))
