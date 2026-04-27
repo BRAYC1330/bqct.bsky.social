@@ -1,5 +1,6 @@
 import os
 import logging
+import re
 import config
 import bsky
 import generator
@@ -13,10 +14,17 @@ async def process(client, llm, task):
     uri = task["uri"]
     user_text = task["text"]
     do_search = "!t" in user_text.lower() or "!c" in user_text.lower()
-    search_query, time_range = "", ""
+    search_query, time_range, search_data = "", "", ""
     if do_search:
-        clean_text = utils._clean_user_text(user_text)
-        search_query, time_range = generator.extract_search_intent(llm, "", clean_text)
+        clean_text = re.sub(r'(!t|!c)', '', user_text, flags=re.I).strip()
+        if "!c" in user_text.lower():
+            search_query = generator.extract_chainbase_keyword(llm, clean_text)
+            if search_query:
+                search_data = await search.fetch_chainbase(search_query)
+        else:
+            search_query, time_range = generator.extract_search_intent(llm, "", clean_text)
+            if search_query:
+                search_data = await search.fetch_tavily(search_query, time_range)
     chain = await bsky.fetch_thread_chain(client, uri)
     if not chain:
         return
@@ -24,13 +32,7 @@ async def process(client, llm, task):
     root_cid = chain.get("root_cid", "")
     parent_cid = chain.get("parent_cid", "")
     memory, _ = state.load_context(root_uri)
-    search_data = ""
-    if do_search and search_query:
-        if "!c" in user_text.lower():
-            search_data = await search.fetch_chainbase(search_query)
-        else:
-            search_data = await search.fetch_tavily(search_query, time_range)
-    thread_context = utils._clean_thread_for_llm(chain, config.OWNER_DID, max_recent=12)
+    thread_context = utils._format_thread_for_llm(chain, config.OWNER_DID, config.BOT_DID, max_recent=10)
     final_ctx = state.merge_contexts(memory, thread_context, search_data, user_text)
     reply = generator.get_answer(llm, final_ctx, user_text, search_data, max_chars=280, temperature=0.7)
     if utils.count_graphemes(reply) > 300:
@@ -39,7 +41,7 @@ async def process(client, llm, task):
     if utils.count_graphemes(reply) > 300:
         logger.error(f"[owner] Reply still too long, skipping post")
         return
-    await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, uri, parent_cid)
+    await bsky.post_reply(client, config.BOT_DID, reply.strip(), root_uri, root_cid, uri, parent_cid)
     if root_uri != os.environ.get("ACTIVE_DIGEST_URI", "").strip():
         state.save_context(root_uri, generator.update_summary(llm, memory, user_text, reply))
     logger.info(f"[owner] Replied to {uri[:40]}...")
