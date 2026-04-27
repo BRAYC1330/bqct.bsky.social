@@ -1,5 +1,5 @@
-import logging
 import httpx
+import logging
 from datetime import datetime, timezone
 import config
 from logging_config import setup_logging
@@ -82,7 +82,7 @@ async def fetch_thread_chain(client: httpx.AsyncClient, uri: str):
     url = "https://bsky.social/xrpc/app.bsky.feed.getPostThread"
     logger.info(f"GET {url} (uri={uri})")
     try:
-        r = await request_with_retry(client, "GET", url, params={"uri": uri, "depth": 100})
+        r = await request_with_retry(client, "GET", url, params={"uri": uri, "depth": 100, "parentHeight": 100})
     except (httpx.HTTPStatusError, httpx.RequestError) as e:
         logger.warning(f"Thread fetch failed: {e}")
         return None
