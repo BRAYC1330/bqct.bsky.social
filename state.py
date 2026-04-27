@@ -1,10 +1,12 @@
 import os
-import re
-import logging
-import json
+import hashlib
 import subprocess
+import logging
 import config
+import re
+import json
 import utils
+from logging_config import setup_logging
 
 logger = logging.getLogger(__name__)
 
