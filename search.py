@@ -57,7 +57,6 @@ async def fetch_tavily(query: str, time_range: str = "") -> str:
 async def fetch_chainbase(query: str) -> str:
     if not query:
         return ""
-    logger.info(f"Fetching Chainbase for: {query}")
     url = f"https://api.chainbase.com/tops/v1/tool/search-narrative-candidates?keyword={query}"
     try:
         async with httpx.AsyncClient(timeout=config.SEARCH_TIMEOUT) as client:
@@ -72,7 +71,6 @@ async def fetch_chainbase(query: str) -> str:
             eng_items = [i for i in items if is_english_text(i.get("keyword", "")) and is_english_text(i.get("summary", ""))]
             eng_items.sort(key=lambda x: x.get("score", 0), reverse=True)
             if not eng_items:
-                logger.warning("No English results from Chainbase")
                 return ""
             lines = []
             for item in eng_items[:5]:
@@ -80,9 +78,7 @@ async def fetch_chainbase(query: str) -> str:
                 score = item.get("score", 0)
                 summary = item.get("summary", "")
                 lines.append(f"{kw} [Score: {int(score)}]: {summary}")
-            result = "\n\n".join(lines)
-            logger.info(f"Chainbase results length: {len(result)}")
-            return result
+            return "\n\n".join(lines)
     except Exception as e:
         logger.error(f"Chainbase fetch failed: {e}")
         return ""

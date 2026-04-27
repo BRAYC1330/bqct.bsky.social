@@ -9,9 +9,6 @@ from logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
 
-async def get_client():
-    return httpx.AsyncClient(timeout=30)
-
 async def login_with_cache(client, handle, password):
     session_path = "session.json"
     if os.path.exists(session_path):
@@ -19,7 +16,6 @@ async def login_with_cache(client, handle, password):
             with open(session_path) as f:
                 sess = json.load(f)
             client.headers["Authorization"] = f"Bearer {sess['accessJwt']}"
-            logger.info("[bsky] Session loaded from cache")
             return
         except Exception:
             pass
@@ -29,7 +25,6 @@ async def login_with_cache(client, handle, password):
     client.headers["Authorization"] = f"Bearer {sess['accessJwt']}"
     with open(session_path, "w") as f:
         json.dump(sess, f)
-    logger.info("[bsky] New session created and cached")
 
 async def post_root(client, bot_did, text):
     record = {"$type": "app.bsky.feed.post", "text": text, "createdAt": datetime.now(timezone.utc).isoformat()}
@@ -51,35 +46,31 @@ async def fetch_thread_chain(client, uri):
     if r.status_code != 200:
         logger.warning(f"[bsky] Thread fetch failed: {r.status_code}")
         return None
-    data = r.json()
-    thread = data.get("thread", {})
-
+    try:
+        data = r.json()
+    except ValueError:
+        return None
+    
     chain = []
-    current = thread
+    current = data.get("thread", {})
     while current and isinstance(current, dict):
         post = current.get("post")
         if post:
             chain.append(post)
         current = current.get("parent")
-
+    
     chain = list(reversed(chain))
     if not chain:
         return None
-
+    
     root = chain[0]
     target = chain[-1]
+    
     root_uri = root.get("uri")
     root_cid = root.get("cid")
     root_text = root.get("record", {}).get("text", "")
     target_cid = target.get("cid")
-
-    logger.info(f"THREAD_CHAIN: root_uri={root_uri} | posts_count={len(chain)}")
-    for p in chain:
-        rec = p.get("record", {})
-        author = p.get("author", {})
-        text = rec.get("text", "")
-        logger.info(f"THREAD_POST: handle={author.get('handle')} | text={text} | uri={p.get('uri')}")
-
+    
     return {
         "root_uri": root_uri,
         "root_cid": root_cid,

@@ -27,8 +27,15 @@ async def process(client, llm, task):
     parent_cid = chain.get("parent_cid", "")
     memory = state.load_context(root_uri)
     root_thread = f"Root: {chain.get('root_text', '')[:200]}"
+    if config.RAW_DEBUG:
+        logger.info(f"[community] [DEBUG] memory: {memory[:200] if memory else 'EMPTY'}")
+        logger.info(f"[community] [DEBUG] root_thread: {root_thread}")
+        logger.info(f"[community] [DEBUG] user_text: {user_text}")
 
     final_ctx = state.merge_contexts(memory, root_thread, "", user_text)
+    if config.RAW_DEBUG:
+        logger.info(f"[community] [DEBUG] === FINAL CONTEXT TO MODEL ===\n{final_ctx}\n=== END CONTEXT ===")
+
     reply = generator.get_answer(llm, final_ctx, user_text, "", max_chars=280, temperature=0.7)
     if utils.count_graphemes(reply) > 293:
         logger.warning(f"[community] Reply too long ({utils.count_graphemes(reply)}), regenerating...")
