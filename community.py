@@ -1,53 +1,44 @@
+import os
 import logging
-import re
 import config
-import generator
 import bsky
+import generator
+import state
 import utils
-from link_extractor import LinkExtractor
 from logging_config import setup_logging
 
 setup_logging()
 logger = logging.getLogger(__name__)
 
 async def process(client, llm, task):
-    try:
-        uri = task.get("uri", "")
-        text = task.get("text", "")
-        if not uri or not text:
-            return
-        
-        text = text.replace("!c", "").replace("!t", "").strip()
-        if not text:
-            return
+    uri = task["uri"]
+    user_text = task["text"]
+    parent_uri = task.get("parent_uri", "")
+    if not parent_uri:
+        logger.warning(f"[community] Missing parent_uri for {uri}")
+        return
 
-        chain = await bsky.fetch_thread_chain(client, uri)
-        if not chain:
-            return
-            
-        link_extractor = LinkExtractor()
-        link_content_parts = []
-        
-        for post in chain.get("chain", []):
-            post_text = post.get("record", {}).get("text", "")
-            urls = re.findall(r'https?://[^\s<>"{}|\\^`\[\]]+', post_text)
-            for url in urls:
-                content = await link_extractor.extract(url)
-                if content:
-                    link_content_parts.append(f"[Linked content from {url}]: {content}")
-                    
-        if link_content_parts:
-            text += "\n\n" + "\n\n".join(link_content_parts)
+    chain = await bsky.fetch_thread_chain(client, uri)
+    if not chain:
+        return
 
-        root_uri = chain.get("root_uri", uri)
-        root_cid = chain.get("root_cid", "")
-        parent_uri = uri
-        parent_cid = chain.get("parent_cid", "")
-        
-        reply = generator.get_reply(llm, "", "", "", text)
-        if not reply or reply == "Error generating reply.":
-            return
-            
-        await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, parent_uri, parent_cid)
-    except Exception as e:
-        logger.error(f"Community process failed: {e}")
+    root_uri = chain.get("root_uri", parent_uri)
+    root_cid = chain.get("root_cid", "")
+    parent_cid = chain.get("parent_cid", "")
+    memory = state.load_context(root_uri)
+    root_thread = f"Root: {chain.get('root_text', '')[:200]}"
+
+    final_ctx = state.merge_contexts(memory, root_thread, "", user_text)
+    reply = generator.get_answer(llm, final_ctx, user_text, "", max_chars=280, temperature=0.7)
+    if utils.count_graphemes(reply) > 293:
+        logger.warning(f"[community] Reply too long ({utils.count_graphemes(reply)}), regenerating...")
+        reply = generator.get_answer(llm, final_ctx, user_text, "", max_chars=260, temperature=0.7)
+    if utils.count_graphemes(reply) > 293:
+        logger.error(f"[community] Reply still too long, skipping post")
+        return
+
+    reply = reply.strip() + "\nQwen"
+    await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, uri, parent_cid)
+    if root_uri != os.environ.get("ACTIVE_DIGEST_URI", "").strip():
+        state.save_context(root_uri, generator.update_summary(llm, memory, user_text, reply))
+    logger.info(f"[community] Replied to {uri[:40]}...")

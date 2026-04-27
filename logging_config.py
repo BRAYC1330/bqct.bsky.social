@@ -7,10 +7,11 @@ from datetime import datetime, timezone
 class SecretFilter(logging.Filter):
     PATTERNS = [
         r'Bearer\s+[A-Za-z0-9\-_\.]+',
-        r'(?i)(?:api[_\-]?key|token|secret|password|pat|credential)\s*[:=]\s*["\']?[A-Za-z0-9\-_\.]{8,}',
+        r'password["\']?\s*[:=]\s*["\']?[^\s"\',}]+',
+        r'api[_-]?key["\']?\s*[:=]\s*["\']?[^\s"\',}]+',
+        r'PAT["\']?\s*[:=]\s*["\']?[^\s"\',}]+',
         r'did:[^\s"\',}]+',
         r'at://[^\s"]+',
-        r'(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,}'
     ]
     def filter(self, record):
         if isinstance(record.msg, str):

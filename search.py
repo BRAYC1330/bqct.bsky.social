@@ -1,90 +1,88 @@
+import os
 import logging
 import httpx
 import json
 import config
 from logging_config import setup_logging
-from copy import deepcopy
 
 setup_logging()
 logger = logging.getLogger(__name__)
 
-NOISE_FIELDS = {
-    "id", "tweet_urls", "authors", "analysis_time", 
-    "snapshot_time", "first_tweet_time", "is_manual", "is_new"
-}
-
-def _clean_json_log(data):
-    if isinstance(data, dict):
-        return {k: _clean_json_log(v) for k, v in data.items() if k not in NOISE_FIELDS}
-    elif isinstance(data, list):
-        return [_clean_json_log(item) for item in data]
-    return data
+def is_english_text(text: str) -> bool:
+    if not text:
+        return False
+    return sum(1 for c in text if ord(c) < 128) / len(text) > 0.7
 
 async def get_trending_topics_raw() -> list:
-    url = "https://api.chainbase.com/tops/v1/tool/list-trending-topics?language=en"
-    logger.info(f"URL: {url}")
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(config.REQUEST_TIMEOUT, connect=config.CONNECT_TIMEOUT)) as client:
-            r = await client.get(url, timeout=config.SEARCH_TIMEOUT)
-            logger.info(f"Chainbase status: {r.status_code}")
+            r = await client.get("https://api.chainbase.com/tops/v1/tool/list-trending-topics?language=en", timeout=config.SEARCH_TIMEOUT)
             if r.status_code != 200:
                 return []
-            raw_data = r.json()
+            data = r.json()
+            items = data.get("items", []) if isinstance(data, dict) else (data if isinstance(data, list) else [])
+            eng = [i for i in items if is_english_text(i.get('keyword', '')) and is_english_text(i.get('summary', ''))]
+            eng.sort(key=lambda x: x.get('score', 0), reverse=True)
             if config.RAW_DEBUG:
-                logger.info(f"Chainbase full response:\n{json.dumps(_clean_json_log(raw_data), ensure_ascii=False)}")
-            from parser_chainbase import parse_trending_items
-            return parse_trending_items(raw_data)
+                logger.info(f"=== RAW-TRENDS ===\n{json.dumps(eng[:10], ensure_ascii=False, indent=2)}\n=== END ===")
+            return eng[:10]
     except Exception as e:
-        logger.error(f"Trend fetch failed: {e}")
+        logger.error(f"[SEARCH] Trend fetch failed: {e}")
         return []
+
+def clean_search_results(raw) -> str:
+    if not raw:
+        return ""
+    if isinstance(raw, list):
+        return " ".join([r.get("title", "") + " " + r.get("content", "")[:150] for r in raw])
+    return str(raw)[:500]
 
 async def fetch_tavily(query: str, time_range: str = "") -> str:
     if not config.TAVILY_API_KEY:
         return ""
     url = "https://api.tavily.com/search"
-    logger.info(f"URL: {url}")
     headers = {"Authorization": f"Bearer {config.TAVILY_API_KEY}", "Content-Type": "application/json"}
-    payload = {"query": query, "search_depth": "basic", "max_results": 3, "include_raw_content": "text"}
-    if time_range and time_range.lower() in ("day", "week", "month", "year"):
-        payload["time_range"] = time_range.lower()
+    payload = {"query": query, "search_depth": "basic", "max_results": 3, "include_raw_content": True}
+    if time_range:
+        payload["time_range"] = time_range
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             r = await client.post(url, headers=headers, json=payload)
-            logger.info(f"Tavily status: {r.status_code}")
-            if config.RAW_DEBUG:
-                logger.info(f"Tavily full response:\n{json.dumps(r.json(), ensure_ascii=False)}")
             r.raise_for_status()
-            from parser_tavily import clean_search_results
-            results = r.json().get("results", [])
-            logger.info(f"Tavily results count: {len(results)}")
-            return clean_search_results(results)
+            return clean_search_results(r.json().get("results", []))
     except Exception as e:
-        logger.error(f"Tavily error: {e}")
+        logger.error(f"[tavily] Error: {e}")
         return ""
 
 async def fetch_chainbase(query: str) -> str:
     if not query:
-        logger.info(f"Chainbase skipped: empty keyword")
         return ""
+    logger.info(f"Fetching Chainbase for: {query}")
+    url = f"https://api.chainbase.com/tops/v1/tool/search-narrative-candidates?keyword={query}"
     try:
         async with httpx.AsyncClient(timeout=config.SEARCH_TIMEOUT) as client:
-            url = f"https://api.chainbase.com/tops/v1/tool/search-narrative-candidates?keyword={query}"
-            logger.info(f"URL: {url}")
-            r = await client.get(url, timeout=config.SEARCH_TIMEOUT)
-            logger.info(f"Chainbase Search status: {r.status_code}")
+            r = await client.get(url)
             if r.status_code != 200:
-                logger.info(f"CHAINBASE_RAW_RESPONSE: {r.text}")
+                logger.warning(f"Chainbase status: {r.status_code}")
                 return ""
             raw_data = r.json()
-            logger.info(f"CHAINBASE_RAW_RESPONSE:\n{json.dumps(raw_data, ensure_ascii=False)}")
             if config.RAW_DEBUG:
-                logger.info(f"Chainbase cleaned response:\n{json.dumps(_clean_json_log(raw_data), ensure_ascii=False)}")
-            from parser_chainbase import format_chainbase_results, parse_search_results
-            items = parse_search_results(raw_data)
-            logger.info(f"Chainbase Search results count: {len(items)}")
-            search_text = format_chainbase_results(items)
-            logger.info(f"Chainbase context passed to model:\n{search_text}")
-            return search_text
+                logger.info(f"CHAINBASE_RAW_RESPONSE:\n{json.dumps(raw_data, ensure_ascii=False, indent=2)}")
+            items = raw_data.get("items", [])
+            eng_items = [i for i in items if is_english_text(i.get("keyword", "")) and is_english_text(i.get("summary", ""))]
+            eng_items.sort(key=lambda x: x.get("score", 0), reverse=True)
+            if not eng_items:
+                logger.warning("No English results from Chainbase")
+                return ""
+            lines = []
+            for item in eng_items[:5]:
+                kw = item.get("keyword", "")
+                score = item.get("score", 0)
+                summary = item.get("summary", "")
+                lines.append(f"{kw} [Score: {int(score)}]: {summary}")
+            result = "\n\n".join(lines)
+            logger.info(f"Chainbase results length: {len(result)}")
+            return result
     except Exception as e:
-        logger.error(f"Chainbase error: {e}")
+        logger.error(f"Chainbase fetch failed: {e}")
         return ""
