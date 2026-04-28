@@ -59,12 +59,13 @@ async def fetch_tavily(query: str, time_range: str = "") -> str:
             "search_depth": "basic",
             "max_results": 2,
             "include_raw_content": "text",
-            "exclude_domains": ["youtube.com"]
+            "exclude_domains": ["youtube.com"],
+            "api_key": config.TAVILY_API_KEY
         }
         if time_range in ("day", "week", "month", "year"):
             payload["time_range"] = time_range
         async with httpx.AsyncClient(timeout=config.SEARCH_TIMEOUT) as client:
-            r = await client.post("https://api.tavily.com/search", json={**payload, "api_key": config.TAVILY_API_KEY})
+            r = await client.post("https://api.tavily.com/search", json=payload)
             if r.status_code == 200:
                 data = r.json()
                 answer = data.get("answer", "")
