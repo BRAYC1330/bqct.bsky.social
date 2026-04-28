@@ -44,7 +44,7 @@ async def process(client, llm, task):
         search_data = await search.fetch_chainbase(kw)
         source = "chainbase"
     
-    if not search_
+    if not search_data:
         reply = build_content.get_no_data_response(kw or "query")
         await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, uri, parent_cid)
         logger.info(f"[community] No-data reply sent for '{kw}'")
