@@ -5,6 +5,7 @@ import bsky
 import generator
 import search
 import utils
+import build_content
 from logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -38,27 +39,10 @@ async def process(client, llm, task):
     
     thread_ctx = await utils._format_thread_for_llm(chain, config.OWNER_DID, config.BOT_DID, client)
     logger.info(f"\033[32m=== MODEL CONTEXT (OWNER) ===\033[0m\n{thread_ctx}")
-    
-    sig = "\n\nQwen"
-    if source == "tavily" and search_data:
-        sig = "\n\nQwen | Tavily"
-    elif source == "chainbase" and search_data:
-        sig = "\n\nQwen | Chainbase"
-    max_body = 300 - len(sig)
-    
-    ctx = thread_ctx
-    if search_data:
-        ctx += f"\n\n[SEARCH]\n{search_data}"
+    logger.info(f"\033[33m[TOKENS] {utils.count_tokens(thread_ctx, llm)} / {config.MODEL_N_CTX}\033[0m")
     
     logger.info(f"\033[33m=== MODEL GENERATION (OWNER) ===\033[0m")
-    reply = generator.get_answer(llm, ctx, user_text, max_chars=max_body, temperature=0.3)
+    reply = await build_content.build_reply(llm, thread_ctx, user_text, search_data, source, max_total=300)
     
-    if utils.count_graphemes(reply) > max_body:
-        truncated = reply[:max_body]
-        last_dot = truncated.rfind(".")
-        reply = truncated[:last_dot+1] if last_dot != -1 else truncated.rstrip() + "."
-    
-    final = reply.strip() + sig
-    
-    await bsky.post_reply(client, config.BOT_DID, final, root_uri, root_cid, uri, parent_cid)
+    await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, uri, parent_cid)
     logger.info(f"[owner] Replied to {uri[:40]}...")

@@ -17,7 +17,7 @@ def _get_signature(source: str, has_search: bool) -> str:
     if has_search: return SIG_CHAINBASE
     return SIG_DEFAULT
 
-async def build_reply(llm, thread_ctx: str, query: str, search_data: str = "", source: str = "", max_total: int = 300) -> str:
+async def build_reply(llm, thread_ctx: str, query: str, search_ str = "", source: str = "", max_total: int = 300) -> str:
     sig = _get_signature(source, bool(search_data))
     max_body = max_total - len(sig)
     ctx = thread_ctx
