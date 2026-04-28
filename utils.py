@@ -1,6 +1,5 @@
 import re
 import logging
-import asyncio
 import httpx
 from typing import Any, Optional
 import config
@@ -29,30 +28,6 @@ def count_tokens(text: str, llm: Optional[Any] = None) -> int:
         try: return len(llm.tokenize(text.encode("utf-8")))
         except: pass
     return max(1, int(len(text) * config.TOKEN_TO_CHAR_RATIO))
-def validate_post_content(text: str, max_graphemes: int = 300, max_tokens: Optional[int] = None, llm: Optional[Any] = None) -> tuple:
-    if max_tokens and llm and count_tokens(text, llm) > max_tokens:
-        words = text.split()
-        out, current = [], 0
-        for w in words:
-            t = count_tokens(w + " ", llm)
-            if current + t > max_tokens: break
-            out.append(w)
-            current += t
-        text = " ".join(out)
-    if not text.endswith(('.', '!', '?')): text += "."
-    grapheme_count = count_graphemes(text)
-    if grapheme_count <= max_graphemes: return True, text
-    truncated = text[:max_graphemes]
-    last_period = truncated.rfind('.')
-    if last_period >= int(max_graphemes * 0.7):
-        truncated = truncated[:last_period + 1]
-    else:
-        last_space = truncated.rfind(' ')
-        if last_space >= int(max_graphemes * 0.7):
-            truncated = truncated[:last_space].rstrip('.,;:') + '.'
-        else:
-            truncated = truncated[:int(max_graphemes * 0.7)].rstrip('.,;: ') + '.'
-    return count_graphemes(truncated) <= max_graphemes, truncated
 async def _format_thread_for_llm(chain: dict, owner_did: str, bot_did: str, client: httpx.AsyncClient, max_recent: int = 20) -> str:
     if not chain: return ""
     root = clean_for_llm(chain.get("root_text", ""))

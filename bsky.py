@@ -6,8 +6,20 @@ import httpx
 from datetime import datetime, timezone
 import config
 logger = logging.getLogger(__name__)
-async def get_client():
-    return httpx.AsyncClient(timeout=30)
+async def _retry_request(method, url, client, max_retries=3, **kwargs):
+    for attempt in range(max_retries):
+        try:
+            r = await method(url, **kwargs)
+            if r.status_code == 429:
+                retry_after = float(r.headers.get("Retry-After", 2 ** attempt))
+                await asyncio.sleep(retry_after)
+                continue
+            r.raise_for_status()
+            return r
+        except httpx.RequestError as e:
+            if attempt == max_retries - 1:
+                raise e
+            await asyncio.sleep(2 ** attempt)
 async def login_with_cache(client, handle, password):
     session_path = "session.json"
     if os.path.exists(session_path):
@@ -26,20 +38,6 @@ async def login_with_cache(client, handle, password):
     with open(session_path, "w") as f:
         json.dump(sess, f)
     logger.info("[bsky] New session created and cached")
-async def _retry_request(method, url, client, max_retries=3, **kwargs):
-    for attempt in range(max_retries):
-        try:
-            r = await method(url, **kwargs)
-            if r.status_code == 429:
-                retry_after = float(r.headers.get("Retry-After", 2 ** attempt))
-                await asyncio.sleep(retry_after)
-                continue
-            r.raise_for_status()
-            return r
-        except httpx.RequestError as e:
-            if attempt == max_retries - 1:
-                raise e
-            await asyncio.sleep(2 ** attempt)
 async def post_root(client, bot_did, text):
     record = {"$type": "app.bsky.feed.post", "text": text, "createdAt": datetime.now(timezone.utc).isoformat()}
     body = {"repo": bot_did, "collection": "app.bsky.feed.post", "record": record}
