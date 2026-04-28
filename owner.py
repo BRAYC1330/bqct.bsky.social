@@ -42,6 +42,8 @@ async def process(client, llm, task):
     logger.info(f"\033[33m[TOKENS] {utils.count_tokens(thread_ctx, llm)} / {config.MODEL_N_CTX}\033[0m")
     
     logger.info(f"\033[33m=== MODEL GENERATION (OWNER) ===\033[0m")
+    if search_
+        search_data = utils.clean_for_llm(search_data)
     reply = await build_content.build_reply(llm, thread_ctx, user_text, search_data, source, max_total=300)
     
     await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, uri, parent_cid)
