@@ -1,5 +1,6 @@
 import logging
 import config
+import utils
 from logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -14,8 +15,14 @@ async def get_trending_topics_raw():
                 return []
             data = r.json()
             trends = data.get("data", [])
+            filtered = []
+            for t in trends:
+                sm = t.get("summary", "")
+                if utils.is_english(sm):
+                    filtered.append(t)
+            trends = filtered[:10]
             logger.info(f"\033[36m=== PARSED TRENDS (RAW) ===\033[0m")
-            for t in trends[:10]:
+            for t in trends:
                 kw = t.get("keyword", "?")
                 sc = t.get("score")
                 rs = t.get("rank_status", "same")
@@ -38,7 +45,8 @@ async def fetch_tavily(query: str, time_range: str = "") -> str:
             r = await client.post("https://api.tavily.com/search", json={**payload, "api_key": config.TAVILY_API_KEY})
             if r.status_code == 200:
                 results = r.json().get("results", [])
-                return "\n".join([f"- {res.get('content', '')}" for res in results[:3]])
+                valid = [f"- {res.get('content', '')}" for res in results[:3] if utils.is_english(res.get('content', ''))]
+                return "\n".join(valid)
     except Exception as e:
         logger.warning(f"[search] Tavily error: {e}")
     return ""
@@ -59,18 +67,18 @@ async def fetch_chainbase(keyword: str) -> str:
             if not isinstance(items, list):
                 logger.warning(f"[search] Chainbase unexpected data format")
                 return ""
-            if not items:
-                logger.warning(f"[search] Chainbase returned 0 results for '{keyword}'")
-                return ""
-            formatted_lines = []
-            for item in items[:5]:
+            valid_items = []
+            for item in items:
                 kw = item.get("keyword", item.get("narrative", ""))
                 sm = item.get("summary", item.get("description", ""))
-                if kw and sm:
-                    formatted_lines.append(f"{kw}: {sm}")
-            if not formatted_lines:
-                logger.warning(f"[search] Chainbase no valid keyword/summary pairs for '{keyword}'")
+                if kw and sm and utils.is_english(sm):
+                    valid_items.append((kw, sm))
+                if len(valid_items) >= 5:
+                    break
+            if not valid_items:
+                logger.warning(f"[search] Chainbase returned 0 valid English results for '{keyword}'")
                 return ""
+            formatted_lines = [f"{kw}: {sm}" for kw, sm in valid_items]
             output = "\n\n".join(formatted_lines)
             logger.info(f"\033[36m=== CHAINBASE CONTEXT (MODEL INPUT) ===\033[0m\n{output}")
             return output

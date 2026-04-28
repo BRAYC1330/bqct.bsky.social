@@ -8,6 +8,12 @@ from logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
 
+def is_english(text: str) -> bool:
+    if not text or not config.ENGLISH_ONLY_SEARCH:
+        return True
+    ascii_count = sum(1 for c in text if ord(c) < 128)
+    return (ascii_count / len(text)) >= config.ENGLISH_ASCII_RATIO
+
 def count_graphemes(text: str) -> int:
     return len(text) if text else 0
 
@@ -63,48 +69,36 @@ def validate_post_content(text: str, max_graphemes: int = 300, max_tokens: Optio
 
 async def _format_thread_for_llm(chain: dict, owner_did: str, bot_did: str, client: httpx.AsyncClient, max_recent: int = 20) -> str:
     if not chain: return ""
-    
     root = chain.get("root_text", "").strip()
     root = re.sub(r'(!t|!c)', '', root, flags=re.I).strip()
     root = re.sub(r'[\s\n]*Qwen(\s*\|\s*(Tavily|Chainbase))?[\s\n]*$', '', root, flags=re.I).strip()
-    
     posts = chain.get("chain", [])
     recent_posts = posts[-max_recent:] if len(posts) > max_recent else posts
     dialogue = []
-    
     for post in recent_posts:
         rec = post.get("record", {})
         author = post.get("author", {})
         did = author.get("did", "")
         text = rec.get("text", "").strip()
         embed = rec.get("embed")
-        
         if rec.get("$type") == "app.bsky.feed.repost" and "subject" in post:
             sub = post.get("subject", {})
             sub_rec = sub.get("record", {})
             text = sub_rec.get("text", "")
             embed = sub_rec.get("embed")
-        
         text = re.sub(r'(!t|!c)', '', text, flags=re.I).strip()
         text = re.sub(r'[\s\n]*Qwen(\s*\|\s*(Tavily|Chainbase))?[\s\n]*$', '', text, flags=re.I).strip()
         if not text and not embed: continue
-        
         embed_txt = bsky._extract_embed_text(embed)
-        if embed_txt:
-            text += f" [EMBED: {embed_txt}]"
-        
+        if embed_txt: text += f" [EMBED: {embed_txt}]"
         urls = re.findall(r'https?://[^\s<>"{}|\\^`\[\]]+', text)
         for u in urls:
             content = await bsky._fetch_url_content(client, u)
             if content: text += f" [LINK: {content}]"
-        
         if did == owner_did: prefix = "Q:"
         elif did == bot_did: prefix = "A:"
         else: prefix = "@user:"
-        
         dialogue.append(f"{prefix} {text}")
-    
     parts = [f"[ROOT]\n{root}"]
-    if dialogue:
-        parts.append(f"[RECENT]\n" + "\n\n".join(dialogue))
+    if dialogue: parts.append(f"[RECENT]\n" + "\n\n".join(dialogue))
     return "\n\n".join(parts)
