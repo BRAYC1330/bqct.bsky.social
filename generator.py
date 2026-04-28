@@ -8,9 +8,11 @@ import config
 from logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
+
 PROMPTS_PATH = pathlib.Path(__file__).parent / "prompts.yaml"
 with open(PROMPTS_PATH, "r", encoding="utf-8") as f:
     _prompts = yaml.safe_load(f)
+
 def get_model():
     model_path = config.MODEL_PATH
     if not os.path.exists(model_path):
@@ -30,6 +32,7 @@ def get_model():
     except Exception as e:
         logger.error(f"[generator] Model load failed: {e}")
         return None
+
 def extract_search_intent(llm, context: str, user_query: str) -> tuple:
     prompt = f"""Extract search query and time filter.
 Rules:
@@ -51,6 +54,7 @@ Output:"""
         return user_query, ""
     except:
         return user_query, ""
+
 def extract_chainbase_keyword(llm, text: str) -> str:
     prompt_tpl = _prompts.get("chainbase_keyword", "Extract the main keyword or entity from the text.\nOutput format: KEYWORD: [1 word]\nText: {text}\nResult:")
     prompt = prompt_tpl.format(text=text)
@@ -64,6 +68,7 @@ def extract_chainbase_keyword(llm, text: str) -> str:
         return re.sub(r'[^\w\s]', '', raw).split()[0] if raw else ""
     except:
         return ""
+
 def get_answer(llm, context: str, user_query: str, search_data: str = "", max_chars: int = 280, temperature: float = 0.3) -> str:
     ctx_lines = []
     if context:

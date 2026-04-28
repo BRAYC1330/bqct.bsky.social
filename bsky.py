@@ -7,8 +7,10 @@ import config
 from logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
+
 async def get_client():
     return httpx.AsyncClient(timeout=30)
+
 async def login_with_cache(client, handle, password):
     session_path = "session.json"
     if os.path.exists(session_path):
@@ -27,12 +29,14 @@ async def login_with_cache(client, handle, password):
     with open(session_path, "w") as f:
         json.dump(sess, f)
     logger.info("[bsky] New session created and cached")
+
 async def post_root(client, bot_did, text):
     record = {"$type": "app.bsky.feed.post", "text": text, "createdAt": datetime.now(timezone.utc).isoformat()}
     body = {"repo": bot_did, "collection": "app.bsky.feed.post", "record": record}
     r = await client.post("https://bsky.social/xrpc/com.atproto.repo.createRecord", json=body)
     r.raise_for_status()
     return r.json()
+
 async def post_reply(client, bot_did, text, root_uri, root_cid, parent_uri, parent_cid):
     reply = {"root": {"uri": root_uri, "cid": root_cid}, "parent": {"uri": parent_uri, "cid": parent_cid}}
     record = {"$type": "app.bsky.feed.post", "text": text, "createdAt": datetime.now(timezone.utc).isoformat(), "reply": reply}
@@ -40,6 +44,7 @@ async def post_reply(client, bot_did, text, root_uri, root_cid, parent_uri, pare
     r = await client.post("https://bsky.social/xrpc/com.atproto.repo.createRecord", json=body)
     r.raise_for_status()
     return r.json()
+
 async def fetch_thread_chain(client, uri):
     r = await client.get("https://bsky.social/xrpc/app.bsky.feed.getPostThread", params={"uri": uri, "depth": 0, "parentHeight": 100})
     if r.status_code != 200:
@@ -76,6 +81,7 @@ async def fetch_thread_chain(client, uri):
         "parent_cid": target_cid,
         "chain": chain
     }
+
 async def fetch_notifications(client, limit=100, seen_at=None):
     params = {"limit": limit}
     if seen_at and seen_at not in ("{}", "null", "none"):
@@ -87,6 +93,7 @@ async def fetch_notifications(client, limit=100, seen_at=None):
     except Exception as e:
         logger.warning(f"[bsky] Notifications fetch failed: {e}")
         return []
+
 def _extract_embed_text(embed):
     texts = []
     if not embed: return ""
@@ -109,6 +116,7 @@ def _extract_embed_text(embed):
             for img in med.get("images", []):
                 if img.get("alt"): texts.append(img["alt"])
     return " ".join(texts)
+
 async def _fetch_url_content(client, url):
     try:
         from trafilatura import extract as trafilatura_extract
