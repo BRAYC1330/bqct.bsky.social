@@ -44,6 +44,12 @@ async def process(client, llm, task):
         search_data = await search.fetch_chainbase(kw)
         source = "chainbase"
     
+    if not search_data:
+        reply = build_content.get_no_data_response(kw or "query")
+        await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, uri, parent_cid)
+        logger.info(f"[community] No-data reply sent for '{kw}'")
+        return
+    
     thread_ctx = await utils._format_thread_for_llm(chain, config.OWNER_DID, config.BOT_DID, client)
     logger.info(f"\033[32m=== MODEL CONTEXT (COMMUNITY) ===\033[0m\n{thread_ctx}")
     logger.info(f"\033[33m[TOKENS] {utils.count_tokens(thread_ctx, llm)} / {config.MODEL_N_CTX}\033[0m")
