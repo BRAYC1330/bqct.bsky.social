@@ -49,9 +49,12 @@ async def run():
             text = (n.get("record", {}).get("text") or "").strip()
             uri = n.get("uri", "")
             record = n.get("record", {})
-            parent_uri = record.get("reply", {}).get("parent", {}).get("uri", "") if isinstance(record, dict) else ""
             
-            if digest_uri and parent_uri and digest_uri in parent_uri:
+            reply_data = record.get("reply", {}) if isinstance(record, dict) else {}
+            parent_uri = reply_data.get("parent", {}).get("uri", "")
+            root_uri = reply_data.get("root", {}).get("uri", "")
+            
+            if digest_uri and root_uri == digest_uri:
                 tasks.append({"type": "digest_comment", "uri": uri, "text": text, "author_did": author_did, "parent_uri": parent_uri})
                 digest_comment_count += 1
                 continue
