@@ -1,10 +1,7 @@
 import logging
 import config
 import utils
-from logging_config import setup_logging
-setup_logging()
 logger = logging.getLogger(__name__)
-
 async def get_trending_topics_raw():
     try:
         import httpx
@@ -33,7 +30,6 @@ async def get_trending_topics_raw():
     except Exception as e:
         logger.error(f"[search] Trending fetch error: {e}")
         return []
-
 async def fetch_tavily(query: str, time_range: str = "") -> str:
     if not config.TAVILY_API_KEY: return ""
     try:
@@ -49,8 +45,7 @@ async def fetch_tavily(query: str, time_range: str = "") -> str:
                 return "\n".join(valid)
     except Exception as e:
         logger.warning(f"[search] Tavily error: {e}")
-    return ""
-
+        return ""
 async def fetch_chainbase(keyword: str) -> str:
     try:
         import httpx
@@ -86,9 +81,9 @@ async def fetch_chainbase(keyword: str) -> str:
                 logger.warning(f"[search] Chainbase returned 0 valid English results for '{keyword}'")
                 return ""
             formatted_lines = [f"{kw}: {sm}" for kw, sm in valid_items]
-            output = "\n\n\n".join(formatted_lines)
+            output = "\n".join(formatted_lines)
             logger.info(f"\033[36m=== CHAINBASE CONTEXT (MODEL INPUT) ===\033[0m\n{output}")
             return output
     except Exception as e:
         logger.warning(f"[search] Chainbase error: {e}")
-    return ""
+        return ""
