@@ -10,12 +10,12 @@ def _clean_tavily_content(text: str) -> str:
     text = re.sub(r'\n\s*\n', '\n', text)
     lines = text.split('\n')
     cleaned = []
-    skip_sections = {'navigation', 'footer', 'menu', 'related', 'trending', 'more news', 'sign in', 'privacy', 'terms'}
+    skip_sections = {'navigation', 'footer', 'menu', 'related', 'trending', 'more news', 'sign in', 'privacy', 'terms', 'upgrade', 'portfolio', 'watch now'}
     for line in lines:
         stripped = line.strip().lower()
         if any(skip in stripped for skip in skip_sections):
             continue
-        if stripped and not stripped.startswith(('+', '-', '•', '1.', '2.', '3.')):
+        if stripped and not stripped.startswith(('+', '-', '•', '1.', '2.', '3.', '4.', '5.', '6.', '7.', '8.', '9.', '0.')):
             cleaned.append(line.strip())
     result = ' '.join(cleaned)
     result = re.sub(r'\s{2,}', ' ', result)
@@ -85,7 +85,7 @@ async def fetch_tavily(query: str, time_range: str = "") -> str:
                     elif content:
                         parts.append(f"• {content}")
                 final_output = "\n".join(parts)
-                logger.info(f"\033[32m[TAVILY PARSED] {len(final_output)} chars | Results: {len(results)}\033[0m")
+                logger.info(f"\033[32m[TAVILY PARSED CONTEXT]\n{final_output}\033[0m")
                 return final_output
     except Exception as e:
         logger.warning(f"[search] Tavily error: {e}")
