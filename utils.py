@@ -1,5 +1,6 @@
 import re
 import logging
+import asyncio
 import httpx
 from typing import Any, Optional
 import config
@@ -22,28 +23,12 @@ def clean_for_llm(text: str) -> str:
     return text.strip()
 def count_graphemes(text: str) -> int:
     return len(text) if text else 0
-def sanitize_input(text: str, max_len: int = 2000, for_prompt: bool = False) -> str:
-    if not text: return ""
-    text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', ' ', text)
-    text = re.sub(r'\s+', ' ', text)
-    if for_prompt:
-        text = re.sub(r'[\[\]{}<>|\\^`]', '', text)
-    return text[:max_len] if len(text) > max_len else text
 def count_tokens(text: str, llm: Optional[Any] = None) -> int:
     if not text: return 0
     if llm:
         try: return len(llm.tokenize(text.encode("utf-8")))
         except: pass
     return max(1, int(len(text) * config.TOKEN_TO_CHAR_RATIO))
-def validate_and_fix_output(text: str) -> str:
-    if not text: return "Invalid response."
-    sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', text) if s.strip()]
-    if len(sentences) > 2: text = " ".join(sentences[:2])
-    if not any(text.endswith(c) for c in ".!?"): text += "."
-    if len(text) > 300:
-        last_dot = text[:299].rfind(".")
-        text = text[:last_dot+1] if last_dot != -1 else text[:297] + "..."
-    return text
 def validate_post_content(text: str, max_graphemes: int = 300, max_tokens: Optional[int] = None, llm: Optional[Any] = None) -> tuple:
     if max_tokens and llm and count_tokens(text, llm) > max_tokens:
         words = text.split()
@@ -54,7 +39,7 @@ def validate_post_content(text: str, max_graphemes: int = 300, max_tokens: Optio
             out.append(w)
             current += t
         text = " ".join(out)
-        if not text.endswith(('.', '!', '?')): text += "."
+    if not text.endswith(('.', '!', '?')): text += "."
     grapheme_count = count_graphemes(text)
     if grapheme_count <= max_graphemes: return True, text
     truncated = text[:max_graphemes]

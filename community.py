@@ -28,7 +28,6 @@ async def process(client, llm, task):
             for rep in replies:
                 post = rep.get("post", {})
                 if post.get("author", {}).get("did") == config.BOT_DID:
-                    logger.info(f"[community] Bot already replied to {uri[:40]}... Skipping.")
                     return
     except Exception as e:
         logger.warning(f"[community] Reply check failed: {e}")
@@ -37,26 +36,15 @@ async def process(client, llm, task):
     source = ""
     if kw:
         logger.info(f"\033[36m[CHAINBASE KEYWORD GENERATED] {kw}\033[0m")
-        search_data = await search.fetch_chainbase(kw)
+        search_data = await search.fetch_chainbase(client, kw)
         source = "chainbase"
     if not search_data:
         reply = build_content.get_no_data_response(kw or "query")
         await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, uri, parent_cid)
-        logger.info(f"[community] No-data reply sent for '{kw}'")
         return
     clean_query = utils.clean_for_llm(user_text)
     clean_search = utils.clean_for_llm(search_data)
     minimal_ctx = f"Q: {clean_query}\nA: {clean_search}"
-    logger.info(f"\033[32m=== MODEL CONTEXT (COMMUNITY) ===\033[0m\n{minimal_ctx}")
-    logger.info(f"\033[33m[TOKENS] {utils.count_tokens(minimal_ctx, llm)} / {config.MODEL_N_CTX}\033[0m")
-    logger.info(f"\033[33m=== MODEL GENERATION (COMMUNITY) ===\033[0m")
-    sig = build_content._get_signature(source, True)
-    max_body = 300 - len(sig)
-    reply = generator.get_answer(llm, minimal_ctx, clean_query, max_chars=max_body, temperature=0.5)
-    if utils.count_graphemes(reply) > max_body:
-        truncated = reply[:max_body]
-        last_dot = truncated.rfind(".")
-        reply = truncated[:last_dot+1] if last_dot != -1 else truncated.rstrip() + "."
-    reply = reply.strip() + sig
+    reply = await build_content.build_reply(llm, minimal_ctx, clean_query, search_data, source, max_total=300)
     await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, uri, parent_cid)
     logger.info(f"[community] Replied to {uri[:40]}...")

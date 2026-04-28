@@ -29,16 +29,11 @@ def get_model():
         logger.error(f"[generator] Model load failed: {e}")
         return None
 def extract_search_intent(llm, context: str, user_query: str) -> tuple:
-    prompt = f"""Extract search query and time filter.
-Rules:
-- If time is a search filter, use: day, week, month, year.
-- If time is part of the question itself, use: none.
-- Return ONLY: QUERY: <text> | TIME: <day/week/month/year/none>
-Context: {context}
-User: "{user_query}"
-Output:"""
+    prompt = _prompts.get("tavily_intent", "QUERY: {query} | TIME: none").format(query=user_query)
     try:
         raw = llm(prompt, max_tokens=60, temperature=0.1)
+        if isinstance(raw, dict):
+            raw = raw.get("choices", [{}])[0].get("text", "")
         if "| TIME:" in raw:
             q_part, t_part = raw.split("| TIME:", 1)
             query = q_part.replace("QUERY:", "").strip()
@@ -50,7 +45,7 @@ Output:"""
     except:
         return user_query, ""
 def extract_chainbase_keyword(llm, text: str) -> str:
-    prompt_tpl = _prompts.get("chainbase_keyword", "Extract the main keyword or entity from the text.\nOutput format: KEYWORD: [1 word]\nText: {text}\nResult:")
+    prompt_tpl = _prompts.get("chainbase_keyword", "KEYWORD: [1 word]\nText: {text}\nResult:")
     prompt = prompt_tpl.format(text=text)
     try:
         raw = llm(prompt, max_tokens=10, temperature=0.1)
@@ -63,14 +58,8 @@ def extract_chainbase_keyword(llm, text: str) -> str:
     except:
         return ""
 def get_answer(llm, context: str, user_query: str, max_chars: int = 280, temperature: float = 0.5) -> str:
-    prompt = f"""{context}
-Query: {user_query}
-Rules:
-- Priority 1: Answer the query directly. If unsure, give your best guess.
-- Priority 2: Align with the root post topic.
-- Max {max_chars} characters including spaces and emojis.
-- No hashtags, no links, no markdown.
-Reply:"""
+    prompt = _prompts.get("reply", "Answer:").format(memory="", root_thread=context, search_data="", query=user_query)
+    prompt += f"\nMax {max_chars} characters."
     output = llm(prompt, max_tokens=150, temperature=temperature)
     raw_text = output.get("choices", [{}])[0].get("text", "")
     logger.info(f"[LLM] RAW_REPLY_OUTPUT: {raw_text}")

@@ -3,13 +3,11 @@ tavily_intent: |
   Output format: QUERY: [cleaned query] | TIME: [day/week/month/year or omit]
   Query: {query}
   Result:
-
 chainbase_keyword: |
   Extract the main keyword or entity from the text.
   Output format: KEYWORD: [1 word]
   Text: {text}
   Result:
-
 reply: |
   You are a helpful assistant. Answer based on:
   Memory: {memory}
@@ -21,14 +19,12 @@ reply: |
   - Start directly with the answer. No intros.
   - Always end with a period.
   Answer:
-
 digest_refine: |
   Write exactly two sentences for "{keyword}".
   Structure: Core fact. Impact or metric.
   Max 19 words total. Start directly with the fact. No intros, no filler.
   Always end with a period.
   Context: {summary}
-
 context_memory: |
   Compress the conversation history into a dense summary.
   Keep only: decisions, facts, open questions.

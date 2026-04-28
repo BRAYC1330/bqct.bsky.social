@@ -18,12 +18,12 @@ async def process(client, llm, task):
         if "!c" in user_text.lower():
             kw = generator.extract_chainbase_keyword(llm, clean_text)
             if kw:
-                search_data = await search.fetch_chainbase(kw)
+                search_data = await search.fetch_chainbase(client, kw)
                 source = "chainbase"
         else:
             q, t = generator.extract_search_intent(llm, "", clean_text)
             if q:
-                search_data = await search.fetch_tavily(q, t)
+                search_data = await search.fetch_tavily(client, q, t)
                 source = "tavily"
     chain = await bsky.fetch_thread_chain(client, uri)
     if not chain: return
