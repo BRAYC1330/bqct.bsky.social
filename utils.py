@@ -61,7 +61,7 @@ def validate_post_content(text: str, max_graphemes: int = 300, max_tokens: Optio
             truncated = truncated[:int(max_graphemes * 0.7)].rstrip('.,;: ') + '.'
     return count_graphemes(truncated) <= max_graphemes, truncated
 
-async def _format_thread_for_llm(chain: dict, owner_did: str, bot_did: str, client: httpx.AsyncClient) -> str:
+async def _format_thread_for_llm(chain: dict, owner_did: str, bot_did: str, client: httpx.AsyncClient, max_recent: int = 20) -> str:
     if not chain: return ""
     
     root = chain.get("root_text", "").strip()
@@ -69,9 +69,10 @@ async def _format_thread_for_llm(chain: dict, owner_did: str, bot_did: str, clie
     root = re.sub(r'[\s\n]*Qwen(\s*\|\s*(Tavily|Chainbase))?[\s\n]*$', '', root, flags=re.I).strip()
     
     posts = chain.get("chain", [])
+    recent_posts = posts[-max_recent:] if len(posts) > max_recent else posts
     dialogue = []
     
-    for post in posts:
+    for post in recent_posts:
         rec = post.get("record", {})
         author = post.get("author", {})
         did = author.get("did", "")

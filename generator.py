@@ -69,19 +69,16 @@ def extract_chainbase_keyword(llm, text: str) -> str:
     except:
         return ""
 
-def get_answer(llm, context: str, user_query: str, max_chars: int = 280, temperature: float = 0.3) -> str:
-    ctx_lines = []
-    if context:
-        ctx_lines.append(context)
-    ctx_block = "\n\n".join(ctx_lines)
-    prompt = f"""{ctx_block}
+def get_answer(llm, context: str, user_query: str, max_chars: int = 280, temperature: float = 0.5) -> str:
+    prompt = f"""{context}
 
 Query: {user_query}
 
 Rules:
+- Priority 1: Answer the query directly. If unsure, give your best guess.
+- Priority 2: Align with the root post topic.
 - Max {max_chars} characters including spaces and emojis.
 - No hashtags, no links, no markdown.
-- Be helpful and direct.
 Reply:"""
     output = llm(prompt, max_tokens=150, temperature=temperature)
     raw_text = output.get("choices", [{}])[0].get("text", "")
