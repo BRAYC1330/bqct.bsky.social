@@ -24,6 +24,18 @@ async def process(client, llm, task):
     root_cid = chain.get("root_cid", "")
     parent_cid = chain.get("parent_cid", "")
     
+    try:
+        r = await client.get("https://bsky.social/xrpc/app.bsky.feed.getPostThread", params={"uri": uri, "depth": 1})
+        if r.status_code == 200:
+            replies = r.json().get("thread", {}).get("replies", [])
+            for rep in replies:
+                post = rep.get("post", {})
+                if post.get("author", {}).get("did") == config.BOT_DID:
+                    logger.info(f"[community] Bot already replied to {uri[:40]}... Skipping.")
+                    return
+    except Exception as e:
+        logger.warning(f"[community] Reply check failed: {e}")
+    
     kw = generator.extract_chainbase_keyword(llm, user_text)
     search_data = ""
     source = ""
