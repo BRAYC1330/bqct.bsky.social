@@ -8,17 +8,7 @@ def _clean_tavily_content(text: str) -> str:
     text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
     text = re.sub(r'[*_#~`>]', '', text)
     text = re.sub(r'\n\s*\n', '\n', text)
-    lines = text.split('\n')
-    cleaned = []
-    skip_sections = {'navigation', 'footer', 'menu', 'related', 'trending', 'more news', 'sign in', 'privacy', 'terms', 'upgrade', 'portfolio', 'watch now'}
-    for line in lines:
-        stripped = line.strip().lower()
-        if any(skip in stripped for skip in skip_sections):
-            continue
-        if stripped and not stripped.startswith(('+', '-', '•', '1.', '2.', '3.', '4.', '5.', '6.', '7.', '8.', '9.', '0.')):
-            cleaned.append(line.strip())
-    result = ' '.join(cleaned)
-    result = re.sub(r'\s{2,}', ' ', result)
+    result = ' '.join(text.split())
     return result.strip()
 async def get_trending_topics_raw():
     try:

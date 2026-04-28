@@ -29,11 +29,11 @@ def get_model():
         logger.error(f"[generator] Model load failed: {e}")
         return None
 def extract_search_intent(llm, thread_context: str, user_query: str) -> tuple:
-    prompt = f"""Extract search query and time filter based on user input and conversation context.
+    prompt = f"""Extract a concise search query based on user input and conversation context.
 Rules:
 - Use thread context to resolve pronouns and implicit references.
-- If time is a search filter, use: day, week, month, year.
-- If time is part of the question itself, use: none.
+- Focus on the core topic: jokes, news, crypto, tech, etc.
+- If time filter is needed, use: day, week, month, year. Otherwise: none.
 - Return ONLY: QUERY: <text> | TIME: <day/week/month/year/none>
 Thread Context: {thread_context}
 User Query: "{user_query}"
@@ -44,7 +44,7 @@ Output:"""
             raw = raw.get("choices", [{}])[0].get("text", "")
         if "| TIME:" in raw:
             q_part, t_part = raw.split("| TIME:", 1)
-            query = q_part.replace("QUERY:", "").strip()
+            query = q_part.replace("QUERY:", "").strip().strip('"')
             time_range = t_part.strip().lower()
             if time_range not in ("day", "week", "month", "year"):
                 time_range = ""
