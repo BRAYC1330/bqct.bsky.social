@@ -34,7 +34,7 @@ async def process(client, llm, task):
     logger.info(f"\033[32m=== MODEL CONTEXT (COMMUNITY) ===\033[0m\n{thread_ctx}")
     
     sig = "\n\nQwen"
-    if source == "chainbase" and search_
+    if source == "chainbase" and search_data:
         sig = "\n\nQwen | Chainbase"
     max_body = 300 - len(sig)
     

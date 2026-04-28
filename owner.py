@@ -40,9 +40,9 @@ async def process(client, llm, task):
     logger.info(f"\033[32m=== MODEL CONTEXT (OWNER) ===\033[0m\n{thread_ctx}")
     
     sig = "\n\nQwen"
-    if source == "tavily" and search_
+    if source == "tavily" and search_data:
         sig = "\n\nQwen | Tavily"
-    elif source == "chainbase" and search_
+    elif source == "chainbase" and search_data:
         sig = "\n\nQwen | Chainbase"
     max_body = 300 - len(sig)
     
