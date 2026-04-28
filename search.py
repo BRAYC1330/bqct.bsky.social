@@ -9,7 +9,7 @@ async def get_trending_topics_raw():
     try:
         import httpx
         async with httpx.AsyncClient(timeout=config.SEARCH_TIMEOUT) as client:
-            r = await client.get("https://api.chainbase.com/v1/trending/topics", headers={"Authorization": f"Bearer {config.PAT}"})
+            r = await client.get("https://api.chainbase.com/tops/v1/trending/topics", headers={"Authorization": f"Bearer {config.PAT}"})
             if r.status_code != 200:
                 logger.warning(f"[search] Chainbase trending failed: {r.status_code}")
                 return []
@@ -56,9 +56,8 @@ async def fetch_chainbase(keyword: str) -> str:
         import httpx
         url = "https://api.chainbase.com/tops/v1/tool/search-narrative-candidates"
         params = {"keyword": keyword}
-        headers = {"Authorization": f"Bearer {config.PAT}"}
         async with httpx.AsyncClient(timeout=config.SEARCH_TIMEOUT) as client:
-            r = await client.get(url, params=params, headers=headers)
+            r = await client.get(url, params=params)
             if r.status_code != 200:
                 logger.warning(f"[search] Chainbase fetch failed: status={r.status_code}")
                 return ""
