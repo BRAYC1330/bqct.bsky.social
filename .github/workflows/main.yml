@@ -1,8 +1,11 @@
 name: Bluesky AI Bot
 on:
   schedule:
-    - cron: '0 * * * *'
+  - cron: '0 * * * *'
   workflow_dispatch:
+concurrency:
+  group: bluesky-bot-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
@@ -12,97 +15,97 @@ jobs:
     outputs:
       new_digest_uri: ${{ steps.run.outputs.new_digest_uri }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-          cache: 'pip'
-      - name: Install checker deps
-        run: pip install httpx
-      - name: Check
-        id: checker
-        env:
-          BOT_HANDLE: ${{ secrets.BOT_HANDLE }}
-          BOT_PASSWORD: ${{ secrets.BOT_PASSWORD }}
-          OWNER_DID: ${{ secrets.OWNER_DID }}
-          BOT_DID: ${{ secrets.BOT_DID }}
-          PAT: ${{ secrets.PAT }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          LAST_PROCESSED: ${{ secrets.LAST_PROCESSED }}
-        run: python check.py
-      - name: Install heavy deps
-        if: steps.checker.outputs.status == 'true'
-        run: |
-          pip install --upgrade pip setuptools wheel
-          CMAKE_ARGS="-DGGML_BLAS=OFF -DGGML_CUDA=OFF" pip install --prefer-binary llama-cpp-python==0.3.20
-          pip install pyyaml PyNaCl trafilatura pyyaml
-      - name: Cache model
-        if: steps.checker.outputs.status == 'true'
-        uses: actions/cache@v4
-        with:
-          path: models
-          key: ${{ runner.os }}-qwen25-coder-14b-q5km-${{ hashFiles('models/**') }}
-          restore-keys: |
-            ${{ runner.os }}-qwen25-coder-14b-q5km-
-      - name: Download model if not cached
-        if: steps.checker.outputs.status == 'true'
-        run: |
-          set -e
-          mkdir -p models
-          FILE="models/qwen2.5-coder-14b-instruct-q5_k_m.gguf"
-          EXPECTED_SHA256="${{ secrets.MODEL_SHA256 }}"
-          if [ ! -f "$FILE" ] || [ $(stat -c%s "$FILE") -lt 1000000000 ]; then
-            curl -L --retry 3 --retry-delay 10 -o "$FILE" "https://huggingface.co/Qwen/Qwen2.5-Coder-14B-Instruct-GGUF/resolve/main/qwen2.5-coder-14b-instruct-q5_k_m.gguf?download=true"
-            if [ -n "$EXPECTED_SHA256" ]; then
-              echo "$EXPECTED_SHA256  $FILE" | sha256sum -c -
-            fi
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        cache: 'pip'
+    - name: Install checker deps
+      run: pip install httpx
+    - name: Check
+      id: checker
+      env:
+        BOT_HANDLE: ${{ secrets.BOT_HANDLE }}
+        BOT_PASSWORD: ${{ secrets.BOT_PASSWORD }}
+        OWNER_DID: ${{ secrets.OWNER_DID }}
+        BOT_DID: ${{ secrets.BOT_DID }}
+        PAT: ${{ secrets.PAT }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        LAST_PROCESSED: ${{ secrets.LAST_PROCESSED }}
+      run: python check.py
+    - name: Install heavy deps
+      if: steps.checker.outputs.status == 'true'
+      run: |
+        pip install --upgrade pip setuptools wheel
+        CMAKE_ARGS="-DGGML_BLAS=OFF -DGGML_CUDA=OFF" pip install --prefer-binary llama-cpp-python==0.3.20
+        pip install pyyaml PyNaCl trafilatura
+    - name: Cache model
+      if: steps.checker.outputs.status == 'true'
+      uses: actions/cache@v4
+      with:
+        path: models
+        key: ${{ runner.os }}-qwen25-coder-14b-q5km-${{ hashFiles('models/**') }}
+        restore-keys: |
+          ${{ runner.os }}-qwen25-coder-14b-q5km-
+    - name: Download model if not cached
+      if: steps.checker.outputs.status == 'true'
+      run: |
+        set -e
+        mkdir -p models
+        FILE="models/qwen2.5-coder-14b-instruct-q5_k_m.gguf"
+        EXPECTED_SHA256="${{ secrets.MODEL_SHA256 }}"
+        if [ ! -f "$FILE" ] || [ $(stat -c%s "$FILE") -lt 1000000000 ]; then
+          curl -L --retry 3 --retry-delay 10 -o "$FILE" "https://huggingface.co/Qwen/Qwen2.5-Coder-14B-Instruct-GGUF/resolve/main/qwen2.5-coder-14b-instruct-q5_k_m.gguf?download=true"
+          if [ -n "$EXPECTED_SHA256" ]; then
+            echo "$EXPECTED_SHA256  $FILE" | sha256sum -c -
           fi
-      - name: Run Bot
-        id: run
-        if: steps.checker.outputs.status == 'true'
-        env:
-          PYTHONUNBUFFERED: "1"
-          TASKS_JSON: ${{ steps.checker.outputs.tasks }}
-          BOT_HANDLE: ${{ secrets.BOT_HANDLE }}
-          BOT_PASSWORD: ${{ secrets.BOT_PASSWORD }}
-          BOT_DID: ${{ secrets.BOT_DID }}
-          OWNER_DID: ${{ secrets.OWNER_DID }}
-          PAT: ${{ secrets.PAT }}
-          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          LINK_CACHE_TTL: 300
-          ALLOWED_LINK_DOMAINS: "bsky.app,atproto.com,chainbase.com,tavily.com"
-          MAX_LINK_CONTENT_SIZE: 600
-          LLAMA_NO_ACCELERATE: 1
-          DEBUG_OWNER: "true"
-        run: python bot.py
-      - name: Update Last Processed State
-        if: steps.checker.outputs.status == 'true'
-        run: |
-          python3 << 'EOF'
-          import os, json, subprocess
-          state_raw = os.environ.get("CHECKER_STATE", "{}")
-          try:
-              state = json.loads(state_raw) if state_raw else {}
-          except: state = {}
-          new_uri = os.environ.get("BOT_NEW_URI", "").strip()
-          if new_uri:
-              state["digest_uri"] = new_uri
-          final_json = json.dumps(state, ensure_ascii=False)
-          cmd = ["gh", "secret", "set", "LAST_PROCESSED", "--body", final_json, "--repo", os.environ["GITHUB_REPOSITORY"]]
-          subprocess.run(cmd, env={**os.environ, "GH_TOKEN": os.environ["PAT"]}, check=True)
-          print(f"[OK] Updated LAST_PROCESSED")
-          EOF
-        env:
-          PAT: ${{ secrets.PAT }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          CHECKER_STATE: ${{ steps.checker.outputs.state_json }}
-          BOT_NEW_URI: ${{ steps.run.outputs.new_digest_uri }}
-      - name: Health check alert
-        if: failure()
-        run: |
-          if [ -n "${{ secrets.ALERT_WEBHOOK }}" ]; then
-            curl -X POST -H "Content-Type: application/json" \
-            -d "{\"text\":\"Bluesky Bot failed: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" \
-            "${{ secrets.ALERT_WEBHOOK }}" || true
-          fi
+        fi
+    - name: Run Bot
+      id: run
+      if: steps.checker.outputs.status == 'true'
+      env:
+        PYTHONUNBUFFERED: "1"
+        TASKS_JSON: ${{ steps.checker.outputs.tasks }}
+        BOT_HANDLE: ${{ secrets.BOT_HANDLE }}
+        BOT_PASSWORD: ${{ secrets.BOT_PASSWORD }}
+        BOT_DID: ${{ secrets.BOT_DID }}
+        OWNER_DID: ${{ secrets.OWNER_DID }}
+        PAT: ${{ secrets.PAT }}
+        TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        LINK_CACHE_TTL: 300
+        ALLOWED_LINK_DOMAINS: "bsky.app,atproto.com,chainbase.com,tavily.com"
+        MAX_LINK_CONTENT_SIZE: 600
+        LLAMA_NO_ACCELERATE: 1
+        DEBUG_OWNER: "true"
+      run: python bot.py
+    - name: Update Last Processed State
+      if: steps.checker.outputs.status == 'true'
+      run: |
+        python3 << 'EOF'
+        import os, json, subprocess
+        state_raw = os.environ.get("CHECKER_STATE", "{}")
+        try:
+            state = json.loads(state_raw) if state_raw else {}
+        except: state = {}
+        new_uri = os.environ.get("BOT_NEW_URI", "").strip()
+        if new_uri:
+            state["digest_uri"] = new_uri
+        final_json = json.dumps(state, ensure_ascii=False)
+        cmd = ["gh", "secret", "set", "LAST_PROCESSED", "--body", final_json, "--repo", os.environ["GITHUB_REPOSITORY"]]
+        subprocess.run(cmd, env={**os.environ, "GH_TOKEN": os.environ["PAT"]}, check=True)
+        print(f"[OK] Updated LAST_PROCESSED")
+        EOF
+      env:
+        PAT: ${{ secrets.PAT }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        CHECKER_STATE: ${{ steps.checker.outputs.state_json }}
+        BOT_NEW_URI: ${{ steps.run.outputs.new_digest_uri }}
+    - name: Health check alert
+      if: failure()
+      run: |
+        if [ -n "${{ secrets.ALERT_WEBHOOK }}" ]; then
+          curl -X POST -H "Content-Type: application/json" \
+          -d "{\"text\":\"Bluesky Bot failed: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" \
+          "${{ secrets.ALERT_WEBHOOK }}" || true
+        fi
