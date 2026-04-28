@@ -41,9 +41,9 @@ async def build_digest(llm, trends, task_type: str, max_total: int = 300) -> str
             st = item.get("rank_status", "same")
             e = emojis.get(st.lower(), "")
             lines.append(f"{e} {kw} 📊 {sc}")
-        if len("\n".join(lines)) + len(header) > max_body:
-            lines.pop()
-            break
+            if len("\n".join(lines)) + len(header) > max_body:
+                lines.pop()
+                break
         if not lines: return None
         body = f"{header}\n" + "\n".join(lines)
     else:
