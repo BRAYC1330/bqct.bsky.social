@@ -50,10 +50,13 @@ async def run():
             uri = n.get("uri", "")
             record = n.get("record", {})
             parent_uri = record.get("reply", {}).get("parent", {}).get("uri", "") if isinstance(record, dict) else ""
+            
             if digest_uri and parent_uri and digest_uri in parent_uri:
                 tasks.append({"type": "digest_comment", "uri": uri, "text": text, "author_did": author_did, "parent_uri": parent_uri})
                 digest_comment_count += 1
-            elif author_did == config.OWNER_DID:
+                continue
+
+            if author_did == config.OWNER_DID:
                 tasks.append({"type": "owner_command", "uri": uri, "text": text, "author_did": author_did})
                 owner_count += 1
     finally:
