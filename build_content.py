@@ -34,7 +34,7 @@ async def build_digest(llm, trends, task_type: str, max_total: int = 300) -> str
     if not trends: return None
     sig = SIG_DIGEST
     max_body = max_total - len(sig)
-    emojis = {"new": "🆕", "up": "↗️", "down": "↙️", "same": "➡️"}
+    emojis = config.TREND_EMOJIS
     
     if task_type == "digest_mini":
         header = "TOP CRYPTO TRENDS:"
