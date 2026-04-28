@@ -57,7 +57,7 @@ async def fetch_tavily(query: str, time_range: str = "") -> str:
             "query": query,
             "include_answer": "basic",
             "search_depth": "basic",
-            "max_results": 2,
+            "max_results": 5,
             "include_raw_content": "text",
             "exclude_domains": ["youtube.com"],
             "api_key": config.TAVILY_API_KEY
@@ -75,7 +75,7 @@ async def fetch_tavily(query: str, time_range: str = "") -> str:
                     clean_answer = _clean_tavily_content(answer)
                     if clean_answer:
                         parts.append(f"[SUMMARY] {clean_answer}")
-                for res in results[:2]:
+                for res in results[:5]:
                     title = res.get("title", "").strip()
                     content = _clean_tavily_content(res.get("content", ""))
                     if len(content) > 1600:

@@ -13,24 +13,28 @@ async def process(client, llm, task):
     do_search = "!t" in user_text.lower() or "!c" in user_text.lower()
     search_data = ""
     source = ""
+    chain = await bsky.fetch_thread_chain(client, uri)
+    if not chain: return
+    root_uri = chain.get("root_uri", uri)
+    root_cid = chain.get("root_cid", "")
+    parent_cid = chain.get("parent_cid", "")
+    thread_ctx = await utils._format_thread_for_llm(chain, config.OWNER_DID, config.BOT_DID, client, max_recent=10)
     if do_search:
         clean_text = re.sub(r'(!t|!c)', '', user_text, flags=re.I).strip()
+        logger.info(f"\033[33m[OWNER SEARCH] Intent: {'!c' if '!c' in user_text.lower() else '!t'} | Cleaned: '{clean_text}'\033[0m")
         if "!c" in user_text.lower():
             kw = generator.extract_chainbase_keyword(llm, clean_text)
             if kw:
                 search_data = await search.fetch_chainbase(kw)
                 source = "chainbase"
         else:
-            q, t = generator.extract_search_intent(llm, "", clean_text)
+            q, t = generator.extract_search_intent(llm, thread_ctx, clean_text)
+            logger.info(f"\033[32m[OWNER TAVILY INTENT] Refined Query: '{q}' | Time: '{t}'\033[0m")
             if q:
                 search_data = await search.fetch_tavily(q, t)
                 source = "tavily"
-    chain = await bsky.fetch_thread_chain(client, uri)
-    if not chain: return
-    root_uri = chain.get("root_uri", uri)
-    root_cid = chain.get("root_cid", "")
-    parent_cid = chain.get("parent_cid", "")
-    thread_ctx = await utils._format_thread_for_llm(chain, config.OWNER_DID, config.BOT_DID, client)
+        if not search_data:
+            logger.warning(f"\033[31m[OWNER SEARCH] No data returned from search provider\033[0m")
     logger.info(f"\033[32m=== MODEL CONTEXT (OWNER) ===\033[0m\n{thread_ctx}")
     logger.info(f"\033[33m[TOKENS] {utils.count_tokens(thread_ctx, llm)} / {config.MODEL_N_CTX}\033[0m")
     logger.info(f"\033[33m=== MODEL GENERATION (OWNER) ===\033[0m")
