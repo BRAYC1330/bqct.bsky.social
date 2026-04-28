@@ -3,6 +3,7 @@ import config
 import bsky
 import search
 import build_content
+import utils
 from logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -22,6 +23,7 @@ async def run(client, llm, task_type="digest_mini") -> str | None:
     
     if config.RAW_DEBUG:
         logger.info(f"\033[32m=== MODEL CONTEXT (DIGEST) ===\033[0m\n{final_post}")
+    logger.info(f"\033[33m[TOKENS] {utils.count_tokens(final_post, llm)} / {config.MODEL_N_CTX}\033[0m")
     
     try:
         resp = await bsky.post_root(client, config.BOT_DID, final_post)
