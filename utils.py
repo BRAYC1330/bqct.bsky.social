@@ -63,49 +63,49 @@ def validate_post_content(text: str, max_graphemes: int = 300, max_tokens: Optio
 
 async def _format_thread_for_llm(chain: dict, owner_did: str, bot_did: str, client: httpx.AsyncClient) -> str:
     if not chain: return ""
-
+    
     root = chain.get("root_text", "").strip()
     root = re.sub(r'(!t|!c)', '', root, flags=re.I).strip()
-    root = re.sub(r'\s*\n\s*Qwen(\s*\|\s*(Tavily|Chainbase))?\s*$', '', root, flags=re.I).strip()
-
+    root = re.sub(r'\n+Qwen(\s*\|\s*(Tavily|Chainbase))?\s*$', '', root, flags=re.I).strip()
+    
     posts = chain.get("chain", [])
     dialogue = []
-
+    
     for post in posts:
         rec = post.get("record", {})
         author = post.get("author", {})
         did = author.get("did", "")
         text = rec.get("text", "").strip()
         embed = rec.get("embed")
-
+        
         if rec.get("$type") == "app.bsky.feed.repost" and "subject" in post:
             sub = post.get("subject", {})
             sub_rec = sub.get("record", {})
             text = sub_rec.get("text", "")
             embed = sub_rec.get("embed")
-
+        
         text = re.sub(r'(!t|!c)', '', text, flags=re.I).strip()
-        text = re.sub(r'\s*\n\s*Qwen(\s*\|\s*(Tavily|Chainbase))?\s*$', '', text, flags=re.I).strip()
+        text = re.sub(r'\n+Qwen(\s*\|\s*(Tavily|Chainbase))?\s*$', '', text, flags=re.I).strip()
         if not text and not embed: continue
-
+        
         embed_txt = bsky._extract_embed_text(embed)
         if embed_txt:
             text += f" [EMBED: {embed_txt}]"
-
+        
         urls = re.findall(r'https?://[^\s<>"{}|\\^`\[\]]+', text)
         for u in urls:
             content = await bsky._fetch_url_content(client, u)
             if content: text += f" [LINK: {content}]"
-
+        
         if did == owner_did:
             prefix = "Q:"
         elif did == bot_did:
             prefix = "A:"
         else:
             prefix = "@user:"
-
+        
         dialogue.append(f"{prefix} {text}")
-
+    
     parts = [f"[ROOT]\n{root}"]
     if dialogue:
         parts.append(f"[RECENT]\n" + "\n\n".join(dialogue))

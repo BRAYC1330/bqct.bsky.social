@@ -1,21 +1,11 @@
-import os
 import logging
-import json
-from datetime import datetime, timezone
 import config
-import search
-import generator
 import bsky
-import utils
+import search
+import build_content
 from logging_config import setup_logging
-
 setup_logging()
 logger = logging.getLogger(__name__)
-
-MAX_POST_TOKENS = 180
-
-def _get_trend_emoji(rank_status: str) -> str:
-    return config.TREND_EMOJIS.get(rank_status.lower(), "")
 
 async def run(client, llm, task_type="digest_mini") -> str | None:
     trends = await search.get_trending_topics_raw()
@@ -23,56 +13,16 @@ async def run(client, llm, task_type="digest_mini") -> str | None:
     if not trends:
         logger.warning("[DIGEST] No trends fetched")
         return None
-
-    sig = f"Qwen | Chainbase TOPS {config.SIGNATURE_ICONS}"
-    stats_emoji = config.TREND_STATS_EMOJI
-    sig_tokens = utils.count_tokens(sig, llm)
-
+    final_post = await build_content.build_digest(llm, trends, task_type, max_total=300)
+    if not final_post:
+        logger.warning("[DIGEST] Build failed or empty")
+        return None
+    if config.RAW_DEBUG:
+        logger.info(f"[DIGEST] RAW-POST:\n{final_post}")
     try:
-        if task_type == "digest_mini":
-            header = "TOP CRYPTO TRENDS:"
-            lines = []
-            header_tokens = utils.count_tokens(header, llm)
-            for item in trends[:6]:
-                kw, sc, st = item.get("keyword", "?"), int(item.get("score", 0)), item.get("rank_status", "same")
-                e = _get_trend_emoji(st)
-                line = f"{e} {kw} {stats_emoji}  {sc}"
-                line_toks = utils.count_tokens(line, llm) + 1
-                if utils.count_tokens("\n".join(lines), llm) + header_tokens + sig_tokens + line_toks > MAX_POST_TOKENS:
-                    break
-                lines.append(line)
-            if not lines:
-                return None
-            joined_lines = "\n".join(lines)
-            final_post = f"{header}\n\n{joined_lines}\n\n{sig}"
-            if utils.count_graphemes(final_post) > 300:
-                logger.warning(f"[DIGEST] SKIPPED: MINI GRAPHEME OVERFLOW")
-                return None
-            if config.RAW_DEBUG:
-                logger.info(f"[DIGEST] RAW-MINI-POST:\n{final_post}")
-            resp = await bsky.post_root(client, config.BOT_DID, final_post)
-            return resp.get("uri")
-        elif task_type == "digest_full":
-            item = trends[0]
-            kw, sc, st, summary = item.get("keyword", "?"), int(item.get("score", 0)), item.get("rank_status", "same"), item.get("summary", "")
-            e = _get_trend_emoji(st)
-            header = "TOP CRYPTO TREND:"
-            title = f"{e + ' ' if e else ''}{kw} {stats_emoji}  {sc}: "
-            header_toks = utils.count_tokens(header, llm)
-            title_toks = utils.count_tokens(title, llm)
-            sig_toks = utils.count_tokens(sig, llm)
-            max_desc_tokens = MAX_POST_TOKENS - header_toks - title_toks - sig_toks - 4
-            if max_desc_tokens < 10:
-                return None
-            desc = generator.generate_digest(llm, kw, summary, max_desc_tokens)
-            final_post = f"{header}\n\n{title}{desc}\n\n{sig}"
-            if utils.count_graphemes(final_post) > 300:
-                logger.warning(f"[DIGEST] SKIPPED: FULL GRAPHEME OVERFLOW")
-                return None
-            if config.RAW_DEBUG:
-                logger.info(f"[DIGEST] RAW-FULL-POST:\n{final_post}")
-            resp = await bsky.post_root(client, config.BOT_DID, final_post)
-            return resp.get("uri")
+        resp = await bsky.post_root(client, config.BOT_DID, final_post)
+        logger.info(f"[DIGEST] Posted {task_type}")
+        return resp.get("uri")
     except Exception as e:
         logger.error(f"[DIGEST] Post failed: {e}")
-    return None
+        return None

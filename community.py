@@ -1,6 +1,4 @@
-import os
 import logging
-import re
 import config
 import bsky
 import generator
@@ -17,32 +15,40 @@ async def process(client, llm, task):
     if not parent_uri:
         logger.warning(f"[community] Missing parent_uri for {uri}")
         return
-
+    
     chain = await bsky.fetch_thread_chain(client, uri)
-    if not chain:
-        return
-
+    if not chain: return
+    
     root_uri = chain.get("root_uri", parent_uri)
     root_cid = chain.get("root_cid", "")
     parent_cid = chain.get("parent_cid", "")
-
-    keyword = generator.extract_chainbase_keyword(llm, user_text)
+    
+    kw = generator.extract_chainbase_keyword(llm, user_text)
     search_data = ""
-    if keyword:
-        search_data = await search.fetch_chainbase(keyword)
-
-    thread_context = await utils._format_thread_for_llm(chain, config.OWNER_DID, config.BOT_DID, client)
-    final_ctx = thread_context
+    source = ""
+    if kw:
+        search_data = await search.fetch_chainbase(kw)
+        source = "chainbase"
+    
+    thread_ctx = await utils._format_thread_for_llm(chain, config.OWNER_DID, config.BOT_DID, client)
+    
+    sig = "\n\nQwen"
+    if source == "chainbase" and search_data:
+        sig = "\n\nQwen | Chainbase"
+    max_body = 300 - len(sig)
+    
+    ctx = thread_ctx
     if search_data:
-        final_ctx += f"\n\n[SEARCH]\n{search_data}"
-
-    reply = generator.get_answer(llm, final_ctx, user_text, "", max_chars=280, temperature=0.3)
-    if utils.count_graphemes(reply) > 293:
-        logger.warning(f"[community] Reply too long ({utils.count_graphemes(reply)}), regenerating...")
-        reply = generator.get_answer(llm, final_ctx, user_text, "", max_chars=260, temperature=0.3)
-    if utils.count_graphemes(reply) > 293:
-        logger.error(f"[community] Reply still too long, skipping post")
-        return
-
-    await bsky.post_reply(client, config.BOT_DID, reply.strip(), root_uri, root_cid, uri, parent_cid)
+        ctx += f"\n\n[SEARCH]\n{search_data}"
+    
+    reply = generator.get_answer(llm, ctx, user_text, max_chars=max_body, temperature=0.3)
+    
+    if utils.count_graphemes(reply) > max_body:
+        truncated = reply[:max_body]
+        last_dot = truncated.rfind(".")
+        reply = truncated[:last_dot+1] if last_dot != -1 else truncated.rstrip() + "."
+    
+    final = reply.strip() + sig
+    
+    await bsky.post_reply(client, config.BOT_DID, final, root_uri, root_cid, uri, parent_cid)
     logger.info(f"[community] Replied to {uri[:40]}...")

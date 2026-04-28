@@ -69,12 +69,10 @@ def extract_chainbase_keyword(llm, text: str) -> str:
     except:
         return ""
 
-def get_answer(llm, context: str, user_query: str, search_data: str = "", max_chars: int = 280, temperature: float = 0.3) -> str:
+def get_answer(llm, context: str, user_query: str, max_chars: int = 280, temperature: float = 0.3) -> str:
     ctx_lines = []
     if context:
         ctx_lines.append(context)
-    if search_data:
-        ctx_lines.append(f"[SEARCH]\n{search_data}")
     ctx_block = "\n\n".join(ctx_lines)
     prompt = f"""{ctx_block}
 
