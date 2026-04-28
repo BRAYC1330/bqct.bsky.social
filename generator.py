@@ -32,7 +32,7 @@ def extract_search_intent(llm, thread_context: str, user_query: str) -> tuple:
     prompt = f"""Extract a concise search query based on user input and conversation context.
 Rules:
 - Use thread context to resolve pronouns and implicit references.
-- Focus on the core topic: jokes, news, crypto, tech, etc.
+- Focus on the core topic.
 - If time filter is needed, use: day, week, month, year. Otherwise: none.
 - Return ONLY: QUERY: <text> | TIME: <day/week/month/year/none>
 Thread Context: {thread_context}

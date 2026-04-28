@@ -40,7 +40,6 @@ async def get_trending_topics_raw():
         return []
 async def fetch_tavily(query: str, time_range: str = "") -> str:
     if not config.TAVILY_API_KEY: return ""
-    logger.info(f"\033[33m[TAVILY REQUEST] Query: '{query}' | Time: {time_range or 'none'}\033[0m")
     try:
         import httpx
         payload = {
