@@ -21,7 +21,7 @@ async def build_reply(llm, thread_ctx: str, query: str, search_data: str = "", s
     sig = _get_signature(source, bool(search_data))
     max_body = max_total - len(sig)
     ctx = thread_ctx
-    if search_
+    if search_data:
         ctx += f"\n\n[SEARCH]\n{search_data}"
     reply = generator.get_answer(llm, ctx, query, max_chars=max_body, temperature=0.5)
     if utils.count_graphemes(reply) > max_body:
