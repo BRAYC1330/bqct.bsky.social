@@ -20,14 +20,12 @@ async def process(client, llm, task):
     chain = await bsky.fetch_thread_chain(client, uri)
     if not chain: return
     
-    chain_list = chain.get("chain", [])
-    if len(chain_list) >= 2:
-        parent_author_did = chain_list[-2].get("author", {}).get("did")
-        if parent_author_did == config.BOT_DID:
-            logger.info(f"[community] Replying to bot's own comment. Skipping.")
-            return
-    
     root_uri = chain.get("root_uri", parent_uri)
+    
+    if parent_uri != root_uri:
+        logger.info(f"[community] Nested reply, skipping.")
+        return
+    
     root_cid = chain.get("root_cid", "")
     parent_cid = chain.get("parent_cid", "")
     
