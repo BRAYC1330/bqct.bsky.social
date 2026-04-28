@@ -21,7 +21,7 @@ async def build_reply(llm, thread_ctx: str, query: str, search_data: str = "", s
     sig = _get_signature(source, bool(search_data))
     max_body = max_total - len(sig)
     ctx = thread_ctx
-    if search_data:
+    if search_
         ctx += f"\n\n[SEARCH]\n{search_data}"
     reply = generator.get_answer(llm, ctx, query, max_chars=max_body, temperature=0.5)
     if utils.count_graphemes(reply) > max_body:
@@ -49,7 +49,7 @@ async def build_digest(llm, trends, task_type: str, max_total: int = 300) -> str
                 lines.pop()
                 break
         if not lines: return None
-        body = f"{header}\n" + "\n".join(lines)
+        body = f"{header}\n\n" + "\n".join(lines)
     else:
         item = trends[0]
         kw = item.get("keyword", "?")
@@ -63,7 +63,7 @@ async def build_digest(llm, trends, task_type: str, max_total: int = 300) -> str
         if max_desc < 20: return None
         prompt = f"Write exactly two sentences for '{kw}'. Structure: Core fact. Impact or metric. Max 19 words total. Start directly. Context: {summary}"
         desc = generator.get_answer(llm, "", prompt, max_chars=max_desc, temperature=0.5)
-        body = f"{header}\n{title} {desc}"
+        body = f"{header}\n\n{title} {desc}"
     
     final = body + sig
     if utils.count_graphemes(final) > max_total: return None
