@@ -67,12 +67,20 @@ async def fetch_chainbase(keyword: str) -> str:
             if not isinstance(items, list):
                 logger.warning(f"[search] Chainbase unexpected data format")
                 return ""
+            seen = set()
             valid_items = []
             for item in items:
-                kw = item.get("keyword", item.get("narrative", ""))
-                sm = item.get("summary", item.get("description", ""))
-                if kw and sm and utils.is_english(sm):
-                    valid_items.append((kw, sm))
+                kw = str(item.get("keyword") or item.get("narrative") or "").strip()
+                sm = str(item.get("summary") or item.get("description") or "").strip()
+                if not kw or not sm:
+                    continue
+                if not utils.is_english(sm):
+                    continue
+                dedup_key = (kw.lower(), sm[:50].lower())
+                if dedup_key in seen:
+                    continue
+                seen.add(dedup_key)
+                valid_items.append((kw, sm))
                 if len(valid_items) >= 5:
                     break
             if not valid_items:
