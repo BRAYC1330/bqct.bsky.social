@@ -28,6 +28,7 @@ async def process(client, llm, task):
     search_data = ""
     source = ""
     if kw:
+        logger.info(f"\033[36m[CHAINBASE KEYWORD GENERATED] {kw}\033[0m")
         search_data = await search.fetch_chainbase(kw)
         source = "chainbase"
     

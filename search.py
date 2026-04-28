@@ -20,7 +20,7 @@ async def get_trending_topics_raw():
                 kw = t.get("keyword", "?")
                 sc = t.get("score")
                 rs = t.get("rank_status", "same")
-                sm = t.get("summary", "")[:200] + "..." if len(t.get("summary", "")) > 200 else t.get("summary", "")
+                sm = t.get("summary", "")
                 logger.info(f"\033[36m• {kw} | score:{sc} | rank:{rs} | {sm}\033[0m")
             logger.info(f"\033[36m=== END PARSED TRENDS ===\033[0m")
             
@@ -53,7 +53,15 @@ async def fetch_chainbase(keyword: str) -> str:
             if r.status_code == 200:
                 data = r.json()
                 results = data.get("data", [])
-                return "\n".join([f"- {res.get('summary', '')}" for res in results[:3]])
+                if not results: return ""
+                formatted = []
+                for res in results:
+                    kw = res.get("keyword", "")
+                    summary = res.get("summary", "")
+                    formatted.append(f"KEYWORD: {kw}\nSUMMARY: {summary}")
+                output = "\n\n".join(formatted)
+                logger.info(f"\033[36m=== CHAINBASE CONTEXT (MODEL INPUT) ===\033[0m\n{output}")
+                return output
     except Exception as e:
         logger.warning(f"[search] Chainbase error: {e}")
     return ""
