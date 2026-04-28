@@ -66,7 +66,7 @@ async def _format_thread_for_llm(chain: dict, owner_did: str, bot_did: str, clie
     
     root = chain.get("root_text", "").strip()
     root = re.sub(r'(!t|!c)', '', root, flags=re.I).strip()
-    root = re.sub(r'\n+Qwen(\s*\|\s*(Tavily|Chainbase))?\s*$', '', root, flags=re.I).strip()
+    root = re.sub(r'[\s\n]*Qwen(\s*\|\s*(Tavily|Chainbase))?[\s\n]*$', '', root, flags=re.I).strip()
     
     posts = chain.get("chain", [])
     dialogue = []
@@ -85,7 +85,7 @@ async def _format_thread_for_llm(chain: dict, owner_did: str, bot_did: str, clie
             embed = sub_rec.get("embed")
         
         text = re.sub(r'(!t|!c)', '', text, flags=re.I).strip()
-        text = re.sub(r'\n+Qwen(\s*\|\s*(Tavily|Chainbase))?\s*$', '', text, flags=re.I).strip()
+        text = re.sub(r'[\s\n]*Qwen(\s*\|\s*(Tavily|Chainbase))?[\s\n]*$', '', text, flags=re.I).strip()
         if not text and not embed: continue
         
         embed_txt = bsky._extract_embed_text(embed)
@@ -97,12 +97,9 @@ async def _format_thread_for_llm(chain: dict, owner_did: str, bot_did: str, clie
             content = await bsky._fetch_url_content(client, u)
             if content: text += f" [LINK: {content}]"
         
-        if did == owner_did:
-            prefix = "Q:"
-        elif did == bot_did:
-            prefix = "A:"
-        else:
-            prefix = "@user:"
+        if did == owner_did: prefix = "Q:"
+        elif did == bot_did: prefix = "A:"
+        else: prefix = "@user:"
         
         dialogue.append(f"{prefix} {text}")
     

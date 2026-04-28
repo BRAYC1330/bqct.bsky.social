@@ -31,9 +31,10 @@ async def process(client, llm, task):
         source = "chainbase"
     
     thread_ctx = await utils._format_thread_for_llm(chain, config.OWNER_DID, config.BOT_DID, client)
+    logger.info(f"\033[32m=== MODEL CONTEXT (COMMUNITY) ===\033[0m\n{thread_ctx}")
     
     sig = "\n\nQwen"
-    if source == "chainbase" and search_data:
+    if source == "chainbase" and search_
         sig = "\n\nQwen | Chainbase"
     max_body = 300 - len(sig)
     
@@ -41,6 +42,7 @@ async def process(client, llm, task):
     if search_data:
         ctx += f"\n\n[SEARCH]\n{search_data}"
     
+    logger.info(f"\033[33m=== MODEL GENERATION (COMMUNITY) ===\033[0m")
     reply = generator.get_answer(llm, ctx, user_text, max_chars=max_body, temperature=0.3)
     
     if utils.count_graphemes(reply) > max_body:
