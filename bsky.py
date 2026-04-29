@@ -44,7 +44,10 @@ async def post_root(client, bot_did, text):
     r = await _retry_request(client.post, "https://bsky.social/xrpc/com.atproto.repo.createRecord", client, json=body)
     return r.json()
 async def post_reply(client, bot_did, text, root_uri, root_cid, parent_uri, parent_cid):
-    reply = {"root": {"uri": root_uri, "cid": root_cid}, "parent": {"uri": parent_uri, "cid": parent_cid}}
+    reply = {
+        "root": {"$type": "com.atproto.repo.strongRef", "uri": root_uri, "cid": root_cid},
+        "parent": {"$type": "com.atproto.repo.strongRef", "uri": parent_uri, "cid": parent_cid}
+    }
     record = {"$type": "app.bsky.feed.post", "text": text, "createdAt": datetime.now(timezone.utc).isoformat(), "reply": reply}
     body = {"repo": bot_did, "collection": "app.bsky.feed.post", "record": record}
     r = await _retry_request(client.post, "https://bsky.social/xrpc/com.atproto.repo.createRecord", client, json=body)
@@ -57,23 +60,18 @@ async def fetch_thread_chain(client, uri):
     current = thread
     while current and isinstance(current, dict):
         post = current.get("post")
-        if post:
-            chain.append(post)
+        if post: chain.append(post)
         current = current.get("parent")
     chain = list(reversed(chain))
-    if not chain:
-        return None
+    if not chain: return None
     root = chain[0]
     target = chain[-1]
-    root_uri = root.get("uri")
-    root_cid = root.get("cid")
-    root_text = root.get("record", {}).get("text", "")
-    target_cid = target.get("cid")
     return {
-        "root_uri": root_uri,
-        "root_cid": root_cid,
-        "root_text": root_text,
-        "parent_cid": target_cid,
+        "root_uri": root.get("uri"),
+        "root_cid": root.get("cid"),
+        "root_text": root.get("record", {}).get("text", ""),
+        "parent_uri": target.get("uri"),
+        "parent_cid": target.get("cid"),
         "chain": chain
     }
 async def fetch_notifications(client, limit=100, seen_at=None):

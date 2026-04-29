@@ -17,8 +17,8 @@ async def process(client, llm, task):
     if not chain: return
     root_uri = chain.get("root_uri", uri)
     root_cid = chain.get("root_cid", "")
+    parent_uri = chain.get("parent_uri", uri)
     parent_cid = chain.get("parent_cid", "")
-    parent_uri = uri
     thread_ctx = await utils._format_thread_for_llm(chain, config.OWNER_DID, config.BOT_DID, client, max_recent=10)
     if do_search:
         clean_text = re.sub(r'(!t|!c)', '', user_text, flags=re.I).strip()
@@ -38,6 +38,7 @@ async def process(client, llm, task):
     if search_data:
         search_data = utils.clean_for_llm(search_data)
     reply = await build_content.build_reply(llm, thread_ctx, user_text, search_data, source, max_total=300)
+    logger.info(f"[REPLY DEBUG] root_uri={root_uri} | root_cid={root_cid} | parent_uri={parent_uri} | parent_cid={parent_cid}")
     if not parent_cid:
         logger.error("[owner] Missing parent_cid, skipping post")
         return
