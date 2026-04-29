@@ -14,9 +14,7 @@ async def process(client, llm, task):
     search_data = ""
     source = ""
     chain = await bsky.fetch_thread_chain(client, uri)
-    if not chain:
-        logger.warning("[owner] Failed to fetch thread chain")
-        return
+    if not chain: return
     root_uri = chain.get("root_uri", uri)
     root_cid = chain.get("root_cid", "")
     parent_cid = chain.get("parent_cid", "")
@@ -37,11 +35,11 @@ async def process(client, llm, task):
     logger.info(f"\033[32m=== MODEL CONTEXT (OWNER) ===\033[0m\n{thread_ctx}")
     logger.info(f"\033[33m[TOKENS] {utils.count_tokens(thread_ctx, llm)} / {config.MODEL_N_CTX}\033[0m")
     logger.info(f"\033[33m=== MODEL GENERATION (OWNER) ===\033[0m")
-    if search_
+    if search_data:
         search_data = utils.clean_for_llm(search_data)
     reply = await build_content.build_reply(llm, thread_ctx, user_text, search_data, source, max_total=300)
     if not parent_cid:
-        logger.error("[owner] Missing parent_cid, cannot post reply")
+        logger.error("[owner] Missing parent_cid, skipping post")
         return
     await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, parent_uri, parent_cid)
-    logger.info(f"[owner] Replied to {uri[:40]}... (parent={parent_uri[:40]})")
+    logger.info(f"[owner] Replied to {uri[:40]}...")
