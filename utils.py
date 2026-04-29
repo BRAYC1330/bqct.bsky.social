@@ -63,41 +63,31 @@ async def _format_thread_for_llm(chain: dict, owner_did: str, bot_did: str, clie
     dialogue = []
     seen_hashes = set()
     seen_hashes.add(hash(root))
-
     fetch_tasks = []
     post_metadata = []
-
     for post in recent_posts:
         rec = post.get("record", {})
         author = post.get("author", {})
         did = author.get("did", "")
         raw_text = rec.get("text", "")
         text = clean_for_llm(raw_text)
+        text = re.sub(r'@\S+', '', text).strip()
         if not text:
             continue
         post_hash = hash(text)
         if post_hash in seen_hashes:
             continue
         seen_hashes.add(post_hash)
-
         embed = rec.get("embed")
         embed_txt = bsky._extract_embed_text(embed)
         if embed_txt:
-            text += f" [EMBED: {embed_txt}]"
-
+            text += f" [ALT IMAGE: {embed_txt}]"
         urls = re.findall(r'https?://[^\s<>"{}|\\^`\[\]]+', raw_text)
         if urls:
             for u in urls:
                 fetch_tasks.append(u)
-
-        if did == owner_did:
-            prefix = "Q:"
-        elif did == bot_did:
-            prefix = "A:"
-        else:
-            prefix = "@user:"
+        prefix = "A:" if did == bot_did else "Q:"
         post_metadata.append({"prefix": prefix, "text": text, "url_count": len(urls)})
-
     if fetch_tasks:
         semaphore = asyncio.Semaphore(3)
         async def fetch_with_limit(url):
@@ -110,11 +100,9 @@ async def _format_thread_for_llm(chain: dict, owner_did: str, bot_did: str, clie
                 content = next(result_iter)
                 if content:
                     meta["text"] += f" [LINK: {content}]"
-
     for meta in post_metadata:
         dialogue.append(f"{meta['prefix']} {meta['text']}")
-
-    parts = [f"[ROOT]\n{root}"]
+    parts = [f"[ROOT]\nTOPIC: {root}"]
     if dialogue:
         parts.append(f"[RECENT]\n" + "\n".join(dialogue))
     return "\n".join(parts)
