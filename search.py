@@ -7,7 +7,7 @@ def _clean_tavily_content(text: str) -> str:
     if not text: return ""
     text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
     text = re.sub(r'[*_#~`>]', '', text)
-    text = re.sub(r'\n\s*\n', '\n', text)
+    text = re.sub(r'\s*\n\s*', '\n', text)
     result = ' '.join(text.split())
     return result.strip()
 async def get_trending_topics_raw():
@@ -19,21 +19,21 @@ async def get_trending_topics_raw():
                 logger.warning(f"[search] Chainbase trending failed: {r.status_code}")
                 return []
             data = r.json()
-            trends = data.get("data", [])
+            raw_items = data.get("items", [])
             filtered = []
-            for t in trends:
+            for t in raw_items:
                 sm = t.get("summary", "")
                 if utils.is_english(sm):
                     filtered.append(t)
-            trends = filtered[:10]
-            logger.info(f"\033[36m=== PARSED TRENDS (RAW) ===\033[0m")
+            trends = sorted(filtered, key=lambda x: x.get("current_rank", 999))[:10]
+            logger.info("=== PARSED TRENDS (RAW) ===")
             for t in trends:
                 kw = t.get("keyword", "?")
                 sc = t.get("score")
                 rs = t.get("rank_status", "same")
-                sm = t.get("summary", "")
-                logger.info(f"\033[36m• {kw} | score:{sc} | rank:{rs} | {sm}\033[0m")
-            logger.info(f"\033[36m=== END PARSED TRENDS ===\033[0m")
+                cr = t.get("current_rank", "?")
+                logger.info(f"• {kw} | score:{sc} | rank:{rs} | rank_pos:{cr}")
+            logger.info("=== END PARSED TRENDS ===")
             return trends
     except Exception as e:
         logger.error(f"[search] Trending fetch error: {e}")
@@ -74,7 +74,7 @@ async def fetch_tavily(query: str, time_range: str = "") -> str:
                     elif content:
                         parts.append(f"• {content}")
                 final_output = "\n".join(parts)
-                logger.info(f"\033[32m[TAVILY PARSED CONTEXT]\n{final_output}\033[0m")
+                logger.info(f"[TAVILY PARSED CONTEXT]\n{final_output}")
                 return final_output
     except Exception as e:
         logger.warning(f"[search] Tavily error: {e}")
@@ -111,7 +111,7 @@ async def fetch_chainbase(keyword: str) -> str:
                 return ""
             formatted_lines = [f"{kw}: {sm}" for kw, sm in valid_items]
             output = "\n".join(formatted_lines)
-            logger.info(f"\033[36m=== CHAINBASE CONTEXT (MODEL INPUT) ===\033[0m\n{output}")
+            logger.info(f"=== CHAINBASE CONTEXT (MODEL INPUT) ===\n{output}")
             return output
     except Exception as e:
         logger.warning(f"[search] Chainbase error: {e}")
