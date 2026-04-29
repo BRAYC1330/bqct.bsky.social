@@ -3,10 +3,10 @@ import utils
 import generator
 import logging
 logger = logging.getLogger(__name__)
-SIG_DIGEST = "\n\nQwen | Chainbase TOPS " + config.SIGNATURE_ICONS
-SIG_TAVILY = "\n\nQwen | Tavily"
-SIG_CHAINBASE = "\n\nQwen | Chainbase"
-SIG_DEFAULT = "\n\nQwen"
+SIG_DIGEST = "\nQwen | Chainbase TOPS " + config.SIGNATURE_ICONS
+SIG_TAVILY = "\nQwen | Tavily"
+SIG_CHAINBASE = "\nQwen | Chainbase"
+SIG_DEFAULT = "\nQwen"
 def _get_signature(source: str, has_search: bool) -> str:
     if source == "tavily": return SIG_TAVILY
     if source == "chainbase": return SIG_CHAINBASE
