@@ -47,7 +47,7 @@ async def build_digest(llm, trends, task_type: str, max_total: int = 300) -> str
                 lines.pop()
                 break
         if not lines: return None
-        body = f"{header}\n" + "\n".join(lines)
+        body = f"{header}\n\n" + "\n".join(lines)
     else:
         item = trends[0]
         kw = item.get("keyword", "?")
@@ -61,7 +61,7 @@ async def build_digest(llm, trends, task_type: str, max_total: int = 300) -> str
         if max_desc < 20: return None
         prompt = f"Write exactly two sentences for '{kw}'. Structure: Core fact. Impact or metric. Max 19 words total. Start directly. Context: {summary}"
         desc = generator.get_answer(llm, "", prompt, max_chars=max_desc, temperature=0.5)
-        body = f"{header}\n{title} {desc}"
+        body = f"{header}\n\n{title} {desc}"
     final = body + sig
     if utils.count_graphemes(final) > max_total: return None
     return final
