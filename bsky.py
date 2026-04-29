@@ -2,9 +2,25 @@ import os
 import json
 import logging
 import httpx
+import base64
+import time
 from datetime import datetime, timezone
 import config
 logger = logging.getLogger(__name__)
+
+def _is_jwt_expired(token: str) -> bool:
+    try:
+        payload = token.split('.')[1]
+        padding = 4 - len(payload) % 4
+        if padding != 4:
+            payload += '=' * padding
+        decoded = json.loads(base64.urlsafe_b64decode(payload))
+        exp = decoded.get('exp')
+        if exp:
+            return time.time() >= exp
+        return False
+    except Exception:
+        return True
 
 async def login_with_cache(client, handle, password):
     session_path = "session.json"
@@ -12,9 +28,10 @@ async def login_with_cache(client, handle, password):
         try:
             with open(session_path) as f:
                 sess = json.load(f)
-            client.headers["Authorization"] = f"Bearer {sess['accessJwt']}"
-            logger.info("[bsky] Session loaded from cache")
-            return
+            if not _is_jwt_expired(sess['accessJwt']):
+                client.headers["Authorization"] = f"Bearer {sess['accessJwt']}"
+                logger.info("[bsky] Session loaded from cache")
+                return
         except Exception:
             pass
     r = await client.post("https://bsky.social/xrpc/com.atproto.server.createSession", json={"identifier": handle, "password": password})
@@ -52,12 +69,10 @@ async def fetch_thread_chain(client, uri):
     reply_ref = record.get("reply", {})
     root_ref = reply_ref.get("root", {}) if reply_ref else {}
     parent_ref = reply_ref.get("parent", {}) if reply_ref else {}
-    
     root_uri = root_ref.get("uri") if root_ref.get("uri") else uri
     root_cid = root_ref.get("cid") if root_ref.get("cid") else post.get("cid", "")
     root_text = record.get("text", "") if root_uri == uri else ""
     parent_cid_ref = parent_ref.get("cid", "") if parent_ref else ""
-    
     chain = []
     current = thread
     while current and isinstance(current, dict):
@@ -66,7 +81,6 @@ async def fetch_thread_chain(client, uri):
             chain.append(p)
         current = current.get("parent")
     chain = list(reversed(chain))
-    
     return {
         "root_uri": root_uri,
         "root_cid": root_cid,

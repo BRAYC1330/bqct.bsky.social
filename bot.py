@@ -22,6 +22,18 @@ class TaskDict(TypedDict, total=False):
     author_did: str
     parent_uri: str
 
+async def handle_digest(client, llm_cache, task_type, task):
+    import digest
+    return await digest.run(client, llm_cache, task_type)
+
+async def handle_community(client, llm_cache, task):
+    import community
+    return await community.process(client, llm_cache, task)
+
+async def handle_owner(client, llm_cache, task):
+    import owner
+    return await owner.process(client, llm_cache, task)
+
 async def main() -> None:
     start_time = time.monotonic()
     logger.info("[MAIN] === START ===")
@@ -67,15 +79,11 @@ async def main() -> None:
                 logger.error("[MAIN] Model load failed, skipping remaining tasks")
                 return
 
-        import digest
-        import community
-        import owner
-
-        handlers: Dict[str, Callable[[TaskDict], Awaitable[Any]]] = {
-            "digest_mini": lambda t: digest.run(client, llm_cache, "digest_mini"),
-            "digest_full": lambda t: digest.run(client, llm_cache, "digest_full"),
-            "digest_comment": lambda t: community.process(client, llm_cache, t),
-            "owner_command": lambda t: owner.process(client, llm_cache, t)
+        handlers: Dict[str, Callable[..., Awaitable[Any]]] = {
+            "digest_mini": lambda t: handle_digest(client, llm_cache, "digest_mini", t),
+            "digest_full": lambda t: handle_digest(client, llm_cache, "digest_full", t),
+            "digest_comment": handle_community,
+            "owner_command": handle_owner
         }
 
         exec_start = time.monotonic()
