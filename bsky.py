@@ -57,17 +57,13 @@ async def fetch_thread_chain(client, uri):
     chain = list(reversed(chain))
     if not chain:
         return None
-    root = chain[0]
     target = chain[-1]
-    root_uri = root.get("uri")
-    root_cid = root.get("cid")
-    root_text = root.get("record", {}).get("text", "")
-    target_cid = target.get("cid")
     return {
-        "root_uri": root_uri,
-        "root_cid": root_cid,
-        "root_text": root_text,
-        "parent_cid": target_cid,
+        "root_uri": chain[0].get("uri"),
+        "root_cid": chain[0].get("cid"),
+        "root_text": chain[0].get("record", {}).get("text", ""),
+        "cid": target.get("cid", ""),
+        "parent_cid": target.get("cid", ""),
         "chain": chain
     }
 
