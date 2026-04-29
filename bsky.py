@@ -47,23 +47,32 @@ async def fetch_thread_chain(client, uri):
         return None
     data = r.json()
     thread = data.get("thread", {})
+    post = thread.get("post", {})
+    record = post.get("record", {})
+    reply_ref = record.get("reply", {})
+    root_ref = reply_ref.get("root", {}) if reply_ref else {}
+    parent_ref = reply_ref.get("parent", {}) if reply_ref else {}
+    
+    root_uri = root_ref.get("uri") if root_ref.get("uri") else uri
+    root_cid = root_ref.get("cid") if root_ref.get("cid") else post.get("cid", "")
+    root_text = record.get("text", "") if root_uri == uri else ""
+    parent_cid_ref = parent_ref.get("cid", "") if parent_ref else ""
+    
     chain = []
     current = thread
     while current and isinstance(current, dict):
-        post = current.get("post")
-        if post:
-            chain.append(post)
+        p = current.get("post")
+        if p:
+            chain.append(p)
         current = current.get("parent")
     chain = list(reversed(chain))
-    if not chain:
-        return None
-    target = chain[-1]
+    
     return {
-        "root_uri": chain[0].get("uri"),
-        "root_cid": chain[0].get("cid"),
-        "root_text": chain[0].get("record", {}).get("text", ""),
-        "cid": target.get("cid", ""),
-        "parent_cid": target.get("cid", ""),
+        "root_uri": root_uri,
+        "root_cid": root_cid,
+        "root_text": root_text,
+        "parent_cid": parent_cid_ref,
+        "cid": post.get("cid", ""),
         "chain": chain
     }
 

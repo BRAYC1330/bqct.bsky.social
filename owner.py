@@ -41,10 +41,6 @@ async def process(client, llm, task):
         return
     
     thread_ctx = await utils._format_thread_for_llm(chain, config.OWNER_DID, config.BOT_DID, client)
-    logger.info(f"\033[32m=== MODEL CONTEXT (OWNER) ===\033[0m\n{thread_ctx}")
-    logger.info(f"\033[33m[TOKENS] {utils.count_tokens(thread_ctx, llm)} / {config.MODEL_N_CTX}\033[0m")
-    logger.info(f"\033[33m=== MODEL GENERATION (OWNER) ===\033[0m")
-    
     if search_data:
         search_data = utils.clean_for_llm(search_data)
     reply = await build_content.build_reply(llm, thread_ctx, user_text, search_data, source, max_total=300)
