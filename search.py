@@ -4,20 +4,10 @@ import config
 import utils
 logger = logging.getLogger(__name__)
 def _clean_tavily_content(text: str) -> str:
-    if not text:
-        return ""
-    text = re.sub(r'!\[[^\]]*\]\([^)]*\)', '', text)
+    if not text: return ""
     text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
-    text = re.sub(r'https?://[^\s<>"{}|\\^`\[\]]+', '', text)
-    text = re.sub(r'[*_#~`>|]', '', text)
-    text = re.sub(r'\([^)]*\)', '', text)
-    text = re.sub(r'[\U0001F300-\U0001F9FF\U0000FE00-\U0000FE0F\U0001F600-\U0001F64F\U0001F680-\U0001F6FF\U00002600-\U000026FF\U00002700-\U000027BF\U0001F1E0-\U0001F1FF]+', '', text)
-    text = re.sub(r'\.\s*\+\s*[A-Z][a-z]+\.?\s*(\+\s*[A-Z][a-z]+\.?\s*)*', '', text)
-    text = re.sub(r'(Be Well\.?\s*)+', '', text, flags=re.I)
-    text = re.sub(r'(White House\.?\s*)+', '', text, flags=re.I)
-    text = re.sub(r'\s{2,}', ' ', text)
-    text = re.sub(r'\n{3,}', '\n\n', text)
-    text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', ' ', text)
+    text = re.sub(r'[*_#~`>]', '', text)
+    text = re.sub(r'\s*\n\s*', '\n', text)
     result = ' '.join(text.split())
     return result.strip()
 async def get_trending_topics_raw():
@@ -29,7 +19,7 @@ async def get_trending_topics_raw():
                 logger.warning(f"[search] Chainbase trending failed: {r.status_code}")
                 return []
             data = r.json()
-            trends = data.get("data", [])
+            trends = data.get("items", [])
             filtered = []
             for t in trends:
                 sm = t.get("summary", "")
@@ -49,8 +39,7 @@ async def get_trending_topics_raw():
         logger.error(f"[search] Trending fetch error: {e}")
         return []
 async def fetch_tavily(query: str, time_range: str = "") -> str:
-    if not config.TAVILY_API_KEY:
-        return ""
+    if not config.TAVILY_API_KEY: return ""
     try:
         import httpx
         payload = {
@@ -110,17 +99,13 @@ async def fetch_chainbase(keyword: str) -> str:
             for item in items:
                 kw = str(item.get("keyword") or item.get("narrative") or "").strip()
                 sm = str(item.get("summary") or item.get("description") or "").strip()
-                if not kw or not sm:
-                    continue
-                if not utils.is_english(sm):
-                    continue
+                if not kw or not sm: continue
+                if not utils.is_english(sm): continue
                 dedup_key = (kw.lower(), sm[:50].lower())
-                if dedup_key in seen:
-                    continue
+                if dedup_key in seen: continue
                 seen.add(dedup_key)
                 valid_items.append((kw, sm))
-                if len(valid_items) >= 5:
-                    break
+                if len(valid_items) >= 5: break
             if not valid_items:
                 logger.warning(f"[search] Chainbase returned 0 valid English results for '{keyword}'")
                 return ""
