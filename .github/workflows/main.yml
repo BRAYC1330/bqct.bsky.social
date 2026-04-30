@@ -1,7 +1,5 @@
 name: Bluesky AI Bot
 on:
-  schedule:
-    - cron: '30 * * * *'
   workflow_dispatch:
 concurrency:
   group: bluesky-bot-${{ github.ref }}
@@ -82,10 +80,25 @@ jobs:
       - name: Update Last Processed State
         if: steps.checker.outputs.status == 'true'
         run: |
-          echo '${{ steps.checker.outputs.state_json }}' | jq '.digest_uri = "${{ steps.run.outputs.new_digest_uri }}"' > state.json
-          gh secret set LAST_PROCESSED --body "$(cat state.json)" --repo ${{ github.repository }}
+          python3 << 'EOF'
+          import os, json, subprocess
+          state_raw = os.environ.get("CHECKER_STATE", "{}")
+          try:
+              state = json.loads(state_raw) if state_raw else {}
+          except: state = {}
+          new_uri = os.environ.get("BOT_NEW_URI", "").strip()
+          if new_uri:
+              state["digest_uri"] = new_uri
+          final_json = json.dumps(state, ensure_ascii=False)
+          cmd = ["gh", "secret", "set", "LAST_PROCESSED", "--body", final_json, "--repo", os.environ["GITHUB_REPOSITORY"]]
+          subprocess.run(cmd, env={**os.environ, "GH_TOKEN": os.environ["PAT"]}, check=True)
+          print(f"[OK] Updated LAST_PROCESSED")
+          EOF
         env:
-          GH_TOKEN: ${{ secrets.PAT }}
+          PAT: ${{ secrets.PAT }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          CHECKER_STATE: ${{ steps.checker.outputs.state_json }}
+          BOT_NEW_URI: ${{ steps.run.outputs.new_digest_uri }}
       - name: Health check alert
         if: failure()
         run: |
