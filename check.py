@@ -47,7 +47,7 @@ async def run():
             parent_uri = reply_data.get("parent", {}).get("uri", "")
             root_uri = reply_data.get("root", {}).get("uri", "")
             if digest_uri and root_uri == digest_uri:
-                if parent_uri != digest_uri:
+                if parent_uri and parent_uri.startswith(f"at://{config.BOT_DID}/"):
                     continue
                 tasks.append({"type": "digest_comment", "uri": uri, "text": text, "author_did": author_did, "parent_uri": parent_uri})
                 digest_comment_count += 1
@@ -72,7 +72,6 @@ async def run():
     if scheduled_type:
         tasks.append({"type": f"digest_{scheduled_type}"})
         state["digest_type"] = scheduled_type
-        state["digest_time"] = now_utc_str
         logger.info(f"[TIMER] Digest scheduled: {scheduled_type}")
     state["seen_at"] = now_utc_str
     tasks_json = json.dumps(tasks, ensure_ascii=False)
