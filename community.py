@@ -40,10 +40,7 @@ async def process(client, llm, task):
     sig = build_content._get_signature(source, True)
     max_body = 300 - len(sig)
     reply = generator.get_answer(llm, minimal_ctx, clean_query, max_chars=max_body, temperature=0.5)
-    if len(reply) > max_body:
-        truncated = reply[:max_body]
-        last_dot = truncated.rfind(".")
-        reply = truncated[:last_dot+1] if last_dot != -1 else truncated.rstrip() + "."
+    reply = utils.truncate_response(reply, max_body)
     reply = reply.strip() + sig
     await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, uri, parent_cid)
     logger.info(f"[community] Replied to {uri[:40]}...")
