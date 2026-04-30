@@ -82,13 +82,14 @@ jobs:
         run: |
           python3 << 'EOF'
           import os, json, subprocess
+          from datetime import datetime, timezone
           state_raw = os.environ.get("CHECKER_STATE", "{}")
-          try:
-              state = json.loads(state_raw) if state_raw else {}
+          try: state = json.loads(state_raw)
           except: state = {}
           new_uri = os.environ.get("BOT_NEW_URI", "").strip()
           if new_uri:
               state["digest_uri"] = new_uri
+              state["digest_time"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
           final_json = json.dumps(state, ensure_ascii=False)
           cmd = ["gh", "secret", "set", "LAST_PROCESSED", "--body", final_json, "--repo", os.environ["GITHUB_REPOSITORY"]]
           subprocess.run(cmd, env={**os.environ, "GH_TOKEN": os.environ["PAT"]}, check=True)
