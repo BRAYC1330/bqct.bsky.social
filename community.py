@@ -25,6 +25,7 @@ async def process(client, llm, task):
         logger.error(f"[community] Missing cid for {uri}")
         return
     kw = generator.extract_chainbase_keyword(llm, user_text)
+    logger.info(f"[community] Extracted keyword: {kw}")
     search_data = ""
     source = ""
     if kw:
