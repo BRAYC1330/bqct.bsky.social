@@ -1,7 +1,7 @@
 name: Bluesky AI Bot
 on:
   schedule:
-    - cron: '0 * * * *'
+    - cron: '30 * * * *'
   workflow_dispatch:
 concurrency:
   group: bluesky-bot-${{ github.ref }}
