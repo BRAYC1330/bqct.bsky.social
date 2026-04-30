@@ -9,31 +9,24 @@ from typing import Dict, List, Any, Callable, Awaitable, TypedDict, Optional
 import config
 import bsky
 from logging_config import setup_logging
-
 setup_logging()
 logger = logging.getLogger(__name__)
-
 ALLOWED_TASK_TYPES = {"digest_mini", "digest_full", "digest_comment", "owner_command"}
-
 class TaskDict(TypedDict, total=False):
     type: str
     uri: str
     text: str
     author_did: str
     parent_uri: str
-
 async def handle_digest(client, llm_cache, task_type, task):
     import digest
     return await digest.run(client, llm_cache, task_type)
-
 async def handle_community(client, llm_cache, task):
     import community
     return await community.process(client, llm_cache, task)
-
 async def handle_owner(client, llm_cache, task):
     import owner
     return await owner.process(client, llm_cache, task)
-
 async def main() -> None:
     start_time = time.monotonic()
     logger.info("[MAIN] === START ===")
@@ -114,6 +107,5 @@ async def main() -> None:
         with open(out_path, "a", encoding="utf-8") as f:
             f.write(f"new_digest_uri={new_digest_uri}\n")
     logger.info("[MAIN] === DONE ===")
-
 if __name__ == "__main__":
     asyncio.run(main())
