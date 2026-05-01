@@ -20,7 +20,7 @@ async def run():
     seen_at = state.get("seen_at", "").strip()
     digest_uri = state.get("digest_uri", "").strip()
     last_digest_time_str = state.get("digest_time", "").strip()
-    last_digest_type = state.get("digest_type", "mini").strip()
+    last_digest_type = state.get("digest_type", "full").strip()
     tasks = []
     now_utc = datetime.now(timezone.utc)
     now_utc_str = now_utc.isoformat().replace("+00:00", "Z")
@@ -33,8 +33,7 @@ async def run():
         await bsky.login_with_cache(client, config.BOT_HANDLE, config.BOT_PASSWORD)
         notifs = await bsky.fetch_notifications(client, limit=100, seen_at=seen_at)
         for n in notifs:
-            idx = n.get("indexedAt", "")
-            if idx <= seen_at:
+            if n.get("indexedAt", "") <= seen_at:
                 continue
             reason = n.get("reason", "")
             if reason not in ("reply", "mention"):
@@ -63,15 +62,14 @@ async def run():
             last_dt = datetime.fromisoformat(last_digest_time_str.replace("Z", "+00:00"))
             if last_dt.tzinfo is None:
                 last_dt = last_dt.replace(tzinfo=timezone.utc)
-            if (now_utc - last_dt).total_seconds() >= 2 * 3600:
-                scheduled_type = "full" if last_digest_type == "mini" else "mini"
+            if (now_utc - last_dt).total_seconds() >= 7200:
+                scheduled_type = "mini" if last_digest_type == "full" else "full"
         except Exception:
             scheduled_type = "mini"
     else:
         scheduled_type = "mini"
     if scheduled_type:
         tasks.append({"type": f"digest_{scheduled_type}"})
-        state["digest_type"] = scheduled_type
         logger.info(f"[TIMER] Digest scheduled: {scheduled_type}")
     state["seen_at"] = now_utc_str
     tasks_json = json.dumps(tasks, ensure_ascii=False)
@@ -82,6 +80,7 @@ async def run():
             f.write(f"status={'true' if has_tasks else 'false'}\n")
             f.write(f"tasks={tasks_json}\n")
             f.write(f"state_json={json.dumps(state, ensure_ascii=False)}\n")
+            f.write(f"scheduled_type={scheduled_type or ''}\n")
     logger.info(f"[checker] Tasks: {len(tasks)} (Owner: {owner_count}, Community: {digest_comment_count}, Digest: {scheduled_type or 'none'})")
     if not has_tasks:
         sys.exit(0)
