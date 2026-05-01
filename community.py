@@ -31,16 +31,20 @@ async def process(client, llm, task):
     if kw:
         search_data = await search.fetch_chainbase(kw)
         source = "chainbase"
-    if not search_data:
-        reply = await build_content.build_no_data_reply(llm, kw or "query")
-        await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, uri, parent_cid)
-        return
-    clean_query = utils.clean_for_llm(user_text)
-    clean_search = utils.clean_for_llm(search_data)
-    minimal_ctx = f"Q: {clean_query}\nA: {clean_search}"
-    sig = build_content._get_signature(source, True)
+    sig = build_content._get_signature(source, bool(search_data))
     max_body = 300 - len(sig)
-    reply = generator.get_answer(llm, minimal_ctx, clean_query, max_chars=max_body, temperature=0.5)
+    clean_query = utils.clean_for_llm(user_text)
+    if not search_data:
+        prompt = (f"User asked about '{kw or 'this topic'}'. No current data found. "
+                  f"Reply naturally in English (max {max_body} chars). Be friendly, concise. "
+                  f"NEVER use phrases like 'I'm sorry', 'I didn't understand', or 'provide more context'. "
+                  f"Just say the info isn't available right now and suggest rephrasing or DYOR. "
+                  f"Start directly with the answer.")
+        reply = generator.get_answer(llm, "", prompt, max_chars=max_body, temperature=0.5)
+    else:
+        clean_search = utils.clean_for_llm(search_data)
+        minimal_ctx = f"Q: {clean_query}\nA: {clean_search}"
+        reply = generator.get_answer(llm, minimal_ctx, clean_query, max_chars=max_body, temperature=0.5)
     reply = utils.truncate_response(reply, max_body)
     reply = reply.strip() + sig
     await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, uri, parent_cid)

@@ -9,29 +9,14 @@ SIG_CHAINBASE = "\n\nQwen | Chainbase"
 SIG_DEFAULT = "\n\nQwen"
 def _get_signature(source: str, has_search: bool) -> str:
     if source == "tavily": return SIG_TAVILY
-    if source == "chainbase": return SIG_CHAINBASE
-    if has_search: return SIG_CHAINBASE
+    if source == "chainbase" and has_search: return SIG_CHAINBASE
     return SIG_DEFAULT
 async def build_reply(llm, thread_ctx: str, query: str, search_data: str = "", source: str = "", max_total: int = 300) -> str:
     sig = _get_signature(source, bool(search_data))
     max_body = max_total - len(sig)
-    if search_data:
-        ctx = f"[SEARCH]\n{search_data}\n{thread_ctx}"
-    else:
-        ctx = thread_ctx
+    ctx = f"[SEARCH]\n{search_data}\n{thread_ctx}" if search_data else thread_ctx
     logger.info(f"=== FINAL CONTEXT FOR MODEL ===\n{ctx}")
     reply = generator.get_answer(llm, ctx, query, max_chars=max_body, temperature=0.5)
-    reply = utils.truncate_response(reply, max_body)
-    return reply.strip() + sig
-async def build_no_data_reply(llm, keyword: str, max_total: int = 300) -> str:
-    sig = SIG_CHAINBASE
-    max_body = max_total - len(sig)
-    prompt = (f"The user asked about '{keyword}', but no relevant data was found in current crypto trends. "
-              f"Reply in a friendly, concise way (max {max_body} chars). "
-              f"Acknowledge their interest, explain that info isn't available right now, "
-              f"and suggest rephrasing the query or doing their own research (DYOR). "
-              f"No hashtags, no links, no markdown. Start directly with the response.")
-    reply = generator.get_answer(llm, "", prompt, max_chars=max_body, temperature=0.5)
     reply = utils.truncate_response(reply, max_body)
     return reply.strip() + sig
 async def build_digest(llm, trends, task_type: str, max_total: int = 300) -> str:
