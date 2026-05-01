@@ -31,7 +31,7 @@ async def process(client, llm, task):
     if kw:
         search_data = await search.fetch_chainbase(kw)
         source = "chainbase"
-    if not search_
+    if not search_data:
         reply = await build_content.build_no_data_reply(llm, kw or "query")
         await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, uri, parent_cid)
         return
