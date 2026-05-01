@@ -68,7 +68,7 @@ async def process(client, llm, task):
                 search_data = await search.fetch_chainbase(alt_kw)
         sig = build_content._get_signature("chainbase", bool(search_data))
         max_body = 300 - len(sig)
-        if search_
+        if search_data:
             prompt = (f"Search results for '{kw or clean_query}':\n{search_data[:1500]}\n\n"
                       f"Discussion context: {parent_ctx[:300]}\n"
                       f"User query: {clean_query}\n\n"
