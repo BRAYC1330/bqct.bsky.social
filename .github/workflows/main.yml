@@ -45,16 +45,32 @@ jobs:
           key: ${{ runner.os }}-qwen25-coder-14b-q5km-${{ hashFiles('models/**') }}
           restore-keys: |
             ${{ runner.os }}-qwen25-coder-14b-q5km-
-      - name: Download model if not cached
+      - name: Verify and Download Model
         if: steps.checker.outputs.status == 'true'
         run: |
           set -e
           mkdir -p models
           FILE="models/qwen2.5-coder-14b-instruct-q5_k_m.gguf"
           EXPECTED_SHA256="${{ secrets.MODEL_SHA256 }}"
-          if [ ! -f "$FILE" ] || [ $(stat -c%s "$FILE") -lt 1000000000 ]; then
+          NEED_DOWNLOAD=true
+          if [ -f "$FILE" ] && [ $(stat -c%s "$FILE") -ge 1000000000 ]; then
+            if [ -n "$EXPECTED_SHA256" ]; then
+              if echo "$EXPECTED_SHA256  $FILE" | sha256sum -c -; then
+                echo "[OK] Model hash verified, skipping download."
+                NEED_DOWNLOAD=false
+              else
+                echo "[WARN] Hash mismatch, corrupted model detected."
+              fi
+            else
+              echo "[WARN] No hash provided, skipping verification."
+              NEED_DOWNLOAD=false
+            fi
+          fi
+          if [ "$NEED_DOWNLOAD" = true ]; then
+            echo "[INFO] Downloading model..."
             curl -L --retry 3 --retry-delay 10 -o "$FILE" "https://huggingface.co/Qwen/Qwen2.5-Coder-14B-Instruct-GGUF/resolve/main/qwen2.5-coder-14b-instruct-q5_k_m.gguf?download=true"
             if [ -n "$EXPECTED_SHA256" ]; then
+              echo "[INFO] Verifying downloaded model..."
               echo "$EXPECTED_SHA256  $FILE" | sha256sum -c -
             fi
           fi
