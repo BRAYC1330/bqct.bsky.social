@@ -5,12 +5,10 @@ import generator
 import search
 import utils
 import build_content
+
 logger = logging.getLogger(__name__)
 
 async def _classify_intent(llm, user_text: str, parent_ctx: str) -> str:
-    """
-    Returns: 'social' or 'search'
-    """
     prompt = (f"Analyze the user's reply in the context of the parent post.\n"
               f"Parent post context: {parent_ctx[:200]}...\n"
               f"User reply: \"{user_text}\"\n\n"
@@ -21,9 +19,6 @@ async def _classify_intent(llm, user_text: str, parent_ctx: str) -> str:
     return 'search' if 'search' in intent else 'social'
 
 async def _check_relevance(llm, query: str, search_result: str, parent_ctx: str) -> bool:
-    """
-    Returns: True if search result is relevant to parent context
-    """
     prompt = (f"Check semantic relevance.\n"
               f"Original Topic: {parent_ctx[:250]}\n"
               f"User Query: {query}\n"
@@ -51,34 +46,36 @@ async def process(client, llm, task):
     if not parent_cid:
         logger.error(f"[community] Missing cid for {uri}")
         return
-    
+
     parent_ctx = chain.get("root_text", "")
     clean_query = utils.clean_for_llm(user_text)
-    
+
     intent = await _classify_intent(llm, user_text, parent_ctx)
     logger.info(f"[community] Intent: {intent} for query: {user_text[:30]}...")
-    
+
     sig = build_content._get_signature("none", False)
     max_body = 300 - len(sig)
     reply = ""
-    
+
     if intent == 'social':
         prompt = (f"User replied to a crypto post with: \"{user_text}\". "
                   f"Reply briefly (max {max_body} chars) in a friendly, natural tone. "
-                  f"Acknowledge their vibe (positive/curious). No links, no markdown.")
+                  f"Acknowledge their vibe (positive/curious/neutral). "
+                  f"IMPORTANT: This is a CLOSING reply. Do NOT ask questions. "
+                  f"Do NOT use phrases like 'let me know', 'feel free to ask', 'what would you like to know', 'is there anything else'. "
+                  f"Just give a short, warm acknowledgment. No links, no markdown, no hashtags.")
         reply = generator.get_answer(llm, "", prompt, max_chars=max_body, temperature=0.7)
-        
     else:
         kw = generator.extract_chainbase_keyword(llm, user_text)
         logger.info(f"[community] Extracted keyword: {kw}")
         search_data = ""
         if kw:
             search_data = await search.fetch_chainbase(kw)
-        
+
         if search_data:
             is_relevant = await _check_relevance(llm, kw or clean_query, search_data, parent_ctx)
             logger.info(f"[community] Relevance check: {is_relevant}")
-            
+
             if is_relevant:
                 clean_search = utils.clean_for_llm(search_data)
                 minimal_ctx = f"Q: {clean_query}\nA: {clean_search}"
@@ -92,7 +89,8 @@ async def process(client, llm, task):
                           f"NEVER use 'I'm sorry' or 'I didn't understand'. Start directly.")
                 reply = generator.get_answer(llm, "", prompt, max_chars=max_body, temperature=0.5)
         else:
-            prompt = (f"User asked about '{kw or clean_query}'. No current data found. "
+            topic_ref = kw if kw else clean_query[:50]
+            prompt = (f"User asked about '{topic_ref}'. No current data found. "
                       f"Reply naturally in English (max {max_body} chars). Be friendly, concise. "
                       f"NEVER use phrases like 'I'm sorry', 'I didn't understand'. "
                       f"Just say the info isn't available right now and suggest rephrasing or DYOR. "
