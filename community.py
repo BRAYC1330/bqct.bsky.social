@@ -34,8 +34,9 @@ async def process(client, llm, task):
     sig = build_content._get_signature(source, bool(search_data))
     max_body = 300 - len(sig)
     clean_query = utils.clean_for_llm(user_text)
+    topic_ref = kw if kw else clean_query[:50]
     if not search_data:
-        prompt = (f"User asked about '{kw or 'this topic'}'. No current data found. "
+        prompt = (f"User asked about '{topic_ref}'. No current data found. "
                   f"Reply naturally in English (max {max_body} chars). Be friendly, concise. "
                   f"NEVER use phrases like 'I'm sorry', 'I didn't understand', or 'provide more context'. "
                   f"Just say the info isn't available right now and suggest rephrasing or DYOR. "
