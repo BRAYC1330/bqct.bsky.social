@@ -7,10 +7,12 @@ SIG_DIGEST = "\n\nQwen | Chainbase TOPS " + config.SIGNATURE_ICONS
 SIG_TAVILY = "\n\nQwen | Tavily"
 SIG_CHAINBASE = "\n\nQwen | Chainbase"
 SIG_DEFAULT = "\n\nQwen"
+
 def _get_signature(source: str, has_search: bool) -> str:
     if source == "tavily": return SIG_TAVILY
     if source == "chainbase" and has_search: return SIG_CHAINBASE
     return SIG_DEFAULT
+
 async def build_reply(llm, thread_ctx: str, query: str, search_data: str = "", source: str = "", max_total: int = 300) -> str:
     sig = _get_signature(source, bool(search_data))
     max_body = max_total - len(sig)
@@ -19,6 +21,7 @@ async def build_reply(llm, thread_ctx: str, query: str, search_data: str = "", s
     reply = generator.get_answer(llm, ctx, query, max_chars=max_body, temperature=0.5)
     reply = utils.truncate_response(reply, max_body)
     return reply.strip() + sig
+
 async def build_digest(llm, trends, task_type: str, max_total: int = 300) -> str:
     if not trends: return "No trends available.\n\nQwen | Chainbase TOPS " + config.SIGNATURE_ICONS
     sig = SIG_DIGEST
