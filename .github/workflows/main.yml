@@ -37,14 +37,6 @@ jobs:
           pip install --upgrade pip setuptools wheel
           CMAKE_ARGS="-DGGML_BLAS=OFF -DGGML_CUDA=OFF" pip install --prefer-binary llama-cpp-python==0.3.20
           pip install pyyaml PyNaCl trafilatura
-      - name: Cache model
-        if: steps.checker.outputs.status == 'true'
-        uses: actions/cache@v4
-        with:
-          path: models
-          key: ${{ runner.os }}-qwen25-coder-14b-q5km-${{ hashFiles('models/**') }}
-          restore-keys: |
-            ${{ runner.os }}-qwen25-coder-14b-q5km-
       - name: Verify and Download Model
         if: steps.checker.outputs.status == 'true'
         run: |
@@ -53,18 +45,18 @@ jobs:
           FILE="models/qwen2.5-coder-14b-instruct-q5_k_m.gguf"
           EXPECTED_SHA256="${{ secrets.MODEL_SHA256 }}"
           NEED_DOWNLOAD=true
-          if [ -f "$FILE" ] && [ $(stat -c%s "$FILE") -ge 1000000000 ]; then
-            if [ -n "$EXPECTED_SHA256" ]; then
-              if echo "$EXPECTED_SHA256  $FILE" | sha256sum -c -; then
-                echo "[OK] Model hash verified, skipping download."
-                NEED_DOWNLOAD=false
-              else
-                echo "[WARN] Hash mismatch, corrupted model detected."
-              fi
-            else
-              echo "[WARN] No hash provided, skipping verification."
+          # Always verify hash if file exists, regardless of size
+          if [ -f "$FILE" ] && [ -n "$EXPECTED_SHA256" ]; then
+            if echo "$EXPECTED_SHA256  $FILE" | sha256sum -c - >/dev/null 2>&1; then
+              echo "[OK] Model hash verified, skipping download."
               NEED_DOWNLOAD=false
+            else
+              echo "[WARN] Hash mismatch or verification failed, removing corrupted file."
+              rm -f "$FILE"
             fi
+          elif [ -f "$FILE" ] && [ -z "$EXPECTED_SHA256" ]; then
+            echo "[WARN] No hash provided, assuming file is valid."
+            NEED_DOWNLOAD=false
           fi
           if [ "$NEED_DOWNLOAD" = true ]; then
             echo "[INFO] Downloading model..."
