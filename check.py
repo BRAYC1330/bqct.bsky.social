@@ -22,6 +22,7 @@ async def run():
     last_digest_time_str = state.get("digest_time", "").strip()
     last_digest_type = state.get("digest_type", "full").strip()
     tasks = []
+    seen_uris = set()
     now_utc = datetime.now(timezone.utc)
     now_utc_str = now_utc.isoformat().replace("+00:00", "Z")
     owner_count = 0
@@ -33,14 +34,19 @@ async def run():
         await bsky.login_with_cache(client, config.BOT_HANDLE, config.BOT_PASSWORD)
         notifs = await bsky.fetch_notifications(client, limit=100, seen_at=seen_at)
         for n in notifs:
-            if n.get("indexedAt", "") <= seen_at:
+            idx = n.get("indexedAt", "")
+            if idx <= seen_at:
                 continue
+            uri = n.get("uri", "")
+            if uri in seen_uris:
+                logger.debug(f"[checker] Duplicate URI skipped: {uri[:40]}...")
+                continue
+            seen_uris.add(uri)
             reason = n.get("reason", "")
             if reason not in ("reply", "mention"):
                 continue
             author_did = n.get("author", {}).get("did", "")
             text = (n.get("record", {}).get("text") or "").strip()
-            uri = n.get("uri", "")
             record = n.get("record", {})
             reply_data = record.get("reply", {}) if isinstance(record, dict) else {}
             parent_uri = reply_data.get("parent", {}).get("uri", "")
