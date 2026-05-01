@@ -72,7 +72,6 @@ async def run():
     if scheduled_type:
         tasks.append({"type": f"digest_{scheduled_type}"})
         state["digest_type"] = scheduled_type
-        state["digest_time"] = now_utc_str
         logger.info(f"[TIMER] Digest scheduled: {scheduled_type}")
     state["seen_at"] = now_utc_str
     tasks_json = json.dumps(tasks, ensure_ascii=False)
