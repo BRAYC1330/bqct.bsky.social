@@ -7,14 +7,22 @@ import utils
 import build_content
 logger = logging.getLogger(__name__)
 async def _classify_intent(llm, user_text: str, parent_ctx: str) -> str:
-    prompt = (f"Analyze the user's reply in the context of the parent post.\n"
-              f"Parent post context: {parent_ctx[:300]}\n"
-              f"User reply: \"{user_text}\"\n\n"
-              f"Determine if the user is requesting specific information requiring a search, "
-              f"or simply expressing a social reaction or conversational remark. "
+    prompt = (f"Analyze the user's reply: \"{user_text}\"\n"
+              f"Parent post context: {parent_ctx[:300]}\n\n"
+              f"Classify the intent:\n"
+              f"- If the user asks for information, explanation, details, clarification, or uses question words (what, how, why, explain, tell me, define, etc.) → reply 'search'\n"
+              f"- If the user expresses emotion, agreement, reaction, or short conversational remark (cool, nice, emoji, thanks, wow, etc.) → reply 'social'\n"
               f"Reply with exactly one word: 'search' or 'social'.")
     intent = generator.get_answer(llm, "", prompt, max_chars=20, temperature=0.1).strip().lower()
     return 'search' if 'search' in intent else 'social'
+async def _suggest_alternative_keyword(llm, original_kw: str, user_query: str, parent_ctx: str) -> str:
+    prompt = (f"Original keyword '{original_kw}' returned no search results.\n"
+              f"User query: {user_query}\n"
+              f"Post context: {parent_ctx[:250]}\n\n"
+              f"Suggest ONE alternative keyword (1-2 words max) that might return relevant results for this query in a crypto trends database. "
+              f"Focus on the core topic. Reply with exactly one word or two-word phrase, nothing else.")
+    alt_kw = generator.get_answer(llm, "", prompt, max_chars=30, temperature=0.1).strip()
+    return alt_kw if alt_kw and len(alt_kw) <= 30 else ""
 async def process(client, llm, task):
     uri = task["uri"]
     user_text = task["text"]
@@ -53,9 +61,14 @@ async def process(client, llm, task):
         search_data = ""
         if kw:
             search_data = await search.fetch_chainbase(kw)
+        if not search_data and kw:
+            alt_kw = await _suggest_alternative_keyword(llm, kw, clean_query, parent_ctx)
+            if alt_kw and alt_kw != kw:
+                logger.info(f"[community] Retry with alternative keyword: {alt_kw}")
+                search_data = await search.fetch_chainbase(alt_kw)
         sig = build_content._get_signature("chainbase", bool(search_data))
         max_body = 300 - len(sig)
-        if search_data:
+        if search_
             prompt = (f"Search results for '{kw or clean_query}':\n{search_data[:1500]}\n\n"
                       f"Discussion context: {parent_ctx[:300]}\n"
                       f"User query: {clean_query}\n\n"
