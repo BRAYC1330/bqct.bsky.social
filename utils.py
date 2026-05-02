@@ -3,7 +3,7 @@ import logging
 from typing import Any, Optional
 import config
 logger = logging.getLogger(__name__)
-TICKER_PATTERN = re.compile(r'\$([A-Z]{1,10}[A-Z0-9]*|[A-Z0-9]*[A-Z]{1,10})\b')
+TICKER_PATTERN = re.compile(r'\$[A-Z0-9]{1,10}\b', re.I)
 CLEAN_COMMANDS = re.compile(r'(!t|!c)', re.I)
 CLEAN_SIGNATURE = re.compile(r'[\s\n]*Qwen(\s*\|\s*(Tavily|Chainbase|Chainbase TOPS))?\s*[\s\n]*$', re.I | re.MULTILINE)
 CLEAN_EMOJIS = re.compile(r'[\U0001F300-\U0001F9FF\U0000FE00-\U0000FE0F\U0001F600-\U0001F64F\U0001F680-\U0001F6FF\U00002600-\U000026FF\U00002700-\U000027BF\U0001F1E0-\U0001F1FF]+')
@@ -64,8 +64,12 @@ def count_tokens(text: str, llm: Optional[Any] = None) -> int:
     return max(1, int(len(text) * config.TOKEN_TO_CHAR_RATIO))
 def build_ticker_facets(text: str) -> list:
     facets = []
+    seen = set()
     for match in TICKER_PATTERN.finditer(text):
-        symbol = match.group(1).lower()
+        symbol = match.group().lstrip('$').lower()
+        if symbol in seen:
+            continue
+        seen.add(symbol)
         byte_start = len(text[:match.start()].encode('utf-8'))
         byte_end = len(text[:match.end()].encode('utf-8'))
         facets.append({
