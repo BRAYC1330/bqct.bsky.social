@@ -2,37 +2,19 @@ import os
 import json
 import logging
 import httpx
-import base64
-import time
 from datetime import datetime, timezone
 import config
 import utils
 logger = logging.getLogger(__name__)
-
-def _is_jwt_expired(token: str) -> bool:
-    try:
-        payload = token.split('.')[1]
-        padding = 4 - len(payload) % 4
-        if padding != 4:
-            payload += '=' * padding
-        decoded = json.loads(base64.urlsafe_b64decode(payload))
-        exp = decoded.get('exp')
-        if exp:
-            return time.time() >= exp
-        return False
-    except Exception:
-        return True
-
 async def login_with_cache(client, handle, password):
     session_path = "session.json"
     if os.path.exists(session_path):
         try:
             with open(session_path) as f:
                 sess = json.load(f)
-            if not _is_jwt_expired(sess['accessJwt']):
-                client.headers["Authorization"] = f"Bearer {sess['accessJwt']}"
-                logger.info("[bsky] Session loaded from cache")
-                return
+            client.headers["Authorization"] = f"Bearer {sess['accessJwt']}"
+            logger.info("[bsky] Session loaded from cache")
+            return
         except Exception:
             pass
     r = await client.post("https://bsky.social/xrpc/com.atproto.server.createSession", json={"identifier": handle, "password": password})
@@ -42,33 +24,19 @@ async def login_with_cache(client, handle, password):
     with open(session_path, "w") as f:
         json.dump(sess, f)
     logger.info("[bsky] New session created and cached")
-
 async def post_root(client, bot_did, text):
-    record = {
-        "$type": "app.bsky.feed.post",
-        "text": text,
-        "facets": utils.build_ticker_facets(text),
-        "createdAt": datetime.now(timezone.utc).isoformat()
-    }
+    record = {"$type": "app.bsky.feed.post", "text": text, "facets": utils.build_ticker_facets(text), "createdAt": datetime.now(timezone.utc).isoformat()}
     body = {"repo": bot_did, "collection": "app.bsky.feed.post", "record": record}
     r = await client.post("https://bsky.social/xrpc/com.atproto.repo.createRecord", json=body)
     r.raise_for_status()
     return r.json()
-
 async def post_reply(client, bot_did, text, root_uri, root_cid, parent_uri, parent_cid):
     reply = {"root": {"uri": root_uri, "cid": root_cid}, "parent": {"uri": parent_uri, "cid": parent_cid}}
-    record = {
-        "$type": "app.bsky.feed.post",
-        "text": text,
-        "facets": utils.build_ticker_facets(text),
-        "reply": reply,
-        "createdAt": datetime.now(timezone.utc).isoformat()
-    }
+    record = {"$type": "app.bsky.feed.post", "text": text, "facets": utils.build_ticker_facets(text), "createdAt": datetime.now(timezone.utc).isoformat(), "reply": reply}
     body = {"repo": bot_did, "collection": "app.bsky.feed.post", "record": record}
     r = await client.post("https://bsky.social/xrpc/com.atproto.repo.createRecord", json=body)
     r.raise_for_status()
     return r.json()
-
 async def fetch_thread_chain(client, uri):
     r = await client.get("https://bsky.social/xrpc/app.bsky.feed.getPostThread", params={"uri": uri, "depth": 0, "parentHeight": 100})
     if r.status_code != 200:
@@ -94,14 +62,9 @@ async def fetch_thread_chain(client, uri):
         current = current.get("parent")
     chain = list(reversed(chain))
     return {
-        "root_uri": root_uri,
-        "root_cid": root_cid,
-        "root_text": root_text,
-        "parent_cid": parent_cid_ref,
-        "cid": post.get("cid", ""),
-        "chain": chain
+        "root_uri": root_uri, "root_cid": root_cid, "root_text": root_text,
+        "parent_cid": parent_cid_ref, "cid": post.get("cid", ""), "chain": chain
     }
-
 async def fetch_notifications(client, limit=100, seen_at=None):
     params = {"limit": limit}
     if seen_at and seen_at not in ("{}", "null", "none"):
@@ -113,7 +76,6 @@ async def fetch_notifications(client, limit=100, seen_at=None):
     except Exception as e:
         logger.warning(f"[bsky] Notifications fetch failed: {e}")
         return []
-
 def _extract_embed_text(embed):
     texts = []
     if not embed: return ""
@@ -136,7 +98,6 @@ def _extract_embed_text(embed):
             for img in med.get("images", []):
                 if img.get("alt"): texts.append(img["alt"])
     return " ".join(texts)
-
 async def _fetch_url_content(client, url):
     try:
         from trafilatura import extract as trafilatura_extract
