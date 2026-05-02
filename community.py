@@ -33,8 +33,9 @@ async def process(client, llm, task):
         sig = build_content._get_signature("none", False)
         max_body = 300 - len(sig)
         reply_prompt = (f"User reacted: '{user_text}' on a crypto post. "
-                        f"Reply briefly, warmly, and close the conversation. "
-                        f"NO questions. NO hashtags. NO markdown. Max {max_body} chars.")
+                        f"Reply with a brief, warm acknowledgment. "
+                        f"PROVIDE ONLY THE DIRECT REPLY. NO questions, NO sign-offs, NO greetings, NO hashtags. "
+                        f"This is a standalone, final response. Max {max_body} chars.")
     else:
         search_data = await search.fetch_chainbase(kw) if kw else ""
         has_data = bool(search_data) and kw.lower() in search_data.lower()
@@ -45,16 +46,14 @@ async def process(client, llm, task):
                             f"Post context: {parent_ctx[:300]}\n"
                             f"User query: {clean_query}\n\n"
                             f"Answer concisely using ONLY the provided data and context. "
-                            f"NO questions. NO invitations to continue. NO greetings. "
-                            f"This is a FINAL reply. Max {max_body} chars. Start directly.")
+                            f"PROVIDE ONLY THE DIRECT ANSWER. NO questions, NO sign-offs, NO greetings, NO hashtags. "
+                            f"This is a standalone, final response. Max {max_body} chars. Start directly.")
         else:
             reply_prompt = (f"No matching data found for '{kw}'. "
-                            f"Reply briefly and naturally. NO questions. NO apologies. NO hashtags. "
+                            f"Reply briefly and naturally. "
+                            f"PROVIDE ONLY THE DIRECT RESPONSE. NO questions, NO apologies, NO sign-offs, NO hashtags. "
                             f"Suggest rephrasing or checking back later. Max {max_body} chars. Start directly.")
     reply = generator.get_answer(llm, "", reply_prompt, max_chars=max_body, temperature=0.3)
-    reply = reply.replace('#', '').strip()
-    for phrase in ['let me know', 'feel free', 'any questions', 'what do you think', 'ask me', 'happy to help']:
-        reply = reply.replace(phrase, '').strip()
     reply = utils.truncate_response(reply, max_body)
     reply = reply.strip() + sig
     await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, uri, parent_cid)
