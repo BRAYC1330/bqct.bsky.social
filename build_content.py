@@ -3,10 +3,10 @@ import utils
 import generator
 import logging
 logger = logging.getLogger(__name__)
-SIG_DIGEST = "\nQwen | Chainbase TOPS " + config.SIGNATURE_ICONS
-SIG_TAVILY = "\nQwen | Tavily"
-SIG_CHAINBASE = "\nQwen | Chainbase"
-SIG_DEFAULT = "\nQwen"
+SIG_DIGEST = "\n\nQwen | Chainbase TOPS " + config.SIGNATURE_ICONS
+SIG_TAVILY = "\n\nQwen | Tavily"
+SIG_CHAINBASE = "\n\nQwen | Chainbase"
+SIG_DEFAULT = "\n\nQwen"
 def get_signature(source: str, has_search: bool) -> str:
     if source == "tavily":
         return SIG_TAVILY
@@ -32,7 +32,7 @@ async def build_digest(llm, trends, task_type: str, max_total: int = 0) -> str:
     max_body = max_total - len(sig)
     emojis = config.TREND_EMOJIS
     if task_type == "digest_mini":
-        header = "TOP CRYPTO TRENDS:\n"
+        header = "TOP CRYPTO TRENDS:\n\n"
         lines = []
         for item in trends[:6]:
             kw = item.get("keyword", "?")
@@ -54,7 +54,7 @@ async def build_digest(llm, trends, task_type: str, max_total: int = 0) -> str:
         summary = item.get("summary", "")
         e = emojis.get(st.lower(), "")
         title = f"{e + ' ' if e else ''}{kw} 📊 {sc}:"
-        header = "TOP CRYPTO TREND:\n"
+        header = "TOP CRYPTO TREND:\n\n"
         max_desc = max_body - len(header) - len(title) - 1
         if max_desc < 20:
             return "No trends available." + SIG_DIGEST
