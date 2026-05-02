@@ -42,6 +42,22 @@ def count_tokens(text: str, llm: Optional[Any] = None) -> int:
         try: return len(llm.tokenize(text.encode("utf-8")))
         except: pass
     return max(1, int(len(text) * config.TOKEN_TO_CHAR_RATIO))
+def build_ticker_facets(text: str) -> list:
+    facets = []
+    pattern = re.compile(r'\$[A-Z0-9]{1,10}\b')
+    text_bytes = text.encode('utf-8')
+    for match in pattern.finditer(text):
+        symbol = match.group().lstrip('$').lower()
+        byte_start = match.start()
+        byte_end = match.end()
+        facets.append({
+            "index": {"byteStart": byte_start, "byteEnd": byte_end},
+            "features": [{
+                "$type": "app.bsky.richtext.facet#link",
+                "uri": f"https://www.coingecko.com/en/coins/{symbol}"
+            }]
+        })
+    return facets
 async def _format_thread_for_llm(chain: dict, owner_did: str, bot_did: str, client: httpx.AsyncClient, max_recent: int = 20) -> str:
     if not chain: return ""
     root = clean_for_llm(chain.get("root_text", ""))
