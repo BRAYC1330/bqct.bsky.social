@@ -37,8 +37,8 @@ async def process(client, llm, task):
     max_body = config.RESPONSE_MAX_CHARS - len(sig)
     if search_data:
         clean_search = utils.clean_for_llm(search_data)
-        minimal_ctx = f"[ROOT CONTEXT]\n{parent_ctx[:400]}\n[SEARCH]\n{clean_search}\n[USER QUERY]\n{clean_query}"
-        reply = generator.get_answer(llm, minimal_ctx, clean_query, max_chars=max_body, temperature=0.5)
+        ctx = f"[ROOT CONTEXT]\n{parent_ctx[:400]}\n[SEARCH]\n{clean_search}\n[USER QUERY]\n{clean_query}"
+        reply = generator.get_answer(llm, ctx, clean_query, max_chars=max_body, temperature=0.5)
     else:
         ctx = f"[ROOT CONTEXT]\n{parent_ctx[:3000]}\n[USER QUERY]\n{clean_query}"
         reply = generator.get_answer(llm, ctx, clean_query, max_chars=max_body, temperature=0.5)

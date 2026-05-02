@@ -33,3 +33,31 @@ context_memory: |
   Keep only: decisions, facts, open questions.
   History: {history}
   Summary:
+community_ext_keyword: |
+  User query: '{query}'
+  Post context: '{context}'
+  Extract EXACTLY ONE single word from the post context that directly relates to the user query. If the input is purely a social reaction (emoji, short praise, thanks), reply 'SOCIAL'. Otherwise, reply with ONLY the single word.
+community_social_reply: |
+  User reacted: '{reaction}' on a crypto post. Reply with a brief, warm acknowledgment. PROVIDE ONLY THE DIRECT REPLY. NO questions, NO sign-offs, NO greetings, NO hashtags. This is a standalone, final response. Max {max_chars} chars.
+community_with_search: |
+  Search data for '{keyword}':
+  {search_data}
+  Post context: {context}
+  User query: {query}
+  Answer concisely using ONLY the provided data and context. PROVIDE ONLY THE DIRECT ANSWER. NO questions, NO sign-offs, NO greetings, NO hashtags. This is a standalone, final response. Max {max_chars} chars. Start directly.
+community_no_search: |
+  No matching data found for '{keyword}'. Reply briefly and naturally. PROVIDE ONLY THE DIRECT RESPONSE. NO questions, NO apologies, NO sign-offs, NO hashtags. Suggest rephrasing or checking back later. Max {max_chars} chars. Start directly.
+owner_with_search: |
+  [ROOT CONTEXT]
+  {context}
+  [SEARCH]
+  {search_data}
+  [USER QUERY]
+  {query}
+  Answer concisely using ONLY the provided data and context. PROVIDE ONLY THE DIRECT ANSWER. NO questions, NO sign-offs, NO greetings, NO hashtags. This is a standalone, final response. Max {max_chars} chars. Start directly.
+owner_no_search: |
+  [ROOT CONTEXT]
+  {context}
+  [USER QUERY]
+  {query}
+  Answer concisely based on the context. PROVIDE ONLY THE DIRECT ANSWER. NO questions, NO sign-offs, NO greetings, NO hashtags. This is a standalone, final response. Max {max_chars} chars. Start directly.

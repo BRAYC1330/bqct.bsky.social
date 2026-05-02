@@ -24,11 +24,11 @@ async def process(client, llm, task):
         return
     parent_ctx = chain.get("root_text", "")
     clean_query = utils.clean_for_llm(user_text)
-    ext_prompt = (f"User query: '{clean_query}'\n"
-                  f"Post context: '{parent_ctx[:300]}'\n"
-                  f"Extract EXACTLY ONE single word from the post context that directly relates to the user query. "
-                  f"If the input is purely a social reaction (emoji, short praise, thanks), reply 'SOCIAL'. "
-                  f"Otherwise, reply with ONLY the single word.")
+    ext_prompt = generator.get_prompt(
+        "community_ext_keyword",
+        query=clean_query,
+        context=parent_ctx[:300]
+    )
     kw = generator.get_answer(llm, "", ext_prompt, max_chars=20, temperature=0.1).strip().strip("'\"")
     has_data = False
     sig = ""
@@ -36,27 +36,31 @@ async def process(client, llm, task):
     if kw.upper() == "SOCIAL":
         sig = build_content.get_signature("none", False)
         max_body = config.RESPONSE_MAX_CHARS - len(sig)
-        reply_prompt = (f"User reacted: '{user_text}' on a crypto post. "
-                        f"Reply with a brief, warm acknowledgment. "
-                        f"PROVIDE ONLY THE DIRECT REPLY. NO questions, NO sign-offs, NO greetings, NO hashtags. "
-                        f"This is a standalone, final response. Max {max_body} chars.")
+        reply_prompt = generator.get_prompt(
+            "community_social_reply",
+            reaction=user_text,
+            max_chars=max_body
+        )
     else:
         search_data = await search.fetch_chainbase(kw) if kw else ""
         has_data = bool(search_data) and kw.lower() in search_data.lower()
         sig = build_content.get_signature("chainbase", has_data)
         max_body = config.RESPONSE_MAX_CHARS - len(sig)
         if has_data:
-            reply_prompt = (f"Search data for '{kw}':\n{search_data[:1500]}\n"
-                            f"Post context: {parent_ctx[:300]}\n"
-                            f"User query: {clean_query}\n"
-                            f"Answer concisely using ONLY the provided data and context. "
-                            f"PROVIDE ONLY THE DIRECT ANSWER. NO questions, NO sign-offs, NO greetings, NO hashtags. "
-                            f"This is a standalone, final response. Max {max_body} chars. Start directly.")
+            reply_prompt = generator.get_prompt(
+                "community_with_search",
+                keyword=kw,
+                search_data=search_data[:1500],
+                context=parent_ctx[:300],
+                query=clean_query,
+                max_chars=max_body
+            )
         else:
-            reply_prompt = (f"No matching data found for '{kw}'. "
-                            f"Reply briefly and naturally. "
-                            f"PROVIDE ONLY THE DIRECT RESPONSE. NO questions, NO apologies, NO sign-offs, NO hashtags. "
-                            f"Suggest rephrasing or checking back later. Max {max_body} chars. Start directly.")
+            reply_prompt = generator.get_prompt(
+                "community_no_search",
+                keyword=kw,
+                max_chars=max_body
+            )
     reply = generator.get_answer(llm, "", reply_prompt, max_chars=max_body, temperature=0.3)
     reply = utils.truncate_response(reply, max_body)
     reply = reply.strip() + sig
