@@ -18,10 +18,16 @@ def get_no_data_response(keyword: str) -> str:
 async def build_reply(llm, thread_ctx: str, query: str, search_data: str = "", source: str = "", max_total: int = 300) -> str:
     sig = _get_signature(source, bool(search_data))
     max_body = max_total - len(sig)
-    ctx = f"[SEARCH]\n{search_data}\n{thread_ctx}" if search_data else thread_ctx
+    if search_data:
+        ctx = f"[SEARCH]\n{search_data}\n{thread_ctx}"
+    else:
+        ctx = thread_ctx
     logger.info(f"=== FINAL CONTEXT FOR MODEL ===\n{ctx}")
     reply = generator.get_answer(llm, ctx, query, max_chars=max_body, temperature=0.5)
-    reply = utils.truncate_response(reply, max_body)
+    if utils.count_graphemes(reply) > max_body:
+        truncated = reply[:max_body]
+        last_dot = truncated.rfind(".")
+        reply = truncated[:last_dot+1] if last_dot != -1 else truncated.rstrip() + "."
     return reply.strip() + sig
 async def build_digest(llm, trends, task_type: str, max_total: int = 300) -> str | None:
     if not trends: return None
@@ -29,7 +35,7 @@ async def build_digest(llm, trends, task_type: str, max_total: int = 300) -> str
     max_body = max_total - len(sig)
     emojis = config.TREND_EMOJIS
     if task_type == "digest_mini":
-        header = "TOP CRYPTO TRENDS:\n"
+        header = "TOP CRYPTO TRENDS:\n\n"
         lines = []
         for item in trends[:6]:
             kw = item.get("keyword", "?")
@@ -50,12 +56,11 @@ async def build_digest(llm, trends, task_type: str, max_total: int = 300) -> str
         summary = item.get("summary", "")
         e = emojis.get(st.lower(), "")
         title = f"{e + ' ' if e else ''}{kw} 📊 {sc}:"
-        header = "TOP CRYPTO TREND:\n"
+        header = "TOP CRYPTO TREND:\n\n"
         max_desc = max_body - len(header) - len(title) - 1
         if max_desc < 20: return None
         prompt = f"Write exactly two sentences for '{kw}'. Structure: Core fact. Impact or metric. Max 19 words total. Start directly. Context: {summary}"
         desc = generator.get_answer(llm, "", prompt, max_chars=max_desc, temperature=0.5)
-        desc = utils.truncate_response(desc, max_desc)
         body = f"{header}{title} {desc}"
     final = body + sig
     if utils.count_graphemes(final) > max_total: return None

@@ -110,7 +110,7 @@ async def fetch_chainbase(keyword: str) -> str:
                 logger.warning(f"[search] Chainbase returned 0 valid English results for '{keyword}'")
                 return ""
             formatted_lines = [f"{kw}: {sm}" for kw, sm in valid_items]
-            output = "\n\n".join(formatted_lines)
+            output = "\n".join(formatted_lines)
             logger.info(f"=== CHAINBASE CONTEXT (MODEL INPUT) ===\n{output}")
             return output
     except Exception as e:
