@@ -32,7 +32,7 @@ async def build_digest(llm, trends, task_type: str, max_total: int = 0) -> str:
     max_body = max_total - len(sig)
     emojis = config.TREND_EMOJIS
     if task_type == "digest_mini":
-        header = "TOP CRYPTO TRENDS:\n\n"
+        header = "TOP TRENDS:\n\n"
         lines = []
         for item in trends[:6]:
             kw = item.get("keyword", "?")
@@ -54,11 +54,11 @@ async def build_digest(llm, trends, task_type: str, max_total: int = 0) -> str:
         summary = item.get("summary", "")
         e = emojis.get(st.lower(), "")
         title = f"{e + ' ' if e else ''}{kw} 📊 {sc}:"
-        header = "TOP CRYPTO TREND:\n\n"
+        header = "TOP TREND:\n\n"
         max_desc = max_body - len(header) - len(title) - 1
         if max_desc < 20:
             return "No trends available." + SIG_DIGEST
-        prompt = f"Write exactly two sentences for '{kw}'. Structure: Core fact. Impact or metric. Max 19 words total. Start directly. Context: {summary}"
+        prompt = generator.get_prompt("digest_refine", keyword=kw, summary=summary)
         desc = generator.get_answer(llm, "", prompt, max_chars=max_desc, temperature=0.5)
         desc = utils.truncate_response(desc, max_desc)
         if not desc or len(desc) < 5:

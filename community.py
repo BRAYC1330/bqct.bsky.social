@@ -36,7 +36,11 @@ async def process(client, llm, task):
     if kw.upper() == "SOCIAL":
         sig = build_content.get_signature("none", False)
         max_body = config.RESPONSE_MAX_CHARS - len(sig)
-        reply_prompt = generator.get_prompt("community_social_reply", max_chars=max_body)
+        reply_prompt = generator.get_prompt(
+            "community_social_reply",
+            reaction=user_text,
+            max_chars=max_body
+        )
     else:
         search_data = await search.fetch_chainbase(kw) if kw else ""
         has_data = bool(search_data) and kw.lower() in search_data.lower()
