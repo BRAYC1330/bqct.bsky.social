@@ -20,7 +20,7 @@ async def run(client, llm, task_type="digest_mini") -> str | None:
             logger.warning("[DIGEST] Build failed or empty")
             return None
         if config.RAW_DEBUG:
-            logger.info(f"=== MODEL CONTEXT (DIGEST) ===\n{final_post}")
+            logger.info(f"=== MODEL CONTEXT (DIGEST) ===\n\n{final_post}")
             logger.info(f"[TOKENS] {utils.count_tokens(final_post, llm)} / {config.MODEL_N_CTX}")
         try:
             resp = await bsky.post_root(client, config.BOT_DID, final_post)
