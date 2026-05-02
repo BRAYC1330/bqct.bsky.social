@@ -1,63 +1,60 @@
-from src.state import settings as config
-from src.content import validator
-from src.llm import inference as llm_infer
+import config
+import utils
+import generator
+import logging
+logger = logging.getLogger(__name__)
 
-SIG_DIGEST = "\nQwen | Chainbase TOPS " + config.SIGNATURE_ICONS
-SIG_TAVILY = "\nQwen | Tavily"
-SIG_CHAINBASE = "\nQwen | Chainbase"
-SIG_DEFAULT = "\nQwen"
+SIG_DIGEST = "\n\nQwen | Chainbase TOPS " + config.SIGNATURE_ICONS
+SIG_TAVILY = "\n\nQwen | Tavily"
+SIG_CHAINBASE = "\n\nQwen | Chainbase"
+SIG_DEFAULT = "\n\nQwen"
 
-def _get_signature(source, has_search):
+def _get_sig_block(source: str, has_search: bool) -> str:
     if source == "tavily": return SIG_TAVILY
     if source == "chainbase": return SIG_CHAINBASE
     if has_search: return SIG_CHAINBASE
     return SIG_DEFAULT
 
-def get_no_data_response(keyword):
-    body = f'No data found for "{keyword}". Try rephrasing your query in a new comment or DYOR.'
-    return f"{body}\nQwen"
+def _truncate(text: str, limit: int) -> str:
+    if utils.count_graphemes(text) <= limit: return text
+    cut = text[:limit]
+    dot = cut.rfind(".")
+    return cut[:dot+1] if dot != -1 else cut.rstrip(" \t") + "."
 
-async def build_reply(llm, thread_ctx, query, search_data="", source="", max_total=300):
-    sig = _get_signature(source, bool(search_data))
-    max_body = max_total - len(sig)
-    ctx = f"[SEARCH]\n{search_data}\n{thread_ctx}" if search_data else thread_ctx
-    reply = llm_infer.get_answer(llm, ctx, query, max_chars=max_body, temperature=0.5)
-    reply = validator.enforce_limit(reply, max_body)
-    return reply.strip() + sig
+async def build_reply(llm, ctx: str, query: str, search_data: str = "", source: str = "", max_total: int = 300) -> str:
+    sig_block = _get_sig_block(source, bool(search_data))
+    limit = max_total - len(sig_block)
+    full_ctx = f"[SEARCH]\n{search_data}\n{ctx}" if search_data else ctx
+    reply = generator.get_answer(llm, full_ctx, query, max_chars=limit, temperature=0.5)
+    return _truncate(reply, limit) + sig_block
 
-async def build_digest(llm, trends, task_type, max_total=300):
+async def build_digest(llm, trends, task_type: str, max_total: int = 300) -> str | None:
     if not trends: return None
-    sig = SIG_DIGEST
-    max_body = max_total - len(sig)
+    sig_block = SIG_DIGEST
+    limit = max_total - len(sig_block)
     emojis = config.TREND_EMOJIS
+
     if task_type == "digest_mini":
-        header = "TOP CRYPTO TRENDS:\n"
+        header = "TOP CRYPTO TRENDS:\n\n"
         lines = []
         for item in trends[:6]:
-            kw = item.get("keyword", "?")
-            sc = item.get("score")
-            st = item.get("rank_status", "same")
+            kw, sc, st = item.get("keyword", "?"), item.get("score"), item.get("rank_status", "same")
             e = emojis.get(st.lower(), "")
             lines.append(f"{e} {kw} 📊 {sc}")
-            if len("\n".join(lines)) + len(header) > max_body:
-                lines.pop()
-                break
+            if len("\n".join(lines)) + len(header) > limit:
+                lines.pop(); break
         if not lines: return None
-        body = f"{header}" + "\n".join(lines)
+        body = header + "\n".join(lines)
     else:
         item = trends[0]
-        kw = item.get("keyword", "?")
-        sc = item.get("score")
-        st = item.get("rank_status", "same")
-        summary = item.get("summary", "")
+        kw, sc, st, summary = item.get("keyword", "?"), item.get("score"), item.get("rank_status", "same"), item.get("summary", "")
         e = emojis.get(st.lower(), "")
         title = f"{e + ' ' if e else ''}{kw} 📊 {sc}:"
-        header = "TOP CRYPTO TREND:\n"
-        max_desc = max_body - len(header) - len(title) - 1
-        if max_desc < 20: return None
+        header = "TOP CRYPTO TREND:\n\n"
+        desc_limit = limit - len(header) - len(title) - 1
+        if desc_limit < 20: return None
         prompt = f"Write exactly two sentences for '{kw}'. Structure: Core fact. Impact or metric. Max 19 words total. Start directly. Context: {summary}"
-        desc = llm_infer.get_answer(llm, "", prompt, max_chars=max_desc, temperature=0.5)
+        desc = generator.get_answer(llm, "", prompt, max_chars=desc_limit, temperature=0.5)
         body = f"{header}{title} {desc}"
-    final = body + sig
-    if validator.count_graphemes(final) > max_total: return None
-    return final
+    final = body + sig_block
+    return final if utils.count_graphemes(final) <= max_total else None
