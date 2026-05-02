@@ -26,6 +26,8 @@ async def process(client, llm, task):
         except Exception as e:
             logger.warning(f"[owner] Link fetch failed: {e}")
     clean_query = utils.clean_for_llm(user_text)
+    logger.info(f"[owner] PRIORITY[1] QUERY: {clean_query}")
+    logger.info(f"[owner] PRIORITY[2] ROOT: {parent_ctx[:400]}")
     kw = generator.extract_chainbase_keyword(llm, user_text)
     logger.info(f"[owner] Extracted keyword: {kw}")
     search_data = ""
@@ -37,6 +39,7 @@ async def process(client, llm, task):
     max_body = config.RESPONSE_MAX_CHARS - len(sig)
     if search_data:
         clean_search = utils.clean_for_llm(search_data)
+        logger.info(f"[owner] PRIORITY[3] SEARCH: {clean_search[:500]}")
         ctx = f"[ROOT CONTEXT]\n{parent_ctx[:400]}\n[SEARCH]\n{clean_search}\n[USER QUERY]\n{clean_query}"
         reply = generator.get_answer(llm, ctx, clean_query, max_chars=max_body, temperature=0.5)
     else:

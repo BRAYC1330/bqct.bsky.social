@@ -24,43 +24,29 @@ async def process(client, llm, task):
         return
     parent_ctx = chain.get("root_text", "")
     clean_query = utils.clean_for_llm(user_text)
-    ext_prompt = generator.get_prompt(
-        "community_ext_keyword",
-        query=clean_query,
-        context=parent_ctx[:300]
-    )
-    kw = generator.get_answer(llm, "", ext_prompt, max_chars=20, temperature=0.1).strip().strip("'\"")
+    logger.info(f"[community] PRIORITY[1] QUERY: {clean_query}")
+    logger.info(f"[community] PRIORITY[2] ROOT: {parent_ctx[:300]}")
+    ext_prompt = generator.get_prompt("community_ext_keyword", query=clean_query, context=parent_ctx[:300])
+    kw_raw = generator.get_answer(llm, "", ext_prompt, max_chars=20, temperature=0.1).strip().strip("'\"")
+    kw = kw_raw.rstrip('.').strip()
+    logger.info(f"[community] EXTRACTED_KEYWORD: '{kw}' (raw: '{kw_raw}')")
     has_data = False
     sig = ""
     max_body = config.RESPONSE_MAX_CHARS
     if kw.upper() == "SOCIAL":
         sig = build_content.get_signature("none", False)
         max_body = config.RESPONSE_MAX_CHARS - len(sig)
-        reply_prompt = generator.get_prompt(
-            "community_social_reply",
-            reaction=user_text,
-            max_chars=max_body
-        )
+        reply_prompt = generator.get_prompt("community_social_reply", reaction=user_text, max_chars=max_body)
     else:
         search_data = await search.fetch_chainbase(kw) if kw else ""
         has_data = bool(search_data) and kw.lower() in search_data.lower()
         sig = build_content.get_signature("chainbase", has_data)
         max_body = config.RESPONSE_MAX_CHARS - len(sig)
         if has_data:
-            reply_prompt = generator.get_prompt(
-                "community_with_search",
-                keyword=kw,
-                search_data=search_data[:1500],
-                context=parent_ctx[:300],
-                query=clean_query,
-                max_chars=max_body
-            )
+            logger.info(f"[community] PRIORITY[3] SEARCH: {search_data[:500]}")
+            reply_prompt = generator.get_prompt("community_with_search", keyword=kw, search_data=search_data[:1500], context=parent_ctx[:300], query=clean_query, max_chars=max_body)
         else:
-            reply_prompt = generator.get_prompt(
-                "community_no_search",
-                keyword=kw,
-                max_chars=max_body
-            )
+            reply_prompt = generator.get_prompt("community_no_search", keyword=kw, max_chars=max_body)
     reply = generator.get_answer(llm, "", reply_prompt, max_chars=max_body, temperature=0.3)
     reply = utils.truncate_response(reply, max_body)
     reply = reply.strip() + sig
