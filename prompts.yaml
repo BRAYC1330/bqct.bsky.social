@@ -1,13 +1,8 @@
 tavily_intent: |
-  Extract a concise search query based on user input and conversation context.
-  Rules:
-  - Use thread context to resolve pronouns and implicit references.
-  - Focus on the core topic.
-  - If time filter is needed, use: day, week, month, year. Otherwise: none.
-  - Return ONLY: QUERY: <text> | TIME: <day/week/month/year/none>
-  Thread Context: {thread_context}
-  User Query: "{user_query}"
-  Output:
+  Extract the core search intent from the query.
+  Output format: QUERY: [cleaned query] | TIME: [day/week/month/year or omit]
+  Query: {query}
+  Result:
 chainbase_keyword: |
   Extract the main keyword or entity from the text.
   Output format: KEYWORD: [1 word]
@@ -17,11 +12,10 @@ reply: |
   {context}
   Query: {query}
   Rules:
-  - Priority 1: Answer the query directly. If unsure, give your best guess.
-  - Priority 2: Align with the root post topic.
-  - Max {max_chars} characters including spaces and emojis.
-  - No hashtags, no links, no markdown.
-  A:
+  - Hard limit: {max_chars} characters maximum.
+  - Start directly with the answer. No intros.
+  - Always end with a period.
+  Answer:
 digest_refine: |
   Write exactly two sentences for "{keyword}".
   Structure: Core fact. Impact or metric.
@@ -38,26 +32,12 @@ community_ext_keyword: |
   Post context: '{context}'
   Extract EXACTLY ONE single word from the post context that directly relates to the user query. If the input is purely a social reaction (emoji, short praise, thanks), reply 'SOCIAL'. Otherwise, reply with ONLY the single word.
 community_social_reply: |
-  User reacted: '{reaction}' on a crypto post. Reply with a brief, warm acknowledgment. PROVIDE ONLY THE DIRECT REPLY. NO questions, NO sign-offs, NO greetings, NO hashtags. This is a standalone, final response. Max {max_chars} chars.
+  Reply with a brief, warm acknowledgment to a social reaction on a crypto post. PROVIDE ONLY THE DIRECT REPLY. NO questions, NO sign-offs, NO greetings, NO hashtags. Max {max_chars} chars.
 community_with_search: |
   Search data for '{keyword}':
   {search_data}
   Post context: {context}
   User query: {query}
-  Answer concisely using ONLY the provided data and context. PROVIDE ONLY THE DIRECT ANSWER. NO questions, NO sign-offs, NO greetings, NO hashtags. This is a standalone, final response. Max {max_chars} chars. Start directly.
+  Answer concisely using ONLY the provided data and context. PROVIDE ONLY THE DIRECT ANSWER. NO questions, NO sign-offs, NO greetings, NO hashtags. Max {max_chars} chars. Start directly.
 community_no_search: |
   No matching data found for '{keyword}'. Reply briefly and naturally. PROVIDE ONLY THE DIRECT RESPONSE. NO questions, NO apologies, NO sign-offs, NO hashtags. Suggest rephrasing or checking back later. Max {max_chars} chars. Start directly.
-owner_with_search: |
-  [ROOT CONTEXT]
-  {context}
-  [SEARCH]
-  {search_data}
-  [USER QUERY]
-  {query}
-  Answer concisely using ONLY the provided data and context. PROVIDE ONLY THE DIRECT ANSWER. NO questions, NO sign-offs, NO greetings, NO hashtags. This is a standalone, final response. Max {max_chars} chars. Start directly.
-owner_no_search: |
-  [ROOT CONTEXT]
-  {context}
-  [USER QUERY]
-  {query}
-  Answer concisely based on the context. PROVIDE ONLY THE DIRECT ANSWER. NO questions, NO sign-offs, NO greetings, NO hashtags. This is a standalone, final response. Max {max_chars} chars. Start directly.

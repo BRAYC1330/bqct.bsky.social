@@ -40,7 +40,7 @@ def get_model() -> Optional[Llama]:
         logger.error(f"[generator] Model load failed: {e}")
         return None
 def extract_search_intent(llm: Llama, thread_context: str, user_query: str) -> Tuple[str, str]:
-    prompt = get_prompt("tavily_intent", thread_context=thread_context, user_query=user_query)
+    prompt = get_prompt("tavily_intent", query=user_query)
     try:
         raw = llm(prompt, max_tokens=60, temperature=0.1)
         if isinstance(raw, dict):
