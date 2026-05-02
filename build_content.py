@@ -13,7 +13,7 @@ def get_signature(source: str, has_search: bool) -> str:
     if source == "chainbase" and has_search:
         return SIG_CHAINBASE
     return SIG_DEFAULT
-async def build_reply(llm, thread_ctx: str, query: str, search_data: str = "", source: str = "", max_total: int = 0) -> str:
+async def build_reply(llm, thread_ctx: str, query: str, search_ str = "", source: str = "", max_total: int = 0) -> str:
     if max_total <= 0:
         max_total = config.RESPONSE_MAX_CHARS
     sig = get_signature(source, bool(search_data))
