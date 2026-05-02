@@ -6,53 +6,55 @@ import search
 import utils
 import build_content
 logger = logging.getLogger(__name__)
-
 async def process(client, llm, task):
     uri = task["uri"]
     user_text = task["text"]
     parent_uri = task.get("parent_uri", "")
-    if not parent_uri:
-        logger.warning(f"[community] Missing parent_uri for {uri}")
-        return
-    
+    if not parent_uri: return
     chain = await bsky.fetch_thread_chain(client, uri)
     if not chain: return
-    
     root_uri = chain.get("root_uri", parent_uri)
-    if parent_uri != root_uri:
-        logger.info(f"[community] Nested reply, skipping.")
-        return
-    
+    if parent_uri != root_uri: return
     root_cid = chain.get("root_cid", "")
     parent_cid = chain.get("cid", "")
-    
-    if not parent_cid:
-        logger.error(f"[community] Missing cid for {uri}")
-        return
-    
-    kw = generator.extract_chainbase_keyword(llm, user_text)
-    search_data = ""
-    source = ""
-    if kw:
-        search_data = await search.fetch_chainbase(kw)
-        source = "chainbase"
-    
-    if not search_data:
-        reply = build_content.get_no_data_response(kw or "query")
-        await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, uri, parent_cid)
-        return
-    
+    if not parent_cid: return
+    parent_ctx = chain.get("root_text", "")
     clean_query = utils.clean_for_llm(user_text)
-    clean_search = utils.clean_for_llm(search_data)
-    minimal_ctx = f"Q: {clean_query}\n\nA: {clean_search}"
-    sig = build_content._get_signature(source, True)
-    max_body = 300 - len(sig)
-    reply = generator.get_answer(llm, minimal_ctx, clean_query, max_chars=max_body, temperature=0.5)
-    if utils.count_graphemes(reply) > max_body:
-        truncated = reply[:max_body]
-        last_dot = truncated.rfind(".")
-        reply = truncated[:last_dot+1] if last_dot != -1 else truncated.rstrip() + "."
+    ext_prompt = (f"User query: '{clean_query}'\n"
+                  f"Post context: '{parent_ctx[:300]}'\n\n"
+                  f"Extract EXACTLY ONE single word from the post context that directly relates to the user query. "
+                  f"If the input is purely a social reaction (emoji, short praise, thanks), reply 'SOCIAL'. "
+                  f"Otherwise, reply with ONLY the single word.")
+    kw = generator.get_answer(llm, "", ext_prompt, max_chars=20, temperature=0.1).strip().strip("'\"")
+    has_data = False
+    sig = ""
+    max_body = 300
+    if kw.upper() == "SOCIAL":
+        sig = build_content._get_signature("none", False)
+        max_body = 300 - len(sig)
+        reply_prompt = (f"User reacted: '{user_text}' on a crypto post. "
+                        f"Reply with a brief, warm acknowledgment. "
+                        f"PROVIDE ONLY THE DIRECT REPLY. NO questions, NO sign-offs, NO greetings, NO hashtags. "
+                        f"This is a standalone, final response. Max {max_body} chars.")
+    else:
+        search_data = await search.fetch_chainbase(kw) if kw else ""
+        has_data = bool(search_data) and kw.lower() in search_data.lower()
+        sig = build_content._get_signature("chainbase", has_data)
+        max_body = 300 - len(sig)
+        if has_data:
+            reply_prompt = (f"Search data for '{kw}':\n{search_data[:1500]}\n\n"
+                            f"Post context: {parent_ctx[:300]}\n"
+                            f"User query: {clean_query}\n\n"
+                            f"Answer concisely using ONLY the provided data and context. "
+                            f"PROVIDE ONLY THE DIRECT ANSWER. NO questions, NO sign-offs, NO greetings, NO hashtags. "
+                            f"This is a standalone, final response. Max {max_body} chars. Start directly.")
+        else:
+            reply_prompt = (f"No matching data found for '{kw}'. "
+                            f"Reply briefly and naturally. "
+                            f"PROVIDE ONLY THE DIRECT RESPONSE. NO questions, NO apologies, NO sign-offs, NO hashtags. "
+                            f"Suggest rephrasing or checking back later. Max {max_body} chars. Start directly.")
+    reply = generator.get_answer(llm, "", reply_prompt, max_chars=max_body, temperature=0.3)
+    reply = utils.truncate_response(reply, max_body)
     reply = reply.strip() + sig
-    
     await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, uri, parent_cid)
-    logger.info(f"[community] Replied to {uri[:40]}...")
+    logger.info(f"[community] Keyword: {kw} | Match: {has_data} | Replied to {uri[:40]}...")

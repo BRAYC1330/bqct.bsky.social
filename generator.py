@@ -6,9 +6,11 @@ import re
 from llama_cpp import Llama
 import config
 logger = logging.getLogger(__name__)
+
 PROMPTS_PATH = pathlib.Path(__file__).parent / "prompts.yaml"
 with open(PROMPTS_PATH, "r", encoding="utf-8") as f:
     _prompts = yaml.safe_load(f)
+
 def get_model():
     model_path = config.MODEL_PATH
     if not os.path.exists(model_path):
@@ -28,16 +30,9 @@ def get_model():
     except Exception as e:
         logger.error(f"[generator] Model load failed: {e}")
         return None
+
 def extract_search_intent(llm, thread_context: str, user_query: str) -> tuple:
-    prompt = f"""Extract a concise search query based on user input and conversation context.
-Rules:
-- Use thread context to resolve pronouns and implicit references.
-- Focus on the core topic.
-- If time filter is needed, use: day, week, month, year. Otherwise: none.
-- Return ONLY: QUERY: <text> | TIME: <day/week/month/year/none>
-Thread Context: {thread_context}
-User Query: "{user_query}"
-Output:"""
+    prompt = _prompts["tavily_intent"].format(thread_context=thread_context, user_query=user_query)
     try:
         raw = llm(prompt, max_tokens=60, temperature=0.1)
         if isinstance(raw, dict):
@@ -52,9 +47,9 @@ Output:"""
         return user_query, ""
     except:
         return user_query, ""
+
 def extract_chainbase_keyword(llm, text: str) -> str:
-    prompt_tpl = _prompts.get("chainbase_keyword", "Extract the main keyword or entity from the text.\nOutput format: KEYWORD: [1 word]\nText: {text}\nResult:")
-    prompt = prompt_tpl.format(text=text)
+    prompt = _prompts["chainbase_keyword"].format(text=text)
     try:
         raw = llm(prompt, max_tokens=10, temperature=0.1)
         if isinstance(raw, dict):
@@ -65,16 +60,15 @@ def extract_chainbase_keyword(llm, text: str) -> str:
         return re.sub(r'[^\w\s]', '', raw).split()[0] if raw else ""
     except:
         return ""
+
 def get_answer(llm, context: str, user_query: str, max_chars: int = 280, temperature: float = 0.5) -> str:
-    prompt = f"""{context}
-Query: {user_query}
-Rules:
-- Priority 1: Answer the query directly. If unsure, give your best guess.
-- Priority 2: Align with the root post topic.
-- Max {max_chars} characters including spaces and emojis.
-- No hashtags, no links, no markdown.
-Reply:"""
+    prompt = _prompts["reply"].format(context=context, query=user_query, max_chars=max_chars)
     output = llm(prompt, max_tokens=150, temperature=temperature)
     raw_text = output.get("choices", [{}])[0].get("text", "")
+    raw_text = raw_text.strip()
+    for prefix in ("A: ", "A:", "Q: ", "Q:"):
+        if raw_text.startswith(prefix):
+            raw_text = raw_text[len(prefix):]
+            break
     logger.info(f"[LLM] RAW_REPLY_OUTPUT: {raw_text}")
     return raw_text.strip()
