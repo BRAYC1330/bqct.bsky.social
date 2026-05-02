@@ -6,6 +6,7 @@ import base64
 import time
 from datetime import datetime, timezone
 import config
+import utils
 logger = logging.getLogger(__name__)
 
 def _is_jwt_expired(token: str) -> bool:
@@ -43,7 +44,12 @@ async def login_with_cache(client, handle, password):
     logger.info("[bsky] New session created and cached")
 
 async def post_root(client, bot_did, text):
-    record = {"$type": "app.bsky.feed.post", "text": text, "createdAt": datetime.now(timezone.utc).isoformat()}
+    record = {
+        "$type": "app.bsky.feed.post",
+        "text": text,
+        "facets": utils.build_ticker_facets(text),
+        "createdAt": datetime.now(timezone.utc).isoformat()
+    }
     body = {"repo": bot_did, "collection": "app.bsky.feed.post", "record": record}
     r = await client.post("https://bsky.social/xrpc/com.atproto.repo.createRecord", json=body)
     r.raise_for_status()
@@ -51,7 +57,13 @@ async def post_root(client, bot_did, text):
 
 async def post_reply(client, bot_did, text, root_uri, root_cid, parent_uri, parent_cid):
     reply = {"root": {"uri": root_uri, "cid": root_cid}, "parent": {"uri": parent_uri, "cid": parent_cid}}
-    record = {"$type": "app.bsky.feed.post", "text": text, "createdAt": datetime.now(timezone.utc).isoformat(), "reply": reply}
+    record = {
+        "$type": "app.bsky.feed.post",
+        "text": text,
+        "facets": utils.build_ticker_facets(text),
+        "reply": reply,
+        "createdAt": datetime.now(timezone.utc).isoformat()
+    }
     body = {"repo": bot_did, "collection": "app.bsky.feed.post", "record": record}
     r = await client.post("https://bsky.social/xrpc/com.atproto.repo.createRecord", json=body)
     r.raise_for_status()
