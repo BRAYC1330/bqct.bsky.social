@@ -9,24 +9,19 @@ from typing import Dict, List, Any, Callable, Awaitable, TypedDict, Optional
 import config
 import bsky
 from logging_config import setup_logging
+
 setup_logging()
 logger = logging.getLogger(__name__)
+
 ALLOWED_TASK_TYPES = {"digest_mini", "digest_full", "digest_comment", "owner_command"}
+
 class TaskDict(TypedDict, total=False):
     type: str
     uri: str
     text: str
     author_did: str
     parent_uri: str
-async def handle_digest(client, llm_cache, task_type, task):
-    import digest
-    return await digest.run(client, llm_cache, task_type)
-async def handle_community(client, llm_cache, task):
-    import community
-    return await community.process(client, llm_cache, task)
-async def handle_owner(client, llm_cache, task):
-    import owner
-    return await owner.process(client, llm_cache, task)
+
 async def main() -> None:
     start_time = time.monotonic()
     logger.info("[MAIN] === START ===")
@@ -40,6 +35,7 @@ async def main() -> None:
     if not tasks:
         logger.warning("[MAIN] Task list empty")
         return
+
     metrics = {
         "total_tasks": len(tasks),
         "success": 0,
@@ -48,12 +44,15 @@ async def main() -> None:
         "execution_time": 0.0
     }
     new_digest_uri = ""
+
     limits = httpx.Limits(max_connections=20, max_keepalive_connections=5)
     timeout = httpx.Timeout(connect=10.0, read=30.0, write=30.0, pool=10.0)
     client = httpx.AsyncClient(limits=limits, timeout=timeout)
+
     llm_cache: Optional[Any] = None
     try:
         await bsky.login_with_cache(client, config.BOT_HANDLE, config.BOT_PASSWORD)
+
         needs_llm = any(t.get("type") in ALLOWED_TASK_TYPES for t in tasks)
         if needs_llm:
             import generator
@@ -67,12 +66,18 @@ async def main() -> None:
             if not llm_cache:
                 logger.error("[MAIN] Model load failed, skipping remaining tasks")
                 return
-        handlers: Dict[str, Callable[..., Awaitable[Any]]] = {
-            "digest_mini": lambda t: handle_digest(client, llm_cache, "digest_mini", t),
-            "digest_full": lambda t: handle_digest(client, llm_cache, "digest_full", t),
-            "digest_comment": lambda t: handle_community(client, llm_cache, t),
-            "owner_command": lambda t: handle_owner(client, llm_cache, t)
+
+        import digest
+        import community
+        import owner
+
+        handlers: Dict[str, Callable[[TaskDict], Awaitable[Any]]] = {
+            "digest_mini": lambda t: digest.run(client, llm_cache, "digest_mini"),
+            "digest_full": lambda t: digest.run(client, llm_cache, "digest_full"),
+            "digest_comment": lambda t: community.process(client, llm_cache, t),
+            "owner_command": lambda t: owner.process(client, llm_cache, t)
         }
+
         exec_start = time.monotonic()
         for idx, task in enumerate(tasks):
             t_type = task.get("type", "UNKNOWN")
@@ -100,12 +105,16 @@ async def main() -> None:
         metrics["failed"] = metrics["total_tasks"]
     finally:
         await client.aclose()
+
     total_time = round(time.monotonic() - start_time, 2)
     logger.info(f"[MAIN] Metrics: {metrics['success']} ok, {metrics['failed']} fail, {total_time}s total")
+
     out_path = os.getenv("GITHUB_OUTPUT")
     if out_path:
         with open(out_path, "a", encoding="utf-8") as f:
             f.write(f"new_digest_uri={new_digest_uri}\n")
+
     logger.info("[MAIN] === DONE ===")
+
 if __name__ == "__main__":
     asyncio.run(main())

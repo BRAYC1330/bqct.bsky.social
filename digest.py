@@ -11,8 +11,11 @@ async def run(client, llm, task_type="digest_mini") -> str | None:
     if not trends:
         logger.warning("[DIGEST] No trends fetched")
         return None
+    if task_type == "digest_full" and trends:
+        top = trends[0]
+        logger.info(f"[FULL DIGEST INPUT] current_rank: {top.get('current_rank')} | keyword: {top.get('keyword')} | summary: {top.get('summary', '')[:250]}")
     logger.info("=== MODEL GENERATION (DIGEST) ===")
-    final_post = await build_content.build_digest(llm, trends, task_type, max_total=config.RESPONSE_MAX_CHARS)
+    final_post = await build_content.build_digest(llm, trends, task_type, max_total=300)
     if not final_post:
         logger.warning("[DIGEST] Build failed or empty")
         return None

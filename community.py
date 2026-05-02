@@ -6,49 +6,53 @@ import search
 import utils
 import build_content
 logger = logging.getLogger(__name__)
+
 async def process(client, llm, task):
     uri = task["uri"]
     user_text = task["text"]
     parent_uri = task.get("parent_uri", "")
     if not parent_uri:
+        logger.warning(f"[community] Missing parent_uri for {uri}")
         return
+    
     chain = await bsky.fetch_thread_chain(client, uri)
-    if not chain:
-        return
+    if not chain: return
+    
     root_uri = chain.get("root_uri", parent_uri)
     if parent_uri != root_uri:
+        logger.info(f"[community] Nested reply, skipping.")
         return
+    
     root_cid = chain.get("root_cid", "")
     parent_cid = chain.get("cid", "")
+    
     if not parent_cid:
+        logger.error(f"[community] Missing cid for {uri}")
         return
-    parent_ctx = chain.get("root_text", "")
+    
+    kw = generator.extract_chainbase_keyword(llm, user_text)
+    search_data = ""
+    source = ""
+    if kw:
+        search_data = await search.fetch_chainbase(kw)
+        source = "chainbase"
+    
+    if not search_data:
+        reply = build_content.get_no_data_response(kw or "query")
+        await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, uri, parent_cid)
+        return
+    
     clean_query = utils.clean_for_llm(user_text)
-    logger.info(f"[community] PRIORITY[1] QUERY: {clean_query}")
-    logger.info(f"[community] PRIORITY[2] ROOT: {parent_ctx[:300]}")
-    ext_prompt = generator.get_prompt("community_ext_keyword", query=clean_query, context=parent_ctx[:300])
-    kw_raw = generator.get_answer(llm, "", ext_prompt, max_chars=20, temperature=0.1).strip().strip("'\"")
-    kw = kw_raw.rstrip('.').strip()
-    logger.info(f"[community] EXTRACTED_KEYWORD: '{kw}' (raw: '{kw_raw}')")
-    has_data = False
-    sig = ""
-    max_body = config.RESPONSE_MAX_CHARS
-    if kw.upper() == "SOCIAL":
-        sig = build_content.get_signature("none", False)
-        max_body = config.RESPONSE_MAX_CHARS - len(sig)
-        reply_prompt = generator.get_prompt("community_social_reply", reaction=user_text, max_chars=max_body)
-    else:
-        search_data = await search.fetch_chainbase(kw) if kw else ""
-        has_data = bool(search_data) and kw.lower() in search_data.lower()
-        sig = build_content.get_signature("chainbase", has_data)
-        max_body = config.RESPONSE_MAX_CHARS - len(sig)
-        if has_data:
-            logger.info(f"[community] PRIORITY[3] SEARCH: {search_data[:500]}")
-            reply_prompt = generator.get_prompt("community_with_search", keyword=kw, search_data=search_data[:1500], context=parent_ctx[:300], query=clean_query, max_chars=max_body)
-        else:
-            reply_prompt = generator.get_prompt("community_no_search", keyword=kw, max_chars=max_body)
-    reply = generator.get_answer(llm, "", reply_prompt, max_chars=max_body, temperature=0.3)
-    reply = utils.truncate_response(reply, max_body)
+    clean_search = utils.clean_for_llm(search_data)
+    minimal_ctx = f"Q: {clean_query}\n\nA: {clean_search}"
+    sig = build_content._get_signature(source, True)
+    max_body = 300 - len(sig)
+    reply = generator.get_answer(llm, minimal_ctx, clean_query, max_chars=max_body, temperature=0.5)
+    if utils.count_graphemes(reply) > max_body:
+        truncated = reply[:max_body]
+        last_dot = truncated.rfind(".")
+        reply = truncated[:last_dot+1] if last_dot != -1 else truncated.rstrip() + "."
     reply = reply.strip() + sig
+    
     await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, uri, parent_cid)
-    logger.info(f"[community] Keyword: {kw} | Match: {has_data} | Replied to {uri[:40]}...")
+    logger.info(f"[community] Replied to {uri[:40]}...")
