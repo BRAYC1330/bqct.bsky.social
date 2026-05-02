@@ -67,34 +67,34 @@ async def main() -> None:
             if not llm_cache:
                 logger.error("[MAIN] Model load failed, skipping remaining tasks")
                 return
-            handlers: Dict[str, Callable[..., Awaitable[Any]]] = {
-                "digest_mini": lambda t: handle_digest(client, llm_cache, "digest_mini", t),
-                "digest_full": lambda t: handle_digest(client, llm_cache, "digest_full", t),
-                "digest_comment": lambda t: handle_community(client, llm_cache, t),
-                "owner_command": lambda t: handle_owner(client, llm_cache, t)
-            }
-            exec_start = time.monotonic()
-            for idx, task in enumerate(tasks):
-                t_type = task.get("type", "UNKNOWN")
-                if t_type not in ALLOWED_TASK_TYPES:
-                    logger.warning(f"[MAIN] Rejected unknown task type: {t_type}")
+        handlers: Dict[str, Callable[..., Awaitable[Any]]] = {
+            "digest_mini": lambda t: handle_digest(client, llm_cache, "digest_mini", t),
+            "digest_full": lambda t: handle_digest(client, llm_cache, "digest_full", t),
+            "digest_comment": lambda t: handle_community(client, llm_cache, t),
+            "owner_command": lambda t: handle_owner(client, llm_cache, t)
+        }
+        exec_start = time.monotonic()
+        for idx, task in enumerate(tasks):
+            t_type = task.get("type", "UNKNOWN")
+            if t_type not in ALLOWED_TASK_TYPES:
+                logger.warning(f"[MAIN] Rejected unknown task type: {t_type}")
+                metrics["failed"] += 1
+                continue
+            logger.debug(f"[MAIN] Processing task #{idx}: {t_type}")
+            handler = handlers.get(t_type)
+            if handler:
+                try:
+                    result = await handler(task)
+                    if t_type.startswith("digest_") and result:
+                        new_digest_uri = result
+                    metrics["success"] += 1
+                except httpx.HTTPStatusError as e:
+                    logger.error(f"[MAIN] HTTP error for task {t_type}: {e.response.status_code}")
                     metrics["failed"] += 1
-                    continue
-                logger.debug(f"[MAIN] Processing task #{idx}: {t_type}")
-                handler = handlers.get(t_type)
-                if handler:
-                    try:
-                        result = await handler(task)
-                        if t_type.startswith("digest_") and result:
-                            new_digest_uri = result
-                        metrics["success"] += 1
-                    except httpx.HTTPStatusError as e:
-                        logger.error(f"[MAIN] HTTP error for task {t_type}: {e.response.status_code}")
-                        metrics["failed"] += 1
-                    except (httpx.RequestError, RuntimeError, ValueError) as e:
-                        logger.error(f"[MAIN] Task {t_type} execution failed: {e}")
-                        metrics["failed"] += 1
-            metrics["execution_time"] = round(time.monotonic() - exec_start, 2)
+                except (httpx.RequestError, RuntimeError, ValueError) as e:
+                    logger.error(f"[MAIN] Task {t_type} execution failed: {e}")
+                    metrics["failed"] += 1
+        metrics["execution_time"] = round(time.monotonic() - exec_start, 2)
     except httpx.RequestError as e:
         logger.error(f"[MAIN] Global network request failed: {e}")
         metrics["failed"] = metrics["total_tasks"]
