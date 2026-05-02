@@ -40,7 +40,7 @@ async def process(client, llm, task):
         has_data = bool(search_data) and kw.lower() in search_data.lower()
         sig = build_content._get_signature("chainbase", has_data)
         max_body = 300 - len(sig)
-        if has_
+        if has_data:
             reply_prompt = (f"Search data for '{kw}':\n{search_data[:1500]}\n\n"
                             f"Post context: {parent_ctx[:300]}\n"
                             f"User query: {clean_query}\n\n"
