@@ -40,18 +40,21 @@ async def process(client, llm, task):
         has_data = bool(search_data) and kw.lower() in search_data.lower()
         sig = build_content._get_signature("chainbase", has_data)
         max_body = 300 - len(sig)
-        if has_data:
+        if has_
             reply_prompt = (f"Search data for '{kw}':\n{search_data[:1500]}\n\n"
                             f"Post context: {parent_ctx[:300]}\n"
                             f"User query: {clean_query}\n\n"
                             f"Answer concisely using ONLY the provided data and context. "
-                            f"Max {max_body} chars. Start directly.")
+                            f"NO questions. NO invitations to continue. NO greetings. "
+                            f"This is a FINAL reply. Max {max_body} chars. Start directly.")
         else:
             reply_prompt = (f"No matching data found for '{kw}'. "
                             f"Reply briefly and naturally. NO questions. NO apologies. NO hashtags. "
                             f"Suggest rephrasing or checking back later. Max {max_body} chars. Start directly.")
     reply = generator.get_answer(llm, "", reply_prompt, max_chars=max_body, temperature=0.3)
     reply = reply.replace('#', '').strip()
+    for phrase in ['let me know', 'feel free', 'any questions', 'what do you think', 'ask me', 'happy to help']:
+        reply = reply.replace(phrase, '').strip()
     reply = utils.truncate_response(reply, max_body)
     reply = reply.strip() + sig
     await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, uri, parent_cid)
