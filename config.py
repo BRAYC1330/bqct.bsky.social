@@ -1,20 +1,37 @@
 import os
 import sys
+from typing import Optional
 
-def _require(var_name: str):
+
+class ConfigError(Exception):
+    """Exception raised for configuration errors."""
+    pass
+
+
+def _require(var_name: str) -> str:
+    """Get required environment variable or raise ConfigError."""
     val = os.getenv(var_name)
     if not val or val.strip().lower() in ("", "{}", "null", "none"):
-        print(f"ERROR: Required env var {var_name} is not set", file=sys.stderr)
-        sys.exit(1)
+        raise ConfigError(f"Required environment variable {var_name} is not set")
     return val
 
+
 def _env_int(name: str, default: int) -> int:
+    """Get integer environment variable with default."""
     val = os.getenv(name, "")
-    return int(val) if val.strip() else default
+    try:
+        return int(val) if val.strip() else default
+    except ValueError:
+        return default
+
 
 def _env_float(name: str, default: float) -> float:
+    """Get float environment variable with default."""
     val = os.getenv(name, "")
-    return float(val) if val.strip() else default
+    try:
+        return float(val) if val.strip() else default
+    except ValueError:
+        return default
 
 MODEL_PATH = os.getenv("MODEL_PATH", "models/qwen2.5-coder-14b-instruct-q5_k_m.gguf")
 MODEL_N_CTX = _env_int("MODEL_N_CTX", 14000)
