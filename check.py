@@ -35,12 +35,15 @@ async def run():
         notifs = await bsky.fetch_notifications(client, limit=100, seen_at=seen_at)
         for n in notifs:
             idx = n.get("indexedAt", "")
-            if idx <= seen_at: continue
+            if idx <= seen_at:
+                continue
             uri = n.get("uri", "")
-            if uri in seen_uris: continue
+            if uri in seen_uris:
+                continue
             seen_uris.add(uri)
             reason = n.get("reason", "")
-            if reason not in ("reply", "mention"): continue
+            if reason not in ("reply", "mention"):
+                continue
             author_did = n.get("author", {}).get("did", "")
             text = (n.get("record", {}).get("text") or "").strip()
             record = n.get("record", {})
@@ -62,7 +65,8 @@ async def run():
     if last_digest_time_str:
         try:
             last_dt = datetime.fromisoformat(last_digest_time_str.replace("Z", "+00:00"))
-            if last_dt.tzinfo is None: last_dt = last_dt.replace(tzinfo=timezone.utc)
+            if last_dt.tzinfo is None:
+                last_dt = last_dt.replace(tzinfo=timezone.utc)
             if (now_utc - last_dt).total_seconds() >= 7200:
                 scheduled_type = "mini" if last_digest_type == "full" else "full"
         except Exception:
@@ -83,6 +87,7 @@ async def run():
             f.write(f"state_json={json.dumps(state, ensure_ascii=False)}\n")
             f.write(f"scheduled_type={scheduled_type or ''}\n")
     logger.info(f"[checker] Tasks: {len(tasks)} (Owner: {owner_count}, Community: {digest_comment_count}, Digest: {scheduled_type or 'none'})")
-    if not has_tasks: sys.exit(0)
+    if not has_tasks:
+        sys.exit(0)
 if __name__ == "__main__":
     asyncio.run(run())
