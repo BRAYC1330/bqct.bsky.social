@@ -1,26 +1,21 @@
 import logging
-from src.state import settings as config
-from src.clients import chainbase, httpx_base
-from src.content import builder
+import config
+import bsky
+import search
+import build_content
 
 logger = logging.getLogger(__name__)
 
-async def run(client, llm, task_type="digest_mini"):
-    trends = await chainbase.get_trending()
+async def run(client, llm, task_type="digest_mini") -> str | None:
+    trends = await search.get_trending_topics_raw()
     if not trends: return None
-    final_post = await builder.build_digest(llm, trends, task_type, max_total=300)
+
+    final_post = await build_content.build_digest(llm, trends, task_type, max_total=300)
     if not final_post: return None
+
     try:
-        resp = await client.post("https://bsky.social/xrpc/com.atproto.repo.createRecord", json={
-            "repo": config.BOT_DID,
-            "collection": "app.bsky.feed.post",
-            "record": {
-                "$type": "app.bsky.feed.post",
-                "text": final_post,
-                "createdAt": __import__('datetime').datetime.now(__import__('datetime').timezone.utc).isoformat()
-            }
-        })
-        resp.raise_for_status()
-        return resp.json().get("uri")
-    except Exception:
+        resp = await bsky.post_root(client, config.BOT_DID, final_post)
+        return resp.get("uri")
+    except Exception as e:
+        logger.error(f"[DIGEST] Post failed: {e}")
         return None
