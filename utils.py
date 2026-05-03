@@ -28,6 +28,26 @@ def clean_for_llm(text: str) -> str:
     text = re.sub(r'(Be Well\.?\s*)+', '', text, flags=re.I)
     text = re.sub(r'(White House\.?\s*)+', '', text, flags=re.I)
     return text.strip()
+def truncate_reply(text: str, max_len: int) -> str:
+    if len(text) <= max_len:
+        return text
+    truncated = text[:max_len]
+    best_cut = -1
+    for i in range(len(truncated) - 1, -1, -1):
+        char = truncated[i]
+        if char in '.!?;':
+            next_char = truncated[i+1] if i+1 < len(truncated) else ' '
+            if next_char.isspace() or i == len(truncated) - 1:
+                if i > 0 and truncated[i-1].isdigit():
+                    continue
+                best_cut = i + 1
+                break
+    if best_cut == -1:
+        cut = truncated.rstrip()
+        while cut and cut[-1] not in ' .,!?;' and len(cut) > 3:
+            cut = cut[:-1]
+        return cut.rstrip() + "..."
+    return truncated[:best_cut]
 def generate_facets(text: str) -> list:
     facets = []
     for pattern, ftype, key in [
