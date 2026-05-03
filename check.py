@@ -50,9 +50,7 @@ async def run():
             reply_data = record.get("reply", {}) if isinstance(record, dict) else {}
             parent_uri = reply_data.get("parent", {}).get("uri", "")
             root_uri = reply_data.get("root", {}).get("uri", "")
-            if digest_uri and root_uri == digest_uri:
-                if parent_uri and parent_uri != digest_uri and parent_uri.startswith(f"at://{config.BOT_DID}/"):
-                    continue
+            if digest_uri and root_uri == digest_uri and parent_uri == digest_uri:
                 tasks.append({"type": "digest_comment", "uri": uri, "text": text, "author_did": author_did, "parent_uri": parent_uri})
                 digest_comment_count += 1
                 continue
