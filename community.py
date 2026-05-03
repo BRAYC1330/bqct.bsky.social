@@ -41,6 +41,7 @@ async def process(client, llm, task):
         reply = build_content.get_no_data_response(kw or "query")
         facets = utils.generate_facets(reply)
         await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, uri, parent_cid, facets)
+        logger.info(f"Posted: {reply}")
         return
     clean_query = utils.clean_for_llm(user_text)
     clean_root = utils.clean_for_llm(root_text)
@@ -67,5 +68,7 @@ async def process(client, llm, task):
     reply = reply.strip() + sig
     facets = utils.generate_facets(reply)
     await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, uri, parent_cid, facets)
+    logger.info(f"Posted: {reply}")
+    logger.info(f"Facets: {len(facets) if facets else 0}")
     logger.info(f"{C_MAGENTA}=== [OUTPUT] END ==={C_RESET}")
     logger.info(f"[community] Replied to {uri[:40]}... | Final length: {len(reply)}")

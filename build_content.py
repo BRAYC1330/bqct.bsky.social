@@ -15,10 +15,10 @@ def _get_signature(source: str, has_search: bool) -> str:
 def get_no_data_response(keyword: str) -> str:
     body = f'No data found for "{keyword}". Try rephrasing your query in a new comment or DYOR.'
     return f"{body}\n\nQwen"
-async def build_reply(llm, thread_ctx: str, query: str, search_data: str = "", source: str = "", max_total: int = 300) -> str:
+async def build_reply(llm, thread_ctx: str, query: str, search_ str = "", source: str = "", max_total: int = 300) -> str:
     sig = _get_signature(source, bool(search_data))
     max_body = max_total - len(sig)
-    if search_data:
+    if search_
         ctx = f"[SEARCH]\n{search_data}\n{thread_ctx}"
     else:
         ctx = thread_ctx
@@ -46,6 +46,7 @@ async def build_digest(llm, trends, task_type: str, max_total: int = 300) -> str
                 break
         if not lines: return None
         body = f"{header}" + "\n".join(lines)
+        final = body + sig
     else:
         item = trends[0]
         kw = item.get("keyword", "?")

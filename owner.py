@@ -71,6 +71,7 @@ async def process(client, llm, task):
     reply = reply.strip() + sig
     facets = utils.generate_facets(reply)
     await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, parent_uri, parent_cid, facets)
+    logger.info(f"Posted: {reply}")
     logger.info(f"Facets: {len(facets) if facets else 0}")
     logger.info(f"{C_MAGENTA}=== [OUTPUT] END ==={C_RESET}")
     logger.info(f"[owner] Replied to {uri[:40]}... | Final length: {len(reply)}")
