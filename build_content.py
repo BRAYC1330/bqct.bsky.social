@@ -18,7 +18,7 @@ def get_no_data_response(keyword: str) -> str:
 async def build_reply(llm, thread_ctx: str, query: str, search_ str = "", source: str = "", max_total: int = 300) -> str:
     sig = _get_signature(source, bool(search_data))
     max_body = max_total - len(sig)
-    if search_
+    if search_data:
         ctx = f"[SEARCH]\n{search_data}\n{thread_ctx}"
     else:
         ctx = thread_ctx
