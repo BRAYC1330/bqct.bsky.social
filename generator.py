@@ -67,10 +67,9 @@ def extract_chainbase_keyword(llm, text: str) -> str:
         return ""
 def get_answer(llm, context: str, user_query: str, max_chars: int = 280, temperature: float = 0.5) -> str:
     prompt = f"""{context}
-Query: {user_query}
 Rules:
 - Priority 1: Answer the query directly. If unsure, give your best guess.
-- Priority 2: Align with the root post topic.
+- Priority 2: Align with the thread context.
 - Max {max_chars} characters including spaces and emojis.
 - No hashtags, no links, no markdown.
 Reply:"""

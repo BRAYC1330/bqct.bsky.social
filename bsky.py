@@ -23,15 +23,19 @@ async def login_with_cache(client, handle, password):
     with open(session_path, "w") as f:
         json.dump(sess, f)
     logger.info("[bsky] New session created and cached")
-async def post_root(client, bot_did, text):
+async def post_root(client, bot_did, text, facets=None):
     record = {"$type": "app.bsky.feed.post", "text": text, "createdAt": datetime.now(timezone.utc).isoformat()}
+    if facets:
+        record["facets"] = facets
     body = {"repo": bot_did, "collection": "app.bsky.feed.post", "record": record}
     r = await client.post("https://bsky.social/xrpc/com.atproto.repo.createRecord", json=body)
     r.raise_for_status()
     return r.json()
-async def post_reply(client, bot_did, text, root_uri, root_cid, parent_uri, parent_cid):
+async def post_reply(client, bot_did, text, root_uri, root_cid, parent_uri, parent_cid, facets=None):
     reply = {"root": {"uri": root_uri, "cid": root_cid}, "parent": {"uri": parent_uri, "cid": parent_cid}}
     record = {"$type": "app.bsky.feed.post", "text": text, "createdAt": datetime.now(timezone.utc).isoformat(), "reply": reply}
+    if facets:
+        record["facets"] = facets
     body = {"repo": bot_did, "collection": "app.bsky.feed.post", "record": record}
     r = await client.post("https://bsky.social/xrpc/com.atproto.repo.createRecord", json=body)
     r.raise_for_status()
@@ -50,6 +54,8 @@ async def fetch_thread_chain(client, uri):
     parent_ref = reply_ref.get("parent", {}) if reply_ref else {}
     root_uri = root_ref.get("uri") if root_ref.get("uri") else uri
     root_cid = root_ref.get("cid") if root_ref.get("cid") else post.get("cid", "")
+    root_text = record.get("text", "") if root_uri == uri else ""
+    parent_cid_ref = parent_ref.get("cid", "") if parent_ref else ""
     chain = []
     current = thread
     while current and isinstance(current, dict):
@@ -58,9 +64,6 @@ async def fetch_thread_chain(client, uri):
             chain.append(p)
         current = current.get("parent")
     chain = list(reversed(chain))
-    root_post = chain[0] if chain else post
-    root_text = root_post.get("record", {}).get("text", "")
-    parent_cid_ref = parent_ref.get("cid", "") if parent_ref else ""
     return {
         "root_uri": root_uri,
         "root_cid": root_cid,
