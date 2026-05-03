@@ -15,7 +15,7 @@ def clean_for_llm(text: str) -> str:
         return ""
     text = re.sub(r'(!t|!c)', '', text, flags=re.I)
     text = re.sub(r'[\s\n]*Qwen(\s*\|\s*(Tavily|Chainbase|Chainbase TOPS))?\s*[\s\n]*$', '', text, flags=re.I | re.MULTILINE)
-    text = re.sub(r'[\U0001F300-\U0001F9FF\U0000FE00-\U0000FE0F\U0001F600-\U0001F64F\U0001F680-\U0001F6FF\U00002600-\U000026FF\U00002700-\U000027BF\U0001F1E0-\U0001F1FF\u2190-\u21FF\u2B00-\u2BFF]+', '', text)
+    text = re.sub(r'[\U0001F100-\U0001F1FF\U0001F200-\U0001F2FF\U0001F300-\U0001F5FF\U0001F600-\U0001F64F\U0001F680-\U0001F6FF\U0001F700-\U0001F77F\U0001F780-\U0001F7FF\U0001F800-\U0001F8FF\U0001F900-\U0001F9FF\U0001FA00-\U0001FA6F\U0001FA70-\U0001FAFF\U0000FE00-\U0000FE0F\u2000-\u206F\u2190-\u21FF\u2B00-\u2BFF]+', '', text)
     text = re.sub(r'!\[[^\]]*\]\([^)]*\)', '', text)
     text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
     text = re.sub(r'https?://[^\s<>"{}|\\^`\[\]]+', '', text)
@@ -51,7 +51,7 @@ def count_tokens(text: str, llm: Optional[Any] = None) -> int:
         except:
             pass
     return max(1, int(len(text) * config.TOKEN_TO_CHAR_RATIO))
-async def _format_thread_for_llm(chain: dict, owner_did: str, bot_did: str, client: httpx.AsyncClient, max_recent: int = 20) -> str:
+async def _format_thread_for_llm(chain: dict, owner_did: str, bot_did: str, client: httpx.AsyncClient, max_recent: int = 5) -> str:
     if not chain:
         return ""
     root = clean_for_llm(chain.get("root_text", ""))
@@ -59,39 +59,33 @@ async def _format_thread_for_llm(chain: dict, owner_did: str, bot_did: str, clie
     recent_posts = posts[-max_recent:] if len(posts) > max_recent else posts
     dialogue = []
     seen_hashes = set()
-    root_hash = hash(root)
-    seen_hashes.add(root_hash)
+    seen_hashes.add(hash(root))
     for post in recent_posts:
         rec = post.get("record", {})
         author = post.get("author", {})
         did = author.get("did", "")
-        text = clean_for_llm(rec.get("text", ""))
-        if not text:
+        raw_text = rec.get("text", "")
+        text = clean_for_llm(raw_text)
+        if not text or hash(text) in seen_hashes:
             continue
-        post_hash = hash(text)
-        if post_hash in seen_hashes:
-            continue
-        seen_hashes.add(post_hash)
+        seen_hashes.add(hash(text))
         embed = rec.get("embed")
         embed_txt = bsky._extract_embed_text(embed)
         if embed_txt:
             text += f" [EMBED: {embed_txt}]"
-        urls = re.findall(r'https?://[^\s<>"{}|\\^`\[\]]+', text)
+        urls = re.findall(r'https?://[^\s<>"{}|\\^`\[\]]+', raw_text)
         for u in urls:
             content = await bsky._fetch_url_content(client, u)
             if content:
-                text += f" [LINK: {content}]"
+                text += f" [LINK: {content[:900]}]"
         if did == owner_did:
-            prefix = "Q:"
+            prefix = "OWNER:"
         elif did == bot_did:
-            prefix = "A:"
+            prefix = "BOT:"
         else:
-            prefix = "@user:"
+            prefix = "USER:"
         dialogue.append(f"{prefix} {text}")
     parts = [f"[ROOT]\n{root}"]
     if dialogue:
         parts.append(f"[RECENT]\n" + "\n".join(dialogue))
-    full_thread = "\n".join(parts)
-    if len(full_thread) > 8000:
-        full_thread = full_thread[:8000].rsplit(" ", 1)[0] + "..."
-    return full_thread
+    return "\n".join(parts)

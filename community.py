@@ -6,6 +6,7 @@ import search
 import utils
 import build_content
 logger = logging.getLogger(__name__)
+C_CYAN, C_GREEN, C_YELLOW, C_MAGENTA, C_RESET = "\033[96m", "\033[92m", "\033[93m", "\033[95m", "\033[0m"
 async def process(client, llm, task):
     uri = task["uri"]
     user_text = task["text"]
@@ -26,7 +27,7 @@ async def process(client, llm, task):
         return
     root_text = chain.get("root_text", "")
     kw = generator.extract_chainbase_keyword(llm, user_text)
-    logger.info("=== [INPUT] ===")
+    logger.info(f"{C_CYAN}=== [INPUT] ==={C_RESET}")
     logger.info(f"Query: {user_text[:150]}")
     logger.info(f"Keyword: {kw}")
     search_data = ""
@@ -35,7 +36,7 @@ async def process(client, llm, task):
         search_data = await search.fetch_chainbase(kw)
         source = "chainbase"
         logger.info(f"Search results: {search_data.count(chr(10)) + 1 if search_data else 0}")
-    logger.info("=== [INPUT] END ===")
+    logger.info(f"{C_CYAN}=== [INPUT] END ==={C_RESET}")
     if not search_data:
         reply = build_content.get_no_data_response(kw or "query")
         facets = utils.generate_facets(reply)
@@ -44,16 +45,18 @@ async def process(client, llm, task):
     clean_query = utils.clean_for_llm(user_text)
     clean_root = utils.clean_for_llm(root_text)
     clean_search = utils.clean_for_llm(search_data)
-    logger.info("=== [CONTEXT] ===")
+    logger.info(f"{C_GREEN}=== [CONTEXT] ==={C_RESET}")
     logger.info(f"Priority 1 (Query): {clean_query}")
     logger.info(f"Priority 2 (Root): {clean_root}")
     logger.info(f"Priority 3 (Search): {clean_search}")
-    logger.info("=== [CONTEXT] END ===")
+    logger.info(f"{C_GREEN}=== [CONTEXT] END ==={C_RESET}")
     sig = build_content._get_signature(source, True)
     max_body = 300 - len(sig)
     minimal_ctx = f"Q: {clean_query}\n[ROOT]: {clean_root}\n[SEARCH]: {clean_search}"
     reply = generator.get_answer(llm, minimal_ctx, clean_query, max_chars=max_body, temperature=0.5)
-    logger.info("=== [OUTPUT] ===")
+    logger.info(f"{C_YELLOW}=== [PROMPT] ==={C_RESET}")
+    logger.info(f"{C_YELLOW}=== [PROMPT] END ==={C_RESET}")
+    logger.info(f"{C_MAGENTA}=== [OUTPUT] ==={C_RESET}")
     logger.info(f"Raw: {reply}")
     pre_len = utils.count_graphemes(reply)
     if pre_len > max_body:
@@ -64,5 +67,5 @@ async def process(client, llm, task):
     reply = reply.strip() + sig
     facets = utils.generate_facets(reply)
     await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, uri, parent_cid, facets)
-    logger.info("=== [OUTPUT] END ===")
+    logger.info(f"{C_MAGENTA}=== [OUTPUT] END ==={C_RESET}")
     logger.info(f"[community] Replied to {uri[:40]}... | Final length: {len(reply)}")

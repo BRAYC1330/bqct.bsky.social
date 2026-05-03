@@ -114,7 +114,7 @@ async def _fetch_url_content(client, url):
         r = await client.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=config.REQUEST_TIMEOUT)
         if r.status_code == 200:
             txt = trafilatura_extract(r.text, include_tables=False, include_comments=False, output_format="txt")
-            if txt: return txt[:config.MAX_LINK_CONTENT_SIZE]
+            if txt: return txt
     except Exception:
         pass
     return ""

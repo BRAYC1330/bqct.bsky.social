@@ -31,7 +31,6 @@ async def build_reply(llm, thread_ctx: str, query: str, search_data: str = "", s
 async def build_digest(llm, trends, task_type: str, max_total: int = 300) -> str | None:
     if not trends: return None
     sig = SIG_DIGEST
-    max_body = max_total - len(sig)
     emojis = config.TREND_EMOJIS
     if task_type == "digest_mini":
         header = "TOP CRYPTO TRENDS:\n\n"
@@ -42,7 +41,7 @@ async def build_digest(llm, trends, task_type: str, max_total: int = 300) -> str
             st = item.get("rank_status", "same")
             e = emojis.get(st.lower(), "")
             lines.append(f"{e} {kw} 📊 {sc}")
-            if len("\n".join(lines)) + len(header) > max_body:
+            if len("\n".join(lines)) + len(header) > max_total - len(sig):
                 lines.pop()
                 break
         if not lines: return None
@@ -56,11 +55,18 @@ async def build_digest(llm, trends, task_type: str, max_total: int = 300) -> str
         e = emojis.get(st.lower(), "")
         title = f"{e + ' ' if e else ''}{kw} 📊 {sc}:"
         header = "TOP CRYPTO TREND:\n\n"
-        max_desc = max_body - len(header) - len(title) - 1
-        if max_desc < 20: return None
-        prompt = f"Write exactly two sentences for '{kw}'. Structure: Core fact. Impact or metric. Max 19 words total. Start directly. Context: {summary}"
-        desc = generator.get_answer(llm, "", prompt, max_chars=max_desc, temperature=0.5)
+        fixed_len = len(header) + len(title) + 1 + len(sig)
+        max_desc = max_total - fixed_len
+        if max_desc < 30: return None
+        prompt = f"Summarize '{kw}' in 1-2 short sentences. Start directly. Context: {summary}"
+        desc = generator.get_answer(llm, "", prompt, max_chars=max_desc, temperature=0.5).strip()
         body = f"{header}{title} {desc}"
-    final = body + sig
+        final = body + sig
+        if utils.count_graphemes(final) > max_total:
+            truncated = desc[:max_desc]
+            last_dot = truncated.rfind(".")
+            desc = truncated[:last_dot+1] if last_dot != -1 else truncated.rstrip() + "."
+            body = f"{header}{title} {desc}"
+            final = body + sig
     if utils.count_graphemes(final) > max_total: return None
     return final
