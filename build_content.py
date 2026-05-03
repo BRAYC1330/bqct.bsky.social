@@ -3,10 +3,10 @@ import utils
 import generator
 import logging
 logger = logging.getLogger(__name__)
-SIG_DIGEST = "\nQwen | Chainbase TOPS " + config.SIGNATURE_ICONS
-SIG_TAVILY = "\nQwen | Tavily"
-SIG_CHAINBASE = "\nQwen | Chainbase"
-SIG_DEFAULT = "\nQwen"
+SIG_DIGEST = "\n\nQwen | Chainbase TOPS " + config.SIGNATURE_ICONS
+SIG_TAVILY = "\n\nQwen | Tavily"
+SIG_CHAINBASE = "\n\nQwen | Chainbase"
+SIG_DEFAULT = "\n\nQwen"
 def _get_signature(source: str, has_search: bool) -> str:
     if source == "tavily": return SIG_TAVILY
     if source == "chainbase": return SIG_CHAINBASE
@@ -14,7 +14,7 @@ def _get_signature(source: str, has_search: bool) -> str:
     return SIG_DEFAULT
 def get_no_data_response(keyword: str) -> str:
     body = f'No data found for "{keyword}". Try rephrasing your query in a new comment or DYOR.'
-    return f"{body}\nQwen"
+    return f"{body}\n\nQwen"
 async def build_reply(llm, thread_ctx: str, query: str, search_data: str = "", source: str = "", max_total: int = 300) -> str:
     sig = _get_signature(source, bool(search_data))
     max_body = max_total - len(sig)
