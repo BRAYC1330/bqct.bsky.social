@@ -55,12 +55,14 @@ async def process(client, llm, task):
     reply = generator.get_answer(llm, model_context, "", max_chars=max_body, temperature=0.5)
     logger.info("=== [OUTPUT] ===")
     logger.info(f"Raw: {reply}")
-    logger.info("=== [OUTPUT] END ===")
-    if utils.count_graphemes(reply) > max_body:
+    pre_len = utils.count_graphemes(reply)
+    if pre_len > max_body:
         truncated = reply[:max_body]
         last_dot = truncated.rfind(".")
         reply = truncated[:last_dot+1] if last_dot != -1 else truncated.rstrip() + "."
+        logger.info(f"Truncated: {pre_len} -> {len(reply)}")
     reply = reply.strip() + sig
     facets = utils.generate_facets(reply)
-    await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, parent_uri, parent_cid, facets=facets)
+    await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, parent_uri, parent_cid, facets)
+    logger.info("=== [OUTPUT] END ===")
     logger.info(f"[owner] Replied to {uri[:40]}... | Final length: {len(reply)}")

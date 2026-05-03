@@ -66,17 +66,17 @@ def extract_chainbase_keyword(llm, text: str) -> str:
     except:
         return ""
 def get_answer(llm, context: str, user_query: str, max_chars: int = 280, temperature: float = 0.5) -> str:
-    prompt = f"""{context}
-Query: {user_query}
+    prompt_skeleton = f"""Query: {user_query}
 Rules:
 - Priority 1: Answer the query directly. If unsure, give your best guess.
-- Priority 2: Align with the root post topic.
+- Priority 2: Align with the [ROOT] post topic.
 - Max {max_chars} characters including spaces and emojis.
 - No hashtags, no links, no markdown.
 Reply:"""
     logger.info("=== [PROMPT] ===")
-    logger.info(prompt)
+    logger.info(prompt_skeleton)
     logger.info("=== [PROMPT] END ===")
-    output = llm(prompt, max_tokens=220, temperature=temperature)
+    full_prompt = f"{context}\n{prompt_skeleton}"
+    output = llm(full_prompt, max_tokens=220, temperature=temperature)
     raw_text = output.get("choices", [{}])[0].get("text", "")
     return raw_text.strip()
