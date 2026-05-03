@@ -74,7 +74,9 @@ Rules:
 - Max {max_chars} characters including spaces and emojis.
 - No hashtags, no links, no markdown.
 Reply:"""
+    logger.info("=== [PROMPT] ===")
+    logger.info(prompt)
+    logger.info("=== [PROMPT] END ===")
     output = llm(prompt, max_tokens=220, temperature=temperature)
     raw_text = output.get("choices", [{}])[0].get("text", "")
-    logger.info(f"[LLM] RAW_REPLY_OUTPUT: {raw_text}")
     return raw_text.strip()
