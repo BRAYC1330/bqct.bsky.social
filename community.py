@@ -6,6 +6,9 @@ import search
 import utils
 import build_content
 logger = logging.getLogger(__name__)
+COLOR_BLUE = "\033[94m"
+COLOR_GREEN = "\033[92m"
+COLOR_RESET = "\033[0m"
 async def process(client, llm, task):
     uri = task["uri"]
     user_text = task["text"]
@@ -26,11 +29,14 @@ async def process(client, llm, task):
         return
     root_text = chain.get("root_text", "")
     kw = generator.extract_chainbase_keyword(llm, user_text)
+    logger.info(f"{COLOR_BLUE}[community] Keyword:{COLOR_RESET} '{kw}'")
     search_data = ""
     source = ""
     if kw:
         search_data = await search.fetch_chainbase(kw)
         source = "chainbase"
+        res_count = search_data.count("\n") + 1 if search_data else 0
+        logger.info(f"{COLOR_GREEN}[community] Chainbase results:{COLOR_RESET} {res_count}")
     if not search_data:
         reply = build_content.get_no_data_response(kw or "query")
         await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, uri, parent_cid)
@@ -39,6 +45,7 @@ async def process(client, llm, task):
     clean_root = utils.clean_for_llm(root_text)
     clean_search = utils.clean_for_llm(search_data)
     minimal_ctx = f"Q: {clean_query}\n[ROOT]: {clean_root}\nA: {clean_search}"
+    logger.debug(f"{COLOR_GREEN}[community] Model context:{COLOR_RESET}\n{minimal_ctx}")
     sig = build_content._get_signature(source, True)
     max_body = 300 - len(sig)
     reply = generator.get_answer(llm, minimal_ctx, clean_query, max_chars=max_body, temperature=0.5)
@@ -48,4 +55,4 @@ async def process(client, llm, task):
         reply = truncated[:last_dot+1] if last_dot != -1 else truncated.rstrip() + "."
     reply = reply.strip() + sig
     await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, uri, parent_cid)
-    logger.info(f"[community] Replied to {uri[:40]}...")
+    logger.info(f"[community] Replied to {uri[:40]}... | Final length: {len(reply)}")

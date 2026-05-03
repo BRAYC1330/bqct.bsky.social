@@ -3,6 +3,8 @@ import re
 import config
 import utils
 logger = logging.getLogger(__name__)
+COLOR_GREEN = "\033[92m"
+COLOR_RESET = "\033[0m"
 def _clean_tavily_content(text: str) -> str:
     if not text: return ""
     text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
@@ -111,7 +113,7 @@ async def fetch_chainbase(keyword: str) -> str:
                 return ""
             formatted_lines = [f"{kw}: {sm}" for kw, sm in valid_items]
             output = "\n".join(formatted_lines)
-            logger.info(f"=== CHAINBASE CONTEXT (MODEL INPUT) ===\n{output}")
+            logger.info(f"{COLOR_GREEN}=== CHAINBASE CONTEXT (MODEL INPUT) ==={COLOR_RESET}\n{output}")
             return output
     except Exception as e:
         logger.warning(f"[search] Chainbase error: {e}")
