@@ -49,11 +49,9 @@ async def run():
             record = n.get("record", {})
             reply_data = record.get("reply", {}) if isinstance(record, dict) else {}
             parent_uri = reply_data.get("parent", {}).get("uri", "")
-            root_uri = reply_data.get("root", {}).get("uri", "")
-            if digest_uri and root_uri == digest_uri:
-                if parent_uri == digest_uri:
-                    tasks.append({"type": "digest_comment", "uri": uri, "text": text, "author_did": author_did, "parent_uri": parent_uri})
-                    digest_comment_count += 1
+            if digest_uri and parent_uri == digest_uri:
+                tasks.append({"type": "digest_comment", "uri": uri, "text": text, "author_did": author_did, "parent_uri": parent_uri})
+                digest_comment_count += 1
                 continue
             if author_did == config.OWNER_DID:
                 tasks.append({"type": "owner_command", "uri": uri, "text": text, "author_did": author_did})
@@ -87,7 +85,7 @@ async def run():
             f.write(f"tasks={tasks_json}\n")
             f.write(f"scheduled_type={scheduled_type or ''}\n")
             f.write(f"state_json={json.dumps(state, ensure_ascii=False)}\n")
-    logger.info(f"[checker] Tasks: {len(tasks)} (Owner: {owner_count}, Community: {digest_comment_count}, Digest: {scheduled_type or 'none'})")
+    logger.info(f"[checker] Digest URI: {digest_uri or 'empty'} | Tasks: {len(tasks)} (Owner: {owner_count}, Community: {digest_comment_count}, Digest: {scheduled_type or 'none'})")
     if not has_tasks:
         sys.exit(0)
 if __name__ == "__main__":
