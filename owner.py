@@ -14,23 +14,29 @@ async def process(client, llm, task):
     do_search = "!t" in user_text.lower() or "!c" in user_text.lower()
     search_data = ""
     source = ""
+    search_query_sent = ""
     logger.info(f"{C_CYAN}=== [INPUT] ==={C_RESET}")
     logger.info(f"Query: {user_text[:150]}")
     if do_search:
         clean_text = re.sub(r'(!t|!c)', '', user_text, flags=re.I).strip()
+        logger.info(f"Commands removed: !c/!t -> '{clean_text[:100]}'")
         if "!c" in user_text.lower():
             kw = generator.extract_chainbase_keyword(llm, clean_text)
             logger.info(f"Command: !c | Keyword: {kw}")
             if kw:
+                search_query_sent = kw
                 search_data = await search.fetch_chainbase(kw)
                 source = "chainbase"
+                logger.info(f"Search query sent: {search_query_sent}")
                 logger.info(f"Search results: {search_data.count(chr(10)) + 1 if search_data else 0}")
         else:
             q, t = generator.extract_search_intent(llm, "", clean_text)
             logger.info(f"Command: !t | Intent: {q} | Time: {t}")
             if q:
+                search_query_sent = f"{q} | time:{t or 'none'}"
                 search_data = await search.fetch_tavily(q, t)
                 source = "tavily"
+                logger.info(f"Search query sent: {search_query_sent}")
                 logger.info(f"Search results: {search_data.count(chr(10)) + 1 if search_data else 0}")
     logger.info(f"{C_CYAN}=== [INPUT] END ==={C_RESET}")
     chain = await bsky.fetch_thread_chain(client, uri)
@@ -47,13 +53,13 @@ async def process(client, llm, task):
     clean_search = utils.clean_for_llm(search_data) if search_data else ""
     logger.info(f"{C_GREEN}=== [CONTEXT] ==={C_RESET}")
     logger.info(f"Priority 1 (Query): {clean_query}")
-    logger.info(f"Priority 2 (Thread): {thread_ctx}")
-    logger.info(f"Priority 3 (Search): {clean_search if clean_search else 'None'}")
+    logger.info(f"Priority 2 (Thread):\n{thread_ctx}")
+    logger.info(f"Priority 3 (Search):\n{clean_search if clean_search else 'None'}")
     logger.info(f"{C_GREEN}=== [CONTEXT] END ==={C_RESET}")
     sig = build_content._get_signature(source, bool(search_data))
     max_body = 300 - len(sig)
     model_ctx = f"[QUERY]\n{clean_query}\n[THREAD]\n{thread_ctx}\n[SEARCH]\n{clean_search if clean_search else 'No external data'}"
-    reply = generator.get_answer(llm, model_ctx, "", max_chars=max_body, temperature=0.5)
+    reply = generator.get_answer(llm, model_ctx, clean_query, max_chars=max_body, temperature=0.5)
     logger.info(f"{C_MAGENTA}=== [OUTPUT] ==={C_RESET}")
     logger.info(f"Raw: {reply}")
     pre_len = utils.count_graphemes(reply)

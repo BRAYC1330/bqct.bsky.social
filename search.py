@@ -53,6 +53,7 @@ async def fetch_tavily(query: str, time_range: str = "") -> str:
         }
         if time_range in ("day", "week", "month", "year"):
             payload["time_range"] = time_range
+        logger.info(f"[TAVILY] Query sent: {query} | Time: {time_range or 'none'}")
         async with httpx.AsyncClient(timeout=config.SEARCH_TIMEOUT) as client:
             r = await client.post("https://api.tavily.com/search", json=payload)
             if r.status_code == 200:
@@ -74,7 +75,7 @@ async def fetch_tavily(query: str, time_range: str = "") -> str:
                     elif content:
                         parts.append(f"• {content}")
                 final_output = "\n".join(parts)
-                logger.debug(f"[TAVILY PARSED CONTEXT]\n{final_output}")
+                logger.info(f"[TAVILY PARSED CONTEXT]\n{final_output}")
                 return final_output
     except Exception as e:
         logger.warning(f"[search] Tavily error: {e}")
@@ -84,6 +85,7 @@ async def fetch_chainbase(keyword: str) -> str:
         import httpx
         url = "https://api.chainbase.com/tops/v1/tool/search-narrative-candidates"
         params = {"keyword": keyword}
+        logger.info(f"[CHAINBASE] Query sent: {keyword}")
         async with httpx.AsyncClient(timeout=config.SEARCH_TIMEOUT) as client:
             r = await client.get(url, params=params)
             if r.status_code != 200:
@@ -111,7 +113,7 @@ async def fetch_chainbase(keyword: str) -> str:
                 return ""
             formatted_lines = [f"{kw}: {sm}" for kw, sm in valid_items]
             output = "\n".join(formatted_lines)
-            logger.debug(f"[CHAINBASE RAW]\n{output}")
+            logger.info(f"=== CHAINBASE CONTEXT (MODEL INPUT) ===\n{output}")
             return output
     except Exception as e:
         logger.warning(f"[search] Chainbase error: {e}")

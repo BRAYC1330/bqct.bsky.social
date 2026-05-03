@@ -54,7 +54,8 @@ def count_tokens(text: str, llm: Optional[Any] = None) -> int:
 async def _format_thread_for_llm(chain: dict, owner_did: str, bot_did: str, client: httpx.AsyncClient, max_recent: int = 5) -> str:
     if not chain:
         return ""
-    root = clean_for_llm(chain.get("root_text", ""))
+    root_raw = chain.get("root_text", "")
+    root = clean_for_llm(root_raw)
     posts = chain.get("chain", [])
     recent_posts = posts[-max_recent:] if len(posts) > max_recent else posts
     dialogue = []
