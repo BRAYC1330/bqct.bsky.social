@@ -22,8 +22,6 @@ async def run():
     digest_uri = state.get("digest_uri", "").strip()
     last_digest_time_str = state.get("digest_time", "").strip()
     last_digest_type = state.get("digest_type", "mini").strip()
-    pending_type = state.get("digest_pending_type")
-    retry_count = state.get("digest_retry_count", 0)
     tasks = []
     seen_uris = set()
     now_utc = datetime.now(timezone.utc)
@@ -70,37 +68,22 @@ async def run():
     finally:
         await client.aclose()
     scheduled_type = None
-    if pending_type:
-        if retry_count >= 2 or (last_digest_time_str and (now_utc - datetime.fromisoformat(last_digest_time_str.replace("Z", "+00:00"))).total_seconds() >= 4 * 3600):
-            logger.warning(f"[TIMER] Digest retry limit/timeout reached. Clearing pending.")
-            pending_type = None
-            state.pop("digest_pending_type", None)
-            state["digest_time"] = now_utc_str
-            state["digest_retry_count"] = 0
-        else:
-            logger.info(f"[check] Retrying pending digest: {pending_type} (attempt {retry_count + 1})")
-            scheduled_type = pending_type
-            state["digest_retry_count"] = retry_count + 1
-    else:
-        if last_digest_time_str:
-            try:
-                last_dt = datetime.fromisoformat(last_digest_time_str.replace("Z", "+00:00"))
-                if (now_utc - last_dt).total_seconds() >= 2 * 3600:
-                    scheduled_type = "full" if last_digest_type == "mini" else "mini"
-                    state["digest_pending_type"] = scheduled_type
-                    state["digest_retry_count"] = 0
-                    logger.info(f"[TIMER] Digest scheduled: {scheduled_type} (pending)")
-            except Exception:
-                scheduled_type = "mini"
-                state["digest_pending_type"] = scheduled_type
-                state["digest_retry_count"] = 0
-        else:
+    if last_digest_time_str:
+        try:
+            last_dt = datetime.fromisoformat(last_digest_time_str.replace("Z", "+00:00"))
+            if (now_utc - last_dt).total_seconds() >= 2 * 3600:
+                scheduled_type = "full" if last_digest_type == "mini" else "mini"
+                logger.info(f"[TIMER] Scheduling {scheduled_type} (2h passed)")
+        except Exception:
             scheduled_type = "mini"
-            state["digest_pending_type"] = scheduled_type
-            state["digest_retry_count"] = 0
+    else:
+        scheduled_type = "mini"
+        logger.info(f"[TIMER] First run, scheduling {scheduled_type}")
     if scheduled_type:
         tasks.append({"type": f"digest_{scheduled_type}"})
     state["seen_at"] = now_utc_str
+    if scheduled_type:
+        state["digest_type"] = scheduled_type
     tasks_json = json.dumps(tasks, ensure_ascii=False)
     out_path = os.getenv("GITHUB_OUTPUT")
     has_tasks = len(tasks) > 0
