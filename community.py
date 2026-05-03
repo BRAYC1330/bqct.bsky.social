@@ -58,7 +58,12 @@ async def process(client, llm, task):
     logger.info(f"{C_YELLOW}=== [PROMPT] END ==={C_RESET}")
     logger.info(f"{C_MAGENTA}=== [OUTPUT] ==={C_RESET}")
     logger.info(f"Raw: {reply}")
-    reply = utils.truncate_to_sentence(reply, max_body)
+    pre_len = utils.count_graphemes(reply)
+    if pre_len > max_body:
+        truncated = reply[:max_body]
+        last_dot = truncated.rfind(".")
+        reply = truncated[:last_dot+1] if last_dot != -1 else truncated.rstrip() + "."
+        logger.info(f"Truncated: {pre_len} -> {len(reply)}")
     reply = reply.strip() + sig
     facets = utils.generate_facets(reply)
     await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, uri, parent_cid, facets)
