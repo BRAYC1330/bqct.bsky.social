@@ -55,8 +55,9 @@ Output:"""
 def extract_chainbase_keyword(llm, text: str) -> str:
     prompt_tpl = _prompts.get("chainbase_keyword", "Extract the main keyword or entity from the text.\nOutput format: KEYWORD: [1 word]\nText: {text}\nResult:")
     prompt = prompt_tpl.format(text=text)
+    logger.info(f"[PROMPT_KEYWORD]\n{prompt}")
     try:
-        raw = llm(prompt, max_tokens=10, temperature=0.1)
+        raw = llm(prompt, max_tokens=20, temperature=0.1)
         if isinstance(raw, dict):
             raw = raw.get("choices", [{}])[0].get("text", "")
         raw = raw.strip()
@@ -74,6 +75,7 @@ Rules:
 - Max {max_chars} characters including spaces and emojis.
 - No hashtags, no links, no markdown.
 Reply:"""
+    logger.info(f"[PROMPT_REPLY]\n{prompt}")
     output = llm(prompt, max_tokens=150, temperature=temperature)
     raw_text = output.get("choices", [{}])[0].get("text", "")
     logger.info(f"[LLM] RAW_REPLY_OUTPUT: {raw_text}")
