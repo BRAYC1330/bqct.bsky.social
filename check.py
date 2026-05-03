@@ -1,10 +1,10 @@
 import os
 import sys
 import json
+import re
 import asyncio
 import logging
 import httpx
-import re
 from datetime import datetime, timezone
 import config
 import bsky
@@ -36,26 +36,18 @@ async def run():
         notifs = await bsky.fetch_notifications(client, limit=100, seen_at=seen_at)
         for n in notifs:
             idx = n.get("indexedAt", "")
-            if idx <= seen_at:
-                continue
+            if idx <= seen_at: continue
             uri = n.get("uri", "")
-            if uri in seen_uris:
-                continue
+            if uri in seen_uris: continue
             seen_uris.add(uri)
             reason = n.get("reason", "")
-            if reason not in ("reply", "mention"):
-                continue
+            if reason not in ("reply", "mention"): continue
             author_did = n.get("author", {}).get("did", "")
             text = (n.get("record", {}).get("text") or "").strip()
             record = n.get("record", {})
             reply_data = record.get("reply", {}) if isinstance(record, dict) else {}
             parent_uri = reply_data.get("parent", {}).get("uri", "")
             root_uri = reply_data.get("root", {}).get("uri", "")
-            if digest_uri and root_uri == digest_uri:
-                if parent_uri == digest_uri:
-                    tasks.append({"type": "digest_comment", "uri": uri, "text": text, "author_did": author_did, "parent_uri": parent_uri})
-                    digest_comment_count += 1
-                continue
             if author_did == config.OWNER_DID:
                 is_reply_to_bot = isinstance(parent_uri, str) and parent_uri.startswith(f"at://{config.BOT_DID}/")
                 bot_handle_clean = config.BOT_HANDLE.lstrip("@")
@@ -63,6 +55,15 @@ async def run():
                 if is_reply_to_bot or has_mention:
                     tasks.append({"type": "owner_command", "uri": uri, "text": text, "author_did": author_did})
                     owner_count += 1
+                    logger.info(f"[check] OWNER task queued (reply_to_bot={is_reply_to_bot}, mention={has_mention})")
+                else:
+                    logger.info(f"[check] Skipping OWNER reply to non-bot (no @mention)")
+                continue
+            if digest_uri and root_uri == digest_uri:
+                if parent_uri and parent_uri != digest_uri and parent_uri.startswith(f"at://{config.BOT_DID}/"):
+                    continue
+                tasks.append({"type": "digest_comment", "uri": uri, "text": text, "author_did": author_did, "parent_uri": parent_uri})
+                digest_comment_count += 1
                 continue
     finally:
         await client.aclose()
@@ -70,20 +71,19 @@ async def run():
     if last_digest_time_str:
         try:
             last_dt = datetime.fromisoformat(last_digest_time_str.replace("Z", "+00:00"))
-            if last_dt.tzinfo is None:
-                last_dt = last_dt.replace(tzinfo=timezone.utc)
             if (now_utc - last_dt).total_seconds() >= 2 * 3600:
                 scheduled_type = "full" if last_digest_type == "mini" else "mini"
+                logger.info(f"[TIMER] Scheduling {scheduled_type} (2h passed)")
         except Exception:
             scheduled_type = "mini"
     else:
         scheduled_type = "mini"
+        logger.info(f"[TIMER] First run, scheduling {scheduled_type}")
     if scheduled_type:
         tasks.append({"type": f"digest_{scheduled_type}"})
-        state["digest_type"] = scheduled_type
-        state["digest_time"] = now_utc_str
-        logger.info(f"[TIMER] Digest scheduled: {scheduled_type}")
     state["seen_at"] = now_utc_str
+    if scheduled_type:
+        state["digest_type"] = scheduled_type
     tasks_json = json.dumps(tasks, ensure_ascii=False)
     out_path = os.getenv("GITHUB_OUTPUT")
     has_tasks = len(tasks) > 0
@@ -91,9 +91,8 @@ async def run():
         with open(out_path, "a") as f:
             f.write(f"status={'true' if has_tasks else 'false'}\n")
             f.write(f"tasks={tasks_json}\n")
-            f.write(f"scheduled_type={scheduled_type or ''}\n")
             f.write(f"state_json={json.dumps(state, ensure_ascii=False)}\n")
-    logger.info(f"[checker] Digest URI: {digest_uri or 'empty'} | Tasks: {len(tasks)} (Owner: {owner_count}, Community: {digest_comment_count}, Digest: {scheduled_type or 'none'})")
+    logger.info(f"[checker] Tasks: {len(tasks)} (Owner: {owner_count}, Community: {digest_comment_count}, Digest: {scheduled_type or 'none'})")
     if not has_tasks:
         sys.exit(0)
 if __name__ == "__main__":
