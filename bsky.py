@@ -5,7 +5,6 @@ import httpx
 from datetime import datetime, timezone
 import config
 logger = logging.getLogger(__name__)
-
 async def login_with_cache(client, handle, password):
     session_path = "session.json"
     if os.path.exists(session_path):
@@ -24,14 +23,12 @@ async def login_with_cache(client, handle, password):
     with open(session_path, "w") as f:
         json.dump(sess, f)
     logger.info("[bsky] New session created and cached")
-
 async def post_root(client, bot_did, text):
     record = {"$type": "app.bsky.feed.post", "text": text, "createdAt": datetime.now(timezone.utc).isoformat()}
     body = {"repo": bot_did, "collection": "app.bsky.feed.post", "record": record}
     r = await client.post("https://bsky.social/xrpc/com.atproto.repo.createRecord", json=body)
     r.raise_for_status()
     return r.json()
-
 async def post_reply(client, bot_did, text, root_uri, root_cid, parent_uri, parent_cid):
     reply = {"root": {"uri": root_uri, "cid": root_cid}, "parent": {"uri": parent_uri, "cid": parent_cid}}
     record = {"$type": "app.bsky.feed.post", "text": text, "createdAt": datetime.now(timezone.utc).isoformat(), "reply": reply}
@@ -39,7 +36,6 @@ async def post_reply(client, bot_did, text, root_uri, root_cid, parent_uri, pare
     r = await client.post("https://bsky.social/xrpc/com.atproto.repo.createRecord", json=body)
     r.raise_for_status()
     return r.json()
-
 async def fetch_thread_chain(client, uri):
     r = await client.get("https://bsky.social/xrpc/app.bsky.feed.getPostThread", params={"uri": uri, "depth": 0, "parentHeight": 100})
     if r.status_code != 200:
@@ -52,12 +48,8 @@ async def fetch_thread_chain(client, uri):
     reply_ref = record.get("reply", {})
     root_ref = reply_ref.get("root", {}) if reply_ref else {}
     parent_ref = reply_ref.get("parent", {}) if reply_ref else {}
-    
     root_uri = root_ref.get("uri") if root_ref.get("uri") else uri
     root_cid = root_ref.get("cid") if root_ref.get("cid") else post.get("cid", "")
-    root_text = record.get("text", "") if root_uri == uri else ""
-    parent_cid_ref = parent_ref.get("cid", "") if parent_ref else ""
-    
     chain = []
     current = thread
     while current and isinstance(current, dict):
@@ -66,7 +58,9 @@ async def fetch_thread_chain(client, uri):
             chain.append(p)
         current = current.get("parent")
     chain = list(reversed(chain))
-    
+    root_post = chain[0] if chain else post
+    root_text = root_post.get("record", {}).get("text", "")
+    parent_cid_ref = parent_ref.get("cid", "") if parent_ref else ""
     return {
         "root_uri": root_uri,
         "root_cid": root_cid,
@@ -75,7 +69,6 @@ async def fetch_thread_chain(client, uri):
         "cid": post.get("cid", ""),
         "chain": chain
     }
-
 async def fetch_notifications(client, limit=100, seen_at=None):
     params = {"limit": limit}
     if seen_at and seen_at not in ("{}", "null", "none"):
@@ -87,7 +80,6 @@ async def fetch_notifications(client, limit=100, seen_at=None):
     except Exception as e:
         logger.warning(f"[bsky] Notifications fetch failed: {e}")
         return []
-
 def _extract_embed_text(embed):
     texts = []
     if not embed: return ""
@@ -110,7 +102,6 @@ def _extract_embed_text(embed):
             for img in med.get("images", []):
                 if img.get("alt"): texts.append(img["alt"])
     return " ".join(texts)
-
 async def _fetch_url_content(client, url):
     try:
         from trafilatura import extract as trafilatura_extract
