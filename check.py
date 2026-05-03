@@ -1,7 +1,6 @@
 import os
 import sys
 import json
-import re
 import asyncio
 import logging
 import httpx
@@ -51,26 +50,15 @@ async def run():
             reply_data = record.get("reply", {}) if isinstance(record, dict) else {}
             parent_uri = reply_data.get("parent", {}).get("uri", "")
             root_uri = reply_data.get("root", {}).get("uri", "")
-            
-            if author_did == config.OWNER_DID:
-                is_reply_to_bot = isinstance(parent_uri, str) and parent_uri.startswith(f"at://{config.BOT_DID}/")
-                bot_handle_clean = config.BOT_HANDLE.lstrip("@")
-                has_mention = bool(re.search(rf'@{re.escape(bot_handle_clean)}', text, re.IGNORECASE))
-                
-                if is_reply_to_bot or has_mention:
-                    tasks.append({"type": "owner_command", "uri": uri, "text": text, "author_did": author_did})
-                    owner_count += 1
-                    logger.info(f"[check] OWNER task queued (reply_to_bot={is_reply_to_bot}, mention={has_mention})")
-                else:
-                    logger.info(f"[check] Skipping OWNER reply to non-bot (no @mention)")
-                continue
-                
             if digest_uri and root_uri == digest_uri:
                 if parent_uri and parent_uri != digest_uri and parent_uri.startswith(f"at://{config.BOT_DID}/"):
                     continue
                 tasks.append({"type": "digest_comment", "uri": uri, "text": text, "author_did": author_did, "parent_uri": parent_uri})
                 digest_comment_count += 1
                 continue
+            if author_did == config.OWNER_DID:
+                tasks.append({"type": "owner_command", "uri": uri, "text": text, "author_did": author_did})
+                owner_count += 1
     finally:
         await client.aclose()
     scheduled_type = None
