@@ -15,7 +15,7 @@ from logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
 async def main():
-    tasks_raw = os.getenv("TASKS", "[]").strip()
+    tasks_raw = os.getenv("TASKS_JSON", "[]").strip()
     state_raw = os.getenv("STATE_JSON", "{}").strip()
     try:
         tasks = json.loads(tasks_raw) if tasks_raw else []
