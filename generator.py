@@ -69,11 +69,12 @@ def get_answer(llm, context: str, user_query: str, max_chars: int = 280, tempera
     prompt = f"""{context}
 Query: {user_query}
 Rules:
-- Priority 1: Answer the query directly using [SEARCH] data.
-- Priority 2: Align tone and topic with [ROOT] post.
+- Priority 1: Answer the query directly. If unsure, give your best guess.
+- Priority 2: Align with the root post topic.
 - Max {max_chars} characters including spaces and emojis.
 - No hashtags, no links, no markdown.
 Reply:"""
-    output = llm(prompt, max_tokens=150, temperature=temperature)
+    output = llm(prompt, max_tokens=220, temperature=temperature)
     raw_text = output.get("choices", [{}])[0].get("text", "")
+    logger.info(f"[LLM] RAW_REPLY_OUTPUT: {raw_text}")
     return raw_text.strip()

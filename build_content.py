@@ -22,7 +22,6 @@ async def build_reply(llm, thread_ctx: str, query: str, search_data: str = "", s
         ctx = f"[SEARCH]\n{search_data}\n{thread_ctx}"
     else:
         ctx = thread_ctx
-    logger.info(f"=== FINAL CONTEXT FOR MODEL ===\n{ctx}")
     reply = generator.get_answer(llm, ctx, query, max_chars=max_body, temperature=0.5)
     if utils.count_graphemes(reply) > max_body:
         truncated = reply[:max_body]
