@@ -15,7 +15,7 @@ def _get_signature(source: str, has_search: bool) -> str:
 def get_no_data_response(keyword: str) -> str:
     body = f'No data found for "{keyword}". Try rephrasing your query in a new comment or DYOR.'
     return f"{body}\n\nQwen"
-async def build_reply(llm, thread_ctx: str, query: str, search_data: str = "", source: str = "", max_total: int = 300) -> str:
+async def build_reply(llm, thread_ctx: str, query: str, search_ str = "", source: str = "", max_total: int = 300) -> str:
     sig = _get_signature(source, bool(search_data))
     max_body = max_total - len(sig)
     if search_data:
@@ -25,10 +25,16 @@ async def build_reply(llm, thread_ctx: str, query: str, search_data: str = "", s
     reply = generator.get_answer(llm, ctx, query, max_chars=max_body, temperature=0.5)
     reply = utils.truncate_reply(reply, max_body)
     return reply.strip() + sig
-async def build_digest(llm, trends, task_type: str, max_total: int = 300) -> str | None:
+async def build_digest(llm, trends, task_type: str, max_total: int = 300, retry_count: int = 0) -> str | None:
     if not trends: return None
     sig = SIG_DIGEST
     emojis = config.TREND_EMOJIS
+    extra_constraint = ""
+    if retry_count == 1:
+        extra_constraint = "\nNOTE: Previous attempt was too long. Keep it under 280 chars. Use short, direct sentences."
+    elif retry_count >= 2:
+        extra_constraint = "\nCRITICAL: Strictly under 290 chars. Drop filler words. Use abbreviations if needed."
+    
     if task_type == "digest_mini":
         header = "TOP CRYPTO TRENDS:\n\n"
         lines = []
@@ -56,8 +62,8 @@ async def build_digest(llm, trends, task_type: str, max_total: int = 300) -> str
         fixed_len = len(header) + len(title) + 1 + len(sig)
         max_desc = max_total - fixed_len
         if max_desc < 30: return None
-        prompt = f"Summarize '{kw}' in 1-2 short sentences. Start directly. Context: {summary}"
-        desc = generator.get_answer(llm, "", prompt, max_chars=max_desc, temperature=0.5).strip()
+        prompt = f"Summarize '{kw}' in 1-2 short sentences. Start directly. Context: {summary}{extra_constraint}"
+        desc = generator.get_answer(llm, "", prompt, max_chars=max_desc, temperature=0.5 + (0.1 * retry_count)).strip()
         body = f"{header}{title} {desc}"
         final = body + sig
         if utils.count_graphemes(final) > max_total:
