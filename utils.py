@@ -91,4 +91,7 @@ async def _format_thread_for_llm(chain: dict, owner_did: str, bot_did: str, clie
     parts = [f"[ROOT]\n{root}"]
     if dialogue:
         parts.append(f"[RECENT]\n" + "\n".join(dialogue))
-    return "\n".join(parts)
+    full_thread = "\n".join(parts)
+    if len(full_thread) > 8000:
+        full_thread = full_thread[:8000].rsplit(" ", 1)[0] + "..."
+    return full_thread

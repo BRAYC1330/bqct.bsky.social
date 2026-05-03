@@ -44,23 +44,3 @@ async def build_digest(llm, trends, task_type: str, max_total: int = 300) -> str
             lines.append(f"{e} {kw} 📊 {sc}")
             if len("\n".join(lines)) + len(header) > max_body:
                 lines.pop()
-                break
-        if not lines: return None
-        body = f"{header}" + "\n".join(lines)
-    else:
-        item = trends[0]
-        kw = item.get("keyword", "?")
-        sc = item.get("score")
-        st = item.get("rank_status", "same")
-        summary = item.get("summary", "")
-        e = emojis.get(st.lower(), "")
-        title = f"{e + ' ' if e else ''}{kw} 📊 {sc}:"
-        header = "TOP CRYPTO TREND:\n\n"
-        max_desc = max_body - len(header) - len(title) - 1
-        if max_desc < 20: return None
-        prompt = f"Write exactly two sentences for '{kw}'. Structure: Core fact. Impact or metric. Max 19 words total. Start directly. Context: {summary}"
-        desc = generator.get_answer(llm, "", prompt, max_chars=max_desc, temperature=0.5)
-        body = f"{header}{title} {desc}"
-    final = body + sig
-    if utils.count_graphemes(final) > max_total: return None
-    return final
