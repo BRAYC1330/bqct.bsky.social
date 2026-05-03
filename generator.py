@@ -52,9 +52,22 @@ Output:"""
         return user_query, ""
     except:
         return user_query, ""
-def extract_chainbase_keyword(llm, text: str) -> str:
-    prompt_tpl = _prompts.get("chainbase_keyword", "Extract the main keyword or entity from the text.\nOutput format: KEYWORD: [1 word]\nText: {text}\nResult:")
-    prompt = prompt_tpl.format(text=text)
+def extract_chainbase_keyword(llm, text: str, root_text: str = "") -> str:
+    if root_text:
+        prompt = f"""Extract the main keyword or entity from the user query, using the root post context to resolve pronouns like "this", "it", "the news".
+Rules:
+- If the query contains pronouns, resolve them using the root post.
+- Return ONLY one word: the core keyword/entity.
+- If unsure, return the most prominent noun from the query.
+Root post: {root_text[:500]}
+User query: {text}
+Output format: KEYWORD: [1 word]
+Result:"""
+    else:
+        prompt = f"""Extract the main keyword or entity from the text.
+Output format: KEYWORD: [1 word]
+Text: {text}
+Result:"""
     try:
         raw = llm(prompt, max_tokens=10, temperature=0.1)
         if isinstance(raw, dict):

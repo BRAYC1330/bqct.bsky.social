@@ -26,7 +26,8 @@ async def process(client, llm, task):
         logger.error(f"[community] Missing cid for {uri}")
         return
     root_text = chain.get("root_text", "")
-    kw = generator.extract_chainbase_keyword(llm, user_text)
+    # Pass root_text to keyword extractor for context-aware resolution
+    kw = generator.extract_chainbase_keyword(llm, user_text, root_text=root_text)
     logger.info(f"{C_CYAN}=== [INPUT] ==={C_RESET}")
     logger.info(f"Query: {user_text[:150]}")
     logger.info(f"Keyword: {kw}")
@@ -37,7 +38,7 @@ async def process(client, llm, task):
         source = "chainbase"
         logger.info(f"Search results: {search_data.count(chr(10)) + 1 if search_data else 0}")
     logger.info(f"{C_CYAN}=== [INPUT] END ==={C_RESET}")
-    if not search_data:
+    if not search_
         reply = build_content.get_no_data_response(kw or "query")
         facets = utils.generate_facets(reply)
         await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, uri, parent_cid, facets)
