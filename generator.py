@@ -9,10 +9,6 @@ logger = logging.getLogger(__name__)
 PROMPTS_PATH = pathlib.Path(__file__).parent / "prompts.yaml"
 with open(PROMPTS_PATH, "r", encoding="utf-8") as f:
     _prompts = yaml.safe_load(f)
-COLOR_BLUE = "\033[94m"
-COLOR_GREEN = "\033[92m"
-COLOR_YELLOW = "\033[93m"
-COLOR_RESET = "\033[0m"
 def get_model():
     model_path = config.MODEL_PATH
     if not os.path.exists(model_path):
@@ -59,7 +55,6 @@ Output:"""
 def extract_chainbase_keyword(llm, text: str) -> str:
     prompt_tpl = _prompts.get("chainbase_keyword", "Extract the main keyword or entity from the text.\nOutput format: KEYWORD: [1 word]\nText: {text}\nResult:")
     prompt = prompt_tpl.format(text=text)
-    logger.debug(f"{COLOR_BLUE}[PROMPT_KEYWORD]{COLOR_RESET}\n{prompt}")
     try:
         raw = llm(prompt, max_tokens=10, temperature=0.1)
         if isinstance(raw, dict):
@@ -74,13 +69,11 @@ def get_answer(llm, context: str, user_query: str, max_chars: int = 280, tempera
     prompt = f"""{context}
 Query: {user_query}
 Rules:
-- Priority 1: Answer the query directly. If unsure, give your best guess.
-- Priority 2: Align with the root post topic.
+- Priority 1: Answer the query directly using [SEARCH] data.
+- Priority 2: Align tone and topic with [ROOT] post.
 - Max {max_chars} characters including spaces and emojis.
 - No hashtags, no links, no markdown.
 Reply:"""
-    logger.debug(f"{COLOR_YELLOW}[PROMPT_REPLY]{COLOR_RESET}\n{prompt}")
     output = llm(prompt, max_tokens=150, temperature=temperature)
     raw_text = output.get("choices", [{}])[0].get("text", "")
-    logger.info(f"[LLM] RAW_REPLY_OUTPUT: {raw_text}")
     return raw_text.strip()
