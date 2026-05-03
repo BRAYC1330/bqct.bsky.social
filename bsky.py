@@ -110,17 +110,11 @@ async def _fetch_url_content(client, url):
     try:
         from trafilatura import extract as trafilatura_extract
         parsed = httpx.URL(url)
-        if parsed.netloc not in config.ALLOWED_LINK_DOMAINS:
-            logger.debug(f"[LINK] Domain {parsed.netloc} not in ALLOWED_LINK_DOMAINS")
-            return ""
+        if parsed.netloc not in config.ALLOWED_LINK_DOMAINS: return ""
         r = await client.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=config.REQUEST_TIMEOUT)
         if r.status_code == 200:
             txt = trafilatura_extract(r.text, include_tables=False, include_comments=False, output_format="txt")
-            if txt:
-                logger.debug(f"[LINK] Parsed {url}: {len(txt)} chars")
-                return txt[:config.MAX_LINK_CONTENT_SIZE]
-            else:
-                logger.debug(f"[LINK] trafilatura returned empty for {url}")
-    except Exception as e:
-        logger.debug(f"[LINK] Error fetching {url}: {e}")
+            if txt: return txt
+    except Exception:
+        pass
     return ""

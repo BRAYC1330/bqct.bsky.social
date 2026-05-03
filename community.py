@@ -26,8 +26,7 @@ async def process(client, llm, task):
         logger.error(f"[community] Missing cid for {uri}")
         return
     root_text = chain.get("root_text", "")
-    # Pass root_text to keyword extractor for context-aware resolution
-    kw = generator.extract_chainbase_keyword(llm, user_text, root_text=root_text)
+    kw = generator.extract_chainbase_keyword(llm, user_text)
     logger.info(f"{C_CYAN}=== [INPUT] ==={C_RESET}")
     logger.info(f"Query: {user_text[:150]}")
     logger.info(f"Keyword: {kw}")
@@ -42,7 +41,6 @@ async def process(client, llm, task):
         reply = build_content.get_no_data_response(kw or "query")
         facets = utils.generate_facets(reply)
         await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, uri, parent_cid, facets)
-        logger.info(f"Posted: {reply}")
         return
     clean_query = utils.clean_for_llm(user_text)
     clean_root = utils.clean_for_llm(root_text)
@@ -60,11 +58,9 @@ async def process(client, llm, task):
     logger.info(f"{C_YELLOW}=== [PROMPT] END ==={C_RESET}")
     logger.info(f"{C_MAGENTA}=== [OUTPUT] ==={C_RESET}")
     logger.info(f"Raw: {reply}")
-    reply = utils.truncate_reply(reply, max_body)
+    reply = utils.truncate_to_sentence(reply, max_body)
     reply = reply.strip() + sig
     facets = utils.generate_facets(reply)
     await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, uri, parent_cid, facets)
-    logger.info(f"Posted: {reply}")
-    logger.info(f"Facets: {len(facets) if facets else 0}")
     logger.info(f"{C_MAGENTA}=== [OUTPUT] END ==={C_RESET}")
     logger.info(f"[community] Replied to {uri[:40]}... | Final length: {len(reply)}")

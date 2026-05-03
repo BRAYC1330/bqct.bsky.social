@@ -19,7 +19,7 @@ def get_model():
             model_path=model_path,
             n_ctx=config.MODEL_N_CTX,
             n_gpu_layers=0,
-            n_threads=config.MODEL_N_THREADS,
+            n_threads=config.N_THREADS,
             n_batch=512,
             verbose=False
         )
@@ -29,15 +29,8 @@ def get_model():
         logger.error(f"[generator] Model load failed: {e}")
         return None
 def extract_search_intent(llm, thread_context: str, user_query: str) -> tuple:
-    prompt = f"""Extract a concise search query based on user input and conversation context.
-Rules:
-- Use thread context to resolve pronouns and implicit references.
-- Focus on the core topic.
-- If time filter is needed, use: day, week, month, year. Otherwise: none.
-- Return ONLY: QUERY: <text> | TIME: <day/week/month/year/none>
-Thread Context: {thread_context}
-User Query: "{user_query}"
-Output:"""
+    prompt_tpl = _prompts.get("tavily_intent", "QUERY: {query}")
+    prompt = prompt_tpl.format(query=user_query)
     try:
         raw = llm(prompt, max_tokens=60, temperature=0.1)
         if isinstance(raw, dict):
@@ -52,22 +45,9 @@ Output:"""
         return user_query, ""
     except:
         return user_query, ""
-def extract_chainbase_keyword(llm, text: str, root_text: str = "") -> str:
-    if root_text:
-        prompt = f"""Extract the main keyword or entity from the user query, using the root post context to resolve pronouns like "this", "it", "the news".
-Rules:
-- If the query contains pronouns, resolve them using the root post.
-- Return ONLY one word: the core keyword/entity.
-- If unsure, return the most prominent noun from the query.
-Root post: {root_text[:500]}
-User query: {text}
-Output format: KEYWORD: [1 word]
-Result:"""
-    else:
-        prompt = f"""Extract the main keyword or entity from the text.
-Output format: KEYWORD: [1 word]
-Text: {text}
-Result:"""
+def extract_chainbase_keyword(llm, text: str) -> str:
+    prompt_tpl = _prompts.get("chainbase_keyword", "Extract the main keyword or entity from the text.\nOutput format: KEYWORD: [1 word]\nText: {text}\nResult:")
+    prompt = prompt_tpl.format(text=text)
     try:
         raw = llm(prompt, max_tokens=10, temperature=0.1)
         if isinstance(raw, dict):
@@ -79,17 +59,11 @@ Result:"""
     except:
         return ""
 def get_answer(llm, context: str, user_query: str, max_chars: int = 280, temperature: float = 0.5) -> str:
-    prompt_skeleton = f"""Query: {user_query}
-Rules:
-- Priority 1: Answer the query directly. If unsure, give your best guess.
-- Priority 2: Align with the [ROOT]/[THREAD] topic.
-- Max {max_chars} characters including spaces and emojis.
-- No hashtags, no links, no markdown.
-Reply:"""
+    prompt_tpl = _prompts.get("reply", "You are a helpful assistant. Answer based on:\nMemory: {memory}\nThread: {root_thread}\nSearch: {search_data}\nUser: {query}\nRules:\n- Hard limit: 3 short sentences maximum.\n- Start directly with the answer. No intros.\n- Always end with a period.\nAnswer:")
+    prompt = prompt_tpl.format(memory="", root_thread=context, search_data="", query=user_query)
     logger.info(f"\033[93m=== [PROMPT] ===\033[0m")
-    logger.info(prompt_skeleton)
+    logger.info(prompt)
     logger.info(f"\033[93m=== [PROMPT] END ===\033[0m")
-    full_prompt = f"{context}\n{prompt_skeleton}"
-    output = llm(full_prompt, max_tokens=220, temperature=temperature)
+    output = llm(prompt, max_tokens=220, temperature=temperature)
     raw_text = output.get("choices", [{}])[0].get("text", "")
     return raw_text.strip()
