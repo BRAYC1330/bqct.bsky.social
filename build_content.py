@@ -23,10 +23,7 @@ async def build_reply(llm, thread_ctx: str, query: str, search_data: str = "", s
     else:
         ctx = thread_ctx
     reply = generator.get_answer(llm, ctx, query, max_chars=max_body, temperature=0.5)
-    if utils.count_graphemes(reply) > max_body:
-        truncated = reply[:max_body]
-        last_dot = truncated.rfind(".")
-        reply = truncated[:last_dot+1] if last_dot != -1 else truncated.rstrip() + "."
+    reply = utils.truncate_to_sentence(reply, max_body)
     return reply.strip() + sig
 async def build_digest(llm, trends, task_type: str, max_total: int = 300) -> str | None:
     if not trends: return None
@@ -41,9 +38,9 @@ async def build_digest(llm, trends, task_type: str, max_total: int = 300) -> str
             st = item.get("rank_status", "same")
             e = emojis.get(st.lower(), "")
             lines.append(f"{e} {kw} 📊 {sc}")
-            if len("\n".join(lines)) + len(header) > max_total - len(sig):
-                lines.pop()
-                break
+        if len("\n".join(lines)) + len(header) > max_total - len(sig):
+            lines.pop()
+            break
         if not lines: return None
         body = f"{header}" + "\n".join(lines)
     else:
@@ -63,10 +60,8 @@ async def build_digest(llm, trends, task_type: str, max_total: int = 300) -> str
         body = f"{header}{title} {desc}"
         final = body + sig
         if utils.count_graphemes(final) > max_total:
-            truncated = desc[:max_desc]
-            last_dot = truncated.rfind(".")
-            desc = truncated[:last_dot+1] if last_dot != -1 else truncated.rstrip() + "."
+            desc = utils.truncate_to_sentence(desc, max_desc)
             body = f"{header}{title} {desc}"
             final = body + sig
-    if utils.count_graphemes(final) > max_total: return None
+        if utils.count_graphemes(final) > max_total: return None
     return final

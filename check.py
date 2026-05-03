@@ -4,6 +4,7 @@ import json
 import asyncio
 import logging
 import httpx
+import re
 from datetime import datetime, timezone
 import config
 import bsky
@@ -57,8 +58,13 @@ async def run():
                 digest_comment_count += 1
                 continue
             if author_did == config.OWNER_DID:
-                tasks.append({"type": "owner_command", "uri": uri, "text": text, "author_did": author_did})
-                owner_count += 1
+                is_reply_to_bot = isinstance(parent_uri, str) and parent_uri.startswith(f"at://{config.BOT_DID}/")
+                bot_handle_clean = config.BOT_HANDLE.lstrip("@")
+                has_mention = bool(re.search(rf'@{re.escape(bot_handle_clean)}', text, re.IGNORECASE))
+                if is_reply_to_bot or has_mention:
+                    tasks.append({"type": "owner_command", "uri": uri, "text": text, "author_did": author_did})
+                    owner_count += 1
+                continue
     finally:
         await client.aclose()
     scheduled_type = None
@@ -86,8 +92,9 @@ async def run():
         with open(out_path, "a") as f:
             f.write(f"status={'true' if has_tasks else 'false'}\n")
             f.write(f"tasks={tasks_json}\n")
+            f.write(f"scheduled_type={scheduled_type or ''}\n")
             f.write(f"state_json={json.dumps(state, ensure_ascii=False)}\n")
-    logger.info(f"[checker] Tasks: {len(tasks)} (Owner: {owner_count}, Community: {digest_comment_count}, Digest: {scheduled_type or 'none'})")
+    logger.info(f"[checker] Digest URI: {digest_uri or 'empty'} | Tasks: {len(tasks)} (Owner: {owner_count}, Community: {digest_comment_count}, Digest: {scheduled_type or 'none'})")
     if not has_tasks:
         sys.exit(0)
 if __name__ == "__main__":
