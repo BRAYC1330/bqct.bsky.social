@@ -22,6 +22,8 @@ async def run():
     digest_uri = state.get("digest_uri", "").strip()
     last_digest_time_str = state.get("digest_time", "").strip()
     last_digest_type = state.get("digest_type", "mini").strip()
+    pending_type = state.get("digest_pending_type")
+    retry_count = state.get("digest_retry_count", 0)
     tasks = []
     seen_uris = set()
     now_utc = datetime.now(timezone.utc)
@@ -36,27 +38,22 @@ async def run():
         notifs = await bsky.fetch_notifications(client, limit=100, seen_at=seen_at)
         for n in notifs:
             idx = n.get("indexedAt", "")
-            if idx <= seen_at:
-                continue
+            if idx <= seen_at: continue
             uri = n.get("uri", "")
-            if uri in seen_uris:
-                continue
+            if uri in seen_uris: continue
             seen_uris.add(uri)
             reason = n.get("reason", "")
-            if reason not in ("reply", "mention"):
-                continue
+            if reason not in ("reply", "mention"): continue
             author_did = n.get("author", {}).get("did", "")
             text = (n.get("record", {}).get("text") or "").strip()
             record = n.get("record", {})
             reply_data = record.get("reply", {}) if isinstance(record, dict) else {}
             parent_uri = reply_data.get("parent", {}).get("uri", "")
             root_uri = reply_data.get("root", {}).get("uri", "")
-
             if author_did == config.OWNER_DID:
                 is_reply_to_bot = isinstance(parent_uri, str) and parent_uri.startswith(f"at://{config.BOT_DID}/")
                 bot_handle_clean = config.BOT_HANDLE.lstrip("@")
                 has_mention = bool(re.search(rf'@{re.escape(bot_handle_clean)}', text, re.IGNORECASE))
-                
                 if is_reply_to_bot or has_mention:
                     tasks.append({"type": "owner_command", "uri": uri, "text": text, "author_did": author_did})
                     owner_count += 1
@@ -64,7 +61,6 @@ async def run():
                 else:
                     logger.info(f"[check] Skipping OWNER reply to non-bot (no @mention)")
                 continue
-
             if digest_uri and root_uri == digest_uri:
                 if parent_uri and parent_uri != digest_uri and parent_uri.startswith(f"at://{config.BOT_DID}/"):
                     continue
@@ -74,22 +70,36 @@ async def run():
     finally:
         await client.aclose()
     scheduled_type = None
-    if last_digest_time_str:
-        try:
-            last_dt = datetime.fromisoformat(last_digest_time_str.replace("Z", "+00:00"))
-            if last_dt.tzinfo is None:
-                last_dt = last_dt.replace(tzinfo=timezone.utc)
-            if (now_utc - last_dt).total_seconds() >= 2 * 3600:
-                scheduled_type = "full" if last_digest_type == "mini" else "mini"
-        except Exception:
-            scheduled_type = "mini"
+    if pending_type:
+        if retry_count >= 2 or (last_digest_time_str and (now_utc - datetime.fromisoformat(last_digest_time_str.replace("Z", "+00:00"))).total_seconds() >= 4 * 3600):
+            logger.warning(f"[TIMER] Digest retry limit/timeout reached. Clearing pending.")
+            pending_type = None
+            state.pop("digest_pending_type", None)
+            state["digest_time"] = now_utc_str
+            state["digest_retry_count"] = 0
+        else:
+            logger.info(f"[check] Retrying pending digest: {pending_type} (attempt {retry_count + 1})")
+            scheduled_type = pending_type
+            state["digest_retry_count"] = retry_count + 1
     else:
-        scheduled_type = "mini"
+        if last_digest_time_str:
+            try:
+                last_dt = datetime.fromisoformat(last_digest_time_str.replace("Z", "+00:00"))
+                if (now_utc - last_dt).total_seconds() >= 2 * 3600:
+                    scheduled_type = "full" if last_digest_type == "mini" else "mini"
+                    state["digest_pending_type"] = scheduled_type
+                    state["digest_retry_count"] = 0
+                    logger.info(f"[TIMER] Digest scheduled: {scheduled_type} (pending)")
+            except Exception:
+                scheduled_type = "mini"
+                state["digest_pending_type"] = scheduled_type
+                state["digest_retry_count"] = 0
+        else:
+            scheduled_type = "mini"
+            state["digest_pending_type"] = scheduled_type
+            state["digest_retry_count"] = 0
     if scheduled_type:
         tasks.append({"type": f"digest_{scheduled_type}"})
-        state["digest_type"] = scheduled_type
-        state["digest_time"] = now_utc_str
-        logger.info(f"[TIMER] Digest scheduled: {scheduled_type}")
     state["seen_at"] = now_utc_str
     tasks_json = json.dumps(tasks, ensure_ascii=False)
     out_path = os.getenv("GITHUB_OUTPUT")
