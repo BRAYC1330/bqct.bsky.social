@@ -36,22 +36,27 @@ async def run():
         notifs = await bsky.fetch_notifications(client, limit=100, seen_at=seen_at)
         for n in notifs:
             idx = n.get("indexedAt", "")
-            if idx <= seen_at: continue
+            if idx <= seen_at:
+                continue
             uri = n.get("uri", "")
-            if uri in seen_uris: continue
+            if uri in seen_uris:
+                continue
             seen_uris.add(uri)
             reason = n.get("reason", "")
-            if reason not in ("reply", "mention"): continue
+            if reason not in ("reply", "mention"):
+                continue
             author_did = n.get("author", {}).get("did", "")
             text = (n.get("record", {}).get("text") or "").strip()
             record = n.get("record", {})
             reply_data = record.get("reply", {}) if isinstance(record, dict) else {}
             parent_uri = reply_data.get("parent", {}).get("uri", "")
             root_uri = reply_data.get("root", {}).get("uri", "")
+            
             if author_did == config.OWNER_DID:
                 is_reply_to_bot = isinstance(parent_uri, str) and parent_uri.startswith(f"at://{config.BOT_DID}/")
                 bot_handle_clean = config.BOT_HANDLE.lstrip("@")
                 has_mention = bool(re.search(rf'@{re.escape(bot_handle_clean)}', text, re.IGNORECASE))
+                
                 if is_reply_to_bot or has_mention:
                     tasks.append({"type": "owner_command", "uri": uri, "text": text, "author_did": author_did})
                     owner_count += 1
@@ -59,6 +64,7 @@ async def run():
                 else:
                     logger.info(f"[check] Skipping OWNER reply to non-bot (no @mention)")
                 continue
+                
             if digest_uri and root_uri == digest_uri:
                 if parent_uri and parent_uri != digest_uri and parent_uri.startswith(f"at://{config.BOT_DID}/"):
                     continue
@@ -71,19 +77,20 @@ async def run():
     if last_digest_time_str:
         try:
             last_dt = datetime.fromisoformat(last_digest_time_str.replace("Z", "+00:00"))
+            if last_dt.tzinfo is None:
+                last_dt = last_dt.replace(tzinfo=timezone.utc)
             if (now_utc - last_dt).total_seconds() >= 2 * 3600:
                 scheduled_type = "full" if last_digest_type == "mini" else "mini"
-                logger.info(f"[TIMER] Scheduling {scheduled_type} (2h passed)")
         except Exception:
             scheduled_type = "mini"
     else:
         scheduled_type = "mini"
-        logger.info(f"[TIMER] First run, scheduling {scheduled_type}")
     if scheduled_type:
         tasks.append({"type": f"digest_{scheduled_type}"})
-    state["seen_at"] = now_utc_str
-    if scheduled_type:
         state["digest_type"] = scheduled_type
+        state["digest_time"] = now_utc_str
+        logger.info(f"[TIMER] Digest scheduled: {scheduled_type}")
+    state["seen_at"] = now_utc_str
     tasks_json = json.dumps(tasks, ensure_ascii=False)
     out_path = os.getenv("GITHUB_OUTPUT")
     has_tasks = len(tasks) > 0
