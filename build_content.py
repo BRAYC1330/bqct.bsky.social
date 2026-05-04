@@ -33,7 +33,7 @@ async def build_digest(llm, trends, task_type: str, max_total: int = 300) -> str
     sig = SIG_DIGEST
     emojis = config.TREND_EMOJIS
     if task_type == "digest_mini":
-        header = "TOP CRYPTO TRENDS:\n"
+        header = "TOP CRYPTO TRENDS:\n\n"
         lines = []
         for item in trends[:6]:
             kw = item.get("keyword", "?")
@@ -54,7 +54,7 @@ async def build_digest(llm, trends, task_type: str, max_total: int = 300) -> str
         summary = item.get("summary", "")
         e = emojis.get(st.lower(), "")
         title = f"{e + ' ' if e else ''}{kw} 📊 {sc}:"
-        header = "TOP CRYPTO TREND:\n"
+        header = "TOP CRYPTO TREND:\n\n"
         fixed_len = len(header) + len(title) + 1 + len(sig)
         max_desc = max_total - fixed_len
         if max_desc < 30: return None
