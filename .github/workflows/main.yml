@@ -1,6 +1,16 @@
 name: Bluesky AI Bot
 on:
   workflow_dispatch:
+    inputs:
+      manual_digest:
+        description: 'Generate digest manually (optional)'
+        required: false
+        type: choice
+        options:
+          - none
+          - mini
+          - full
+        default: 'none'
 concurrency:
   group: bluesky-bot-${{ github.ref }}
   cancel-in-progress: true
@@ -32,6 +42,7 @@ jobs:
           PAT: ${{ secrets.PAT }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           LAST_PROCESSED: ${{ secrets.LAST_PROCESSED }}
+          MANUAL_DIGEST_TYPE: ${{ inputs.manual_digest }}
         run: python check.py
 
       - name: Install heavy deps
