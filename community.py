@@ -46,19 +46,22 @@ async def process(client, llm, task):
     clean_root = utils.clean_for_llm(root_text)
     clean_search = utils.clean_for_llm(search_data)
     logger.info(f"{C_GREEN}=== [CONTEXT] ==={C_RESET}")
-    logger.info(f"Priority 1 (Query): {clean_query}")
-    logger.info(f"Priority 2 (Root): {clean_root}")
-    logger.info(f"Priority 3 (Search): {clean_search}")
+    logger.info(f"[QUERY] {clean_query}")
+    logger.info(f"[ROOT] {clean_root}")
+    logger.info(f"[SEARCH] {clean_search}")
     logger.info(f"{C_GREEN}=== [CONTEXT] END ==={C_RESET}")
     sig = build_content._get_signature(source, True)
     max_body = 300 - len(sig)
-    minimal_ctx = f"Q: {clean_query}\n[ROOT]: {clean_root}\n[SEARCH]: {clean_search}"
+    minimal_ctx = f"[QUERY]\n{clean_query}\n[ROOT]\n{clean_root}\n[SEARCH]\n{clean_search}"
     reply = generator.get_answer(llm, minimal_ctx, clean_query, max_chars=max_body, temperature=0.5)
-    logger.info(f"{C_YELLOW}=== [PROMPT] ==={C_RESET}")
-    logger.info(f"{C_YELLOW}=== [PROMPT] END ==={C_RESET}")
     logger.info(f"{C_MAGENTA}=== [OUTPUT] ==={C_RESET}")
     logger.info(f"Raw: {reply}")
-    reply = utils.truncate_to_sentence(reply, max_body)
+    pre_len = utils.count_graphemes(reply)
+    if pre_len > max_body:
+        truncated = reply[:max_body]
+        last_dot = truncated.rfind(".")
+        reply = truncated[:last_dot+1] if last_dot != -1 else truncated.rstrip() + "."
+        logger.info(f"Truncated: {pre_len} -> {len(reply)}")
     reply = reply.strip() + sig
     facets = utils.generate_facets(reply)
     await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, uri, parent_cid, facets)
