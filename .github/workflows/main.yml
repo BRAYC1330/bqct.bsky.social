@@ -11,6 +11,8 @@ on:
           - mini
           - full
         default: 'none'
+  schedule:
+    - cron: '*/15 * * * *'
 concurrency:
   group: bluesky-bot-${{ github.ref }}
   cancel-in-progress: true
@@ -110,16 +112,17 @@ jobs:
           state_raw = os.environ.get("CHECKER_STATE", "{}")
           try: state = json.loads(state_raw)
           except: state = {}
+          
           new_uri = os.environ.get("BOT_NEW_URI", "").strip()
           sched_type = os.environ.get("SCHED_TYPE", "").strip()
           now_str = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+          
           if sched_type:
               state["digest_type"] = sched_type
+          state["digest_time"] = now_str
           if new_uri:
               state["digest_uri"] = new_uri
-              state["digest_time"] = now_str
-          elif sched_type:
-              state["digest_time"] = now_str
+              
           final_json = json.dumps(state, ensure_ascii=False)
           cmd = ["gh", "secret", "set", "LAST_PROCESSED", "--body", final_json, "--repo", os.environ["GITHUB_REPOSITORY"]]
           subprocess.run(cmd, env={**os.environ, "GH_TOKEN": os.environ["PAT"]}, check=True)
