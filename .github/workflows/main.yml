@@ -104,7 +104,7 @@ jobs:
         run: python bot.py
 
       - name: Update Last Processed State
-        if: steps.checker.outputs.status == 'true'
+        if: steps.run.outputs.all_ok == 'true'
         run: |
           python3 << 'EOF'
           import os, json, subprocess
