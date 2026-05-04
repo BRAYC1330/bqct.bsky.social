@@ -21,6 +21,7 @@ async def run():
     digest_uri = state.get("digest_uri", "").strip()
     last_digest_time_str = state.get("digest_time", "").strip()
     last_digest_type = state.get("digest_type", "mini").strip()
+    manual_digest_type = os.getenv("MANUAL_DIGEST_TYPE", "none").strip().lower()
     tasks = []
     seen_uris = set()
     now_utc = datetime.now(timezone.utc)
@@ -50,10 +51,8 @@ async def run():
             reply_data = record.get("reply", {}) if isinstance(record, dict) else {}
             parent_uri = reply_data.get("parent", {}).get("uri", "")
             root_uri = reply_data.get("root", {}).get("uri", "")
-            if root_uri.startswith(f"at://{config.BOT_DID}/") and root_uri != digest_uri:
-                continue
             if digest_uri and root_uri == digest_uri:
-                if parent_uri != digest_uri:
+                if parent_uri and parent_uri != digest_uri and parent_uri.startswith(f"at://{config.BOT_DID}/"):
                     continue
                 tasks.append({"type": "digest_comment", "uri": uri, "text": text, "author_did": author_did, "parent_uri": parent_uri})
                 digest_comment_count += 1
@@ -64,7 +63,10 @@ async def run():
     finally:
         await client.aclose()
     scheduled_type = None
-    if last_digest_time_str:
+    if manual_digest_type in ("mini", "full"):
+        scheduled_type = manual_digest_type
+        logger.info(f"[MANUAL] Digest override: {scheduled_type}")
+    elif last_digest_time_str:
         try:
             last_dt = datetime.fromisoformat(last_digest_time_str.replace("Z", "+00:00"))
             if last_dt.tzinfo is None:
@@ -89,6 +91,7 @@ async def run():
             f.write(f"status={'true' if has_tasks else 'false'}\n")
             f.write(f"tasks={tasks_json}\n")
             f.write(f"state_json={json.dumps(state, ensure_ascii=False)}\n")
+            f.write(f"scheduled_type={scheduled_type or 'none'}\n")
     logger.info(f"[checker] Tasks: {len(tasks)} (Owner: {owner_count}, Community: {digest_comment_count}, Digest: {scheduled_type or 'none'})")
     if not has_tasks:
         sys.exit(0)
