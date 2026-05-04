@@ -7,14 +7,17 @@ SIG_DIGEST = "\n\nQwen | Chainbase TOPS " + config.SIGNATURE_ICONS
 SIG_TAVILY = "\n\nQwen | Tavily"
 SIG_CHAINBASE = "\n\nQwen | Chainbase"
 SIG_DEFAULT = "\n\nQwen"
+
 def _get_signature(source: str, has_search: bool) -> str:
     if source == "tavily": return SIG_TAVILY
     if source == "chainbase": return SIG_CHAINBASE
     if has_search: return SIG_CHAINBASE
     return SIG_DEFAULT
+
 def get_no_data_response(keyword: str) -> str:
     body = f'No data found for "{keyword}". Try rephrasing your query in a new comment or DYOR.'
     return f"{body}\n\nQwen"
+
 async def build_reply(llm, thread_ctx: str, query: str, search_data: str = "", source: str = "", max_total: int = 300) -> str:
     sig = _get_signature(source, bool(search_data))
     max_body = max_total - len(sig)
@@ -28,10 +31,18 @@ async def build_reply(llm, thread_ctx: str, query: str, search_data: str = "", s
         last_dot = truncated.rfind(".")
         reply = truncated[:last_dot+1] if last_dot != -1 else truncated.rstrip() + "."
     return reply.strip() + sig
+
 async def build_digest(llm, trends, task_type: str, max_total: int = 300) -> str | None:
     if not trends: return None
     sig = SIG_DIGEST
     emojis = config.TREND_EMOJIS
+    max_body = max_total - len(sig)
+    body = ""
+    desc = ""
+    title = ""
+    header = ""
+    max_desc = 0
+
     if task_type == "digest_mini":
         header = "TOP CRYPTO TRENDS:\n\n"
         lines = []
@@ -41,11 +52,11 @@ async def build_digest(llm, trends, task_type: str, max_total: int = 300) -> str
             st = item.get("rank_status", "same")
             e = emojis.get(st.lower(), "")
             lines.append(f"{e} {kw} 📊 {sc}")
-            if len("\n".join(lines)) + len(header) > max_total - len(sig):
+            if len(header) + len("\n".join(lines)) > max_body:
                 lines.pop()
                 break
         if not lines: return None
-        body = f"{header}" + "\n".join(lines)
+        body = header + "\n".join(lines)
     else:
         item = trends[0]
         kw = item.get("keyword", "?")
@@ -55,18 +66,25 @@ async def build_digest(llm, trends, task_type: str, max_total: int = 300) -> str
         e = emojis.get(st.lower(), "")
         title = f"{e + ' ' if e else ''}{kw} 📊 {sc}:"
         header = "TOP CRYPTO TREND:\n\n"
-        fixed_len = len(header) + len(title) + 1 + len(sig)
-        max_desc = max_total - fixed_len
+        fixed_len = len(header) + len(title) + 1
+        max_desc = max_body - fixed_len
         if max_desc < 30: return None
         prompt = f"Summarize '{kw}' in 1-2 short sentences. Start directly. Context: {summary}"
         desc = generator.get_answer(llm, "", prompt, max_chars=max_desc, temperature=0.5).strip()
         body = f"{header}{title} {desc}"
-        final = body + sig
-        if utils.count_graphemes(final) > max_total:
+
+    final = body + sig
+    if utils.count_graphemes(final) > max_total:
+        if task_type == "digest_full":
             truncated = desc[:max_desc]
             last_dot = truncated.rfind(".")
             desc = truncated[:last_dot+1] if last_dot != -1 else truncated.rstrip() + "."
             body = f"{header}{title} {desc}"
-            final = body + sig
+        else:
+            truncated = body[:max_body]
+            last_newline = truncated.rfind("\n")
+            body = truncated[:last_newline+1] if last_newline != -1 else truncated.rstrip() + "."
+        final = body + sig
+
     if utils.count_graphemes(final) > max_total: return None
     return final

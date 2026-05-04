@@ -42,6 +42,12 @@ def generate_facets(text: str) -> list:
     return facets
 def count_graphemes(text: str) -> int:
     return len(text) if text else 0
+def truncate_to_sentence(text: str, limit: int) -> str:
+    if len(text) <= limit:
+        return text
+    cut = text[:limit].rstrip()
+    dot = cut.rfind(".")
+    return cut[:dot+1] if dot != -1 else cut.rstrip() + "."
 def count_tokens(text: str, llm: Optional[Any] = None) -> int:
     if not text:
         return 0

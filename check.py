@@ -11,7 +11,6 @@ import utils
 from logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
-
 async def run():
     last_processed_raw = os.getenv("LAST_PROCESSED", "{}").strip()
     try:
@@ -52,7 +51,7 @@ async def run():
             parent_uri = reply_data.get("parent", {}).get("uri", "")
             root_uri = reply_data.get("root", {}).get("uri", "")
             if digest_uri and root_uri == digest_uri:
-                if parent_uri != digest_uri:
+                if parent_uri and parent_uri != digest_uri and parent_uri.startswith(f"at://{config.BOT_DID}/"):
                     continue
                 tasks.append({"type": "digest_comment", "uri": uri, "text": text, "author_did": author_did, "parent_uri": parent_uri})
                 digest_comment_count += 1
@@ -91,6 +90,5 @@ async def run():
     logger.info(f"[checker] Tasks: {len(tasks)} (Owner: {owner_count}, Community: {digest_comment_count}, Digest: {scheduled_type or 'none'})")
     if not has_tasks:
         sys.exit(0)
-
 if __name__ == "__main__":
     asyncio.run(run())
