@@ -19,8 +19,8 @@ community_reply: |
 owner_reply: |
   Query: {query}
   Rules:
-  - Priority 1: Answer the query directly. If unsure, give your best guess.
-  - Priority 2: Stay aligned with the [CONVERSATION] topic above.
+  - Answer the query directly. If unsure, give your best guess.
+  - Stay aligned with the [CONVERSATION] topic above.
   - Max {max_chars} characters including spaces and emojis.
   - No hashtags, no links, no markdown.
   Reply:
