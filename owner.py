@@ -42,18 +42,39 @@ async def process(client, llm, task):
     if not parent_cid:
         logger.error(f"[owner] Missing cid for {uri}")
         return
-    thread_ctx = await utils._format_thread_for_llm(chain, config.OWNER_DID, config.BOT_DID, client, max_recent=5)
     clean_query = utils.clean_for_llm(user_text)
+    root_text = utils.clean_for_llm(chain.get("root_text", ""))
     clean_search = utils.clean_for_llm(search_data) if search_data else ""
+    posts = chain.get("chain", [])[-5:]
+    history_lines = []
+    for post in posts:
+        rec = post.get("record", {})
+        author = post.get("author", {})
+        did = author.get("did", "")
+        text = utils.clean_for_llm(rec.get("text", ""))
+        if not text: continue
+        if did == config.OWNER_DID: prefix = "OWNER:"
+        elif did == config.BOT_DID: prefix = "BOT:"
+        else: prefix = "USER:"
+        history_lines.append(f"{prefix} {text}")
+    history_block = "\n".join(history_lines) if history_lines else "No history."
+    model_ctx = (
+        f"[QUERY]\n{clean_query}\n"
+        f"[CONVERSATION]\n"
+        f"[ROOT]\n{root_text}\n"
+        f"[HISTORY]\n{history_block}\n"
+        f"[SEARCH]\n{clean_search if clean_search else 'No external data'}"
+    )
     logger.info(f"{C_GREEN}=== [CONTEXT] ==={C_RESET}")
-    logger.info(f"Priority 1 (Query): {clean_query}")
-    logger.info(f"Priority 2 (Thread): {thread_ctx}")
-    logger.info(f"Priority 3 (Search): {clean_search if clean_search else 'None'}")
+    logger.info(f"{C_CYAN}[QUERY]\n{clean_query}{C_RESET}")
+    logger.info(f"{C_GREEN}[CONVERSATION]{C_RESET}")
+    logger.info(f"{C_YELLOW}[ROOT]\n{root_text}{C_RESET}")
+    logger.info(f"{C_YELLOW}[HISTORY]\n{history_block}{C_RESET}")
+    logger.info(f"{C_MAGENTA}[SEARCH]\n{clean_search if clean_search else 'No external data'}{C_RESET}")
     logger.info(f"{C_GREEN}=== [CONTEXT] END ==={C_RESET}")
     sig = build_content._get_signature(source, bool(search_data))
     max_body = 300 - len(sig)
-    model_ctx = f"[QUERY]\n{clean_query}\n[THREAD]\n{thread_ctx}\n[SEARCH]\n{clean_search if clean_search else 'No external data'}"
-    reply = generator.get_answer(llm, model_ctx, "", max_chars=max_body, temperature=0.5)
+    reply = generator.get_answer(llm, model_ctx, clean_query, max_chars=max_body, temperature=0.5)
     logger.info(f"{C_MAGENTA}=== [OUTPUT] ==={C_RESET}")
     logger.info(f"Raw: {reply}")
     pre_len = utils.count_graphemes(reply)
