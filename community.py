@@ -26,34 +26,58 @@ async def process(client, llm, task):
         logger.error(f"[community] Missing cid for {uri}")
         return
     root_text = chain.get("root_text", "")
-    kw = generator.extract_chainbase_keyword(llm, user_text)
+    clean_root = utils.clean_for_llm(root_text)
+    clean_query = utils.clean_for_llm(user_text)
+    intent = generator.classify_intent(llm, user_text, clean_root)
     logger.info(f"{C_CYAN}=== [INPUT] ==={C_RESET}")
     logger.info(f"Query: {user_text[:150]}")
-    logger.info(f"Keyword: {kw}")
-    search_data = ""
-    source = ""
-    if kw:
-        search_data = await search.fetch_chainbase(kw)
-        source = "chainbase"
-        logger.info(f"Search results: {search_data.count(chr(10)) + 1 if search_data else 0}")
-    logger.info(f"{C_CYAN}=== [INPUT] END ==={C_RESET}")
-    if not search_data:
-        reply = build_content.get_no_data_response(kw or "query")
+    logger.info(f"Intent: {intent}")
+    if intent == "CASUAL":
+        sig = build_content.SIG_DEFAULT
+        max_body = 300 - len(sig)
+        ctx = f"[ROOT]\n{clean_root}"
+        reply = generator.get_answer(llm, ctx, user_text, max_chars=max_body, temperature=0.7, prompt_key="casual_reply")
+        reply = reply.strip() + sig
         facets = utils.generate_facets(reply)
         await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, uri, parent_cid, facets)
+        logger.info(f"[community] Casual reply to {uri[:40]}...")
         return
-    clean_query = utils.clean_for_llm(user_text)
-    clean_root = utils.clean_for_llm(root_text)
+    kw = generator.extract_chainbase_keyword(llm, user_text)
+    logger.info(f"Initial keyword: {kw}")
+    search_data = ""
+    source = ""
+    attempts = 0
+    max_attempts = 3
+    while attempts < max_attempts and not search_data and kw:
+        attempts += 1
+        logger.info(f"[community] Chainbase attempt {attempts}/{max_attempts} with keyword: {kw}")
+        search_data = await search.fetch_chainbase(kw)
+        if search_data:
+            source = "chainbase"
+            logger.info(f"Search results: {search_data.count(chr(10)) + 1}")
+            break
+        if attempts < max_attempts:
+            kw = generator.regenerate_keyword(llm, kw, clean_query, clean_root)
+            logger.info(f"Regenerated keyword: {kw}")
+    logger.info(f"{C_CYAN}=== [INPUT] END ==={C_RESET}")
+    sig = build_content._get_signature(source, bool(search_data))
+    max_body = 300 - len(sig)
+    if not search_data:
+        ctx = f"[ROOT]\n{clean_root}"
+        reply = generator.get_answer(llm, ctx, clean_query, max_chars=max_body, temperature=0.5, prompt_key="dyor_fallback")
+        reply = reply.strip() + sig
+        facets = utils.generate_facets(reply)
+        await bsky.post_reply(client, config.BOT_DID, reply, root_uri, root_cid, uri, parent_cid, facets)
+        logger.info(f"[community] DYOR fallback reply to {uri[:40]}...")
+        return
     clean_search = utils.clean_for_llm(search_data)
     logger.info(f"{C_GREEN}=== [CONTEXT] ==={C_RESET}")
-    logger.info(f"[QUERY] {clean_query}")
-    logger.info(f"[ROOT] {clean_root}")
-    logger.info(f"[SEARCH] {clean_search}")
+    logger.info(f"{C_CYAN}[QUERY]\n{clean_query}{C_RESET}")
+    logger.info(f"{C_YELLOW}[ROOT]\n{clean_root}{C_RESET}")
+    logger.info(f"{C_MAGENTA}[SEARCH]\n{clean_search}{C_RESET}")
     logger.info(f"{C_GREEN}=== [CONTEXT] END ==={C_RESET}")
-    sig = build_content._get_signature(source, True)
-    max_body = 300 - len(sig)
-    minimal_ctx = f"[QUERY]\n{clean_query}\n[ROOT]\n{clean_root}\n[SEARCH]\n{clean_search}"
-    reply = generator.get_answer(llm, minimal_ctx, clean_query, max_chars=max_body, temperature=0.5)
+    minimal_ctx = f"[ROOT]\n{clean_root}\n[SEARCH]\n{clean_search}"
+    reply = generator.get_answer(llm, minimal_ctx, clean_query, max_chars=max_body, temperature=0.5, prompt_key="community_reply")
     logger.info(f"{C_MAGENTA}=== [OUTPUT] ==={C_RESET}")
     logger.info(f"Raw: {reply}")
     pre_len = utils.count_graphemes(reply)

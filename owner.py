@@ -74,7 +74,7 @@ async def process(client, llm, task):
     logger.info(f"{C_GREEN}=== [CONTEXT] END ==={C_RESET}")
     sig = build_content._get_signature(source, bool(search_data))
     max_body = 300 - len(sig)
-    reply = generator.get_answer(llm, model_ctx, clean_query, max_chars=max_body, temperature=0.5)
+    reply = generator.get_answer(llm, model_ctx, clean_query, max_chars=max_body, temperature=0.5, prompt_key="owner_reply")
     logger.info(f"{C_MAGENTA}=== [OUTPUT] ==={C_RESET}")
     logger.info(f"Raw: {reply}")
     pre_len = utils.count_graphemes(reply)

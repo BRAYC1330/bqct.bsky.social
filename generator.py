@@ -28,16 +28,15 @@ def get_model():
     except Exception as e:
         logger.error(f"[generator] Model load failed: {e}")
         return None
+def load_prompt(key, **kwargs):
+    template = _prompts.get(key, "")
+    try:
+        return template.format(**kwargs)
+    except KeyError as e:
+        logger.warning(f"[generator] Missing prompt key: {e}")
+        return template
 def extract_search_intent(llm, thread_context: str, user_query: str) -> tuple:
-    prompt = f"""Extract a concise search query based on user input and conversation context.
-Rules:
-- Use thread context to resolve pronouns and implicit references.
-- Focus on the core topic.
-- If time filter is needed, use: day, week, month, year. Otherwise: none.
-- Return ONLY: QUERY: <text> | TIME: <day/week/month/year/none>
-Thread Context: {thread_context}
-User Query: "{user_query}"
-Output:"""
+    prompt = load_prompt("tavily_intent", query=user_query)
     try:
         raw = llm(prompt, max_tokens=60, temperature=0.1)
         if isinstance(raw, dict):
@@ -50,11 +49,10 @@ Output:"""
                 time_range = ""
             return query, time_range
         return user_query, ""
-    except:
+    except Exception:
         return user_query, ""
 def extract_chainbase_keyword(llm, text: str) -> str:
-    prompt_tpl = _prompts.get("chainbase_keyword", "Extract the main keyword or entity from the text.\nOutput format: KEYWORD: [1 word]\nText: {text}\nResult:")
-    prompt = prompt_tpl.format(text=text)
+    prompt = load_prompt("chainbase_keyword", text=text)
     try:
         raw = llm(prompt, max_tokens=10, temperature=0.1)
         if isinstance(raw, dict):
@@ -63,16 +61,30 @@ def extract_chainbase_keyword(llm, text: str) -> str:
         if "KEYWORD:" in raw.upper():
             raw = raw.split("KEYWORD:")[-1].strip()
         return re.sub(r'[^\w\s]', '', raw).split()[0] if raw else ""
-    except:
+    except Exception:
         return ""
-def get_answer(llm, context: str, user_query: str, max_chars: int = 280, temperature: float = 0.5) -> str:
-    prompt_skeleton = f"""Query: {user_query}
-Rules:
-- Priority 1: Answer the query directly. If unsure, give your best guess.
-- Priority 2: Align with the [ROOT]/[THREAD] topic.
-- Max {max_chars} characters including spaces and emojis.
-- No hashtags, no links, no markdown.
-Reply:"""
+def classify_intent(llm, message: str, root_topic: str) -> str:
+    prompt = load_prompt("intent_check", message=message, root_topic=root_topic)
+    try:
+        raw = llm(prompt, max_tokens=5, temperature=0.1)
+        if isinstance(raw, dict):
+            raw = raw.get("choices", [{}])[0].get("text", "")
+        cls = raw.strip().upper()
+        return "SUBSTANTIVE" if "SUBSTANTIVE" in cls else "CASUAL"
+    except Exception:
+        return "SUBSTANTIVE"
+def regenerate_keyword(llm, original: str, query: str, root_topic: str) -> str:
+    prompt = load_prompt("keyword_regenerate", original=original, query=query, root_topic=root_topic)
+    try:
+        raw = llm(prompt, max_tokens=15, temperature=0.3)
+        if isinstance(raw, dict):
+            raw = raw.get("choices", [{}])[0].get("text", "")
+        kw = raw.strip().split()[0] if raw.strip() else ""
+        return re.sub(r'[^\w]', '', kw)
+    except Exception:
+        return ""
+def get_answer(llm, context: str, user_query: str, max_chars: int = 280, temperature: float = 0.5, prompt_key: str = "community_reply") -> str:
+    prompt_skeleton = load_prompt(prompt_key, query=user_query, max_chars=max_chars)
     logger.info(f"\033[93m=== [PROMPT] ===\033[0m")
     logger.info(prompt_skeleton)
     logger.info(f"\033[93m=== [PROMPT] END ===\033[0m")

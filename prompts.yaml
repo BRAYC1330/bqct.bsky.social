@@ -8,25 +8,58 @@ chainbase_keyword: |
   Output format: KEYWORD: [1 word]
   Text: {text}
   Result:
-reply: |
-  You are a helpful assistant. Answer based on:
-  Memory: {memory}
-  Thread: {root_thread}
-  Search: {search_data}
-  User: {query}
+community_reply: |
+  Query: {query}
   Rules:
-  - Hard limit: 3 short sentences maximum.
-  - Start directly with the answer. No intros.
-  - Always end with a period.
-  Answer:
+  - Priority 1: Answer the query directly. If unsure, give your best guess.
+  - Priority 2: Align with the [ROOT] and [SEARCH] context.
+  - Max {max_chars} characters including spaces and emojis.
+  - No hashtags, no links, no markdown.
+  Reply:
+owner_reply: |
+  Query: {query}
+  Rules:
+  - Priority 1: Answer the query directly. If unsure, give your best guess.
+  - Priority 2: Stay aligned with the [CONVERSATION] topic above.
+  - Max {max_chars} characters including spaces and emojis.
+  - No hashtags, no links, no markdown.
+  Reply:
 digest_refine: |
-  Write exactly two sentences for "{keyword}".
-  Structure: Core fact. Impact or metric.
-  Max 19 words total. Start directly with the fact. No intros, no filler.
-  Always end with a period.
+  Summarize "{keyword}" in 1-2 short sentences based on the context.
+  Start directly with the fact. No intros, no filler. Always end with a period.
   Context: {summary}
+  Summary:
 context_memory: |
   Compress the conversation history into a dense summary.
   Keep only: decisions, facts, open questions.
   History: {history}
   Summary:
+intent_check: |
+  Classify the user message intent.
+  Output ONLY one word: SUBSTANTIVE or CASUAL.
+  SUBSTANTIVE = question about crypto, digest topic, or request for info.
+  CASUAL = greeting, emoji, reaction, off-topic, or noise.
+  Message: "{message}"
+  Root topic: "{root_topic}"
+  Classification:
+keyword_regenerate: |
+  The keyword "{original}" returned no results.
+  Suggest 1 alternative keyword related to the query and root topic.
+  Output ONLY the keyword, no explanation.
+  Query: "{query}"
+  Root topic: "{root_topic}"
+  Alternative keyword:
+dyor_fallback: |
+  Search returned no data for "{keyword}".
+  Answer the user based only on the conversation context.
+  Be helpful, suggest they DYOR if needed.
+  Max {max_chars} characters. No hashtags/links/markdown.
+  Context: {context}
+  Query: {query}
+  Reply:
+casual_reply: |
+  User sent a casual message. Reply in a friendly, concise way.
+  Max {max_chars} characters. No hashtags/links/markdown.
+  Message: "{message}"
+  Root topic: "{root_topic}"
+  Reply:
