@@ -37,17 +37,14 @@ def generate_facets(text: str) -> list:
         for m in re.finditer(pattern, text):
             bs = len(text[:m.start()].encode('utf-8'))
             be = len(text[:m.end()].encode('utf-8'))
-            val = m.group(1) if ftype.endswith('tag') else f"https://dexscreener.com/search?q={m.group(0)}"
+            if ftype.endswith('tag'):
+                val = m.group(1)
+            else:
+                val = f"https://dexscreener.com/search?q={m.group(1)}"
             facets.append({"index": {"byteStart": bs, "byteEnd": be}, "features": [{"$type": ftype, key: val}]})
     return facets
 def count_graphemes(text: str) -> int:
     return len(text) if text else 0
-def truncate_to_sentence(text: str, limit: int) -> str:
-    if len(text) <= limit:
-        return text
-    cut = text[:limit].rstrip()
-    dot = cut.rfind(".")
-    return cut[:dot+1] if dot != -1 else cut.rstrip() + "."
 def count_tokens(text: str, llm: Optional[Any] = None) -> int:
     if not text:
         return 0
