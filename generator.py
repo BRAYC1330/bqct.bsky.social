@@ -84,7 +84,7 @@ def regenerate_keyword(llm, original: str, query: str, root_topic: str) -> str:
     except Exception:
         return ""
 def get_answer(llm, context: str, user_query: str, max_chars: int = 280, temperature: float = 0.5, prompt_key: str = "community_reply") -> str:
-    prompt_skeleton = load_prompt(prompt_key, query=user_query, max_chars=max_chars)
+    prompt_skeleton = load_prompt(prompt_key, query=user_query, max_chars=max_chars, context=context)
     logger.info(f"\033[93m=== [PROMPT] ===\033[0m")
     logger.info(prompt_skeleton)
     logger.info(f"\033[93m=== [PROMPT] END ===\033[0m")

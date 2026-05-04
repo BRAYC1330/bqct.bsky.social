@@ -11,8 +11,8 @@ chainbase_keyword: |
 community_reply: |
   Query: {query}
   Rules:
-  - Priority 1: Answer the query directly. If unsure, give your best guess.
-  - Priority 2: Align with the [ROOT] and [SEARCH] context.
+  - Answer the query directly. If unsure, give your best guess.
+  - Align with the [ROOT] and [SEARCH] context.
   - Max {max_chars} characters including spaces and emojis.
   - No hashtags, no links, no markdown.
   Reply:

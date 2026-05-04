@@ -53,6 +53,7 @@ async def fetch_tavily(query: str, time_range: str = "") -> str:
         }
         if time_range in ("day", "week", "month", "year"):
             payload["time_range"] = time_range
+        logger.info(f"[TAVILY REQUEST] query='{query}' | time_range='{time_range if time_range else 'none'}'")
         async with httpx.AsyncClient(timeout=config.SEARCH_TIMEOUT) as client:
             r = await client.post("https://api.tavily.com/search", json=payload)
             if r.status_code == 200:
