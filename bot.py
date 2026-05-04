@@ -23,19 +23,23 @@ async def main():
         logger.info("[MAIN] No tasks.")
         return
     logger.info(f"[MAIN] Loaded {len(tasks)} tasks")
+    
     client = httpx.AsyncClient(timeout=30)
     llm = generator.get_model()
     if not llm:
         logger.error("[MAIN] Model load failed. Exiting.")
         sys.exit(1)
+        
     try:
         await bsky.login_with_cache(client, config.BOT_HANDLE, config.BOT_PASSWORD)
+        
         handlers = {
             "digest_mini": partial(digest.run, client, llm, "digest_mini"),
             "digest_full": partial(digest.run, client, llm, "digest_full"),
-            "digest_comment": community.process,
-            "owner_command": owner.process
+            "digest_comment": partial(community.process, client, llm),
+            "owner_command": partial(owner.process, client, llm)
         }
+        
         ok, fail = 0, 0
         for task in tasks:
             task_type = task.get("type", "")
@@ -50,6 +54,7 @@ async def main():
             except Exception as e:
                 logger.error(f"[MAIN] Task {task_type} failed: {e}")
                 fail += 1
+                
         out_path = os.getenv("GITHUB_OUTPUT")
         if out_path:
             with open(out_path, "a") as f:
